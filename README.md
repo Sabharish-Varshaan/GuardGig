@@ -1,9 +1,6 @@
 # GuardGig
 # AI-Powered Parametric Insurance for Quick-Commerce Gig Workers
 
-Guidewire DEVTrails 2026 | Phase 1: Ideation & Foundation
-Lead Architect: Sabharish Varshaan
-
 ---
 
 # Overview and Problem Statement
