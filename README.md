@@ -51,6 +51,7 @@
 ---
 
 # Parametric Trigger System
+<img width="1024" height="572" alt="image" src="https://github.com/user-attachments/assets/4923aaef-38a7-4e16-9f93-d824699ba84f" />
 
 ## Environmental Triggers
 
@@ -76,6 +77,7 @@
 ---
 
 # AI-Powered Weekly Premium Model
+<img width="1024" height="572" alt="image" src="https://github.com/user-attachments/assets/d8987ec6-d290-4c92-bcc7-57a6b87776ae" />
 
 ## Premium Formula
 
@@ -132,6 +134,7 @@
 ---
 
 # Adversarial Defense and Anti-Spoofing Strategy
+<img width="926" height="475" alt="image" src="https://github.com/user-attachments/assets/1f807c53-1689-4ff0-8247-5307ce9f5b82" />
 
 ## Problem Context
 
@@ -193,6 +196,7 @@
 ---
 
 # System Architecture
+<img width="1024" height="572" alt="image" src="https://github.com/user-attachments/assets/02b75dfe-c491-4521-a0ec-f40b00e37da7" />
 
 ## Data Flow Pipeline
 
@@ -229,6 +233,7 @@
 * Fraud detection model
 
 ---
+<img width="1024" height="572" alt="image" src="https://github.com/user-attachments/assets/fb1c102c-664e-45b2-8eaa-b3a75c9b4b93" />
 
 # Tech Stack
 
@@ -241,6 +246,7 @@
 ---
 
 # Scalability and Performance
+<img width="1024" height="572" alt="image" src="https://github.com/user-attachments/assets/25ee70a2-245d-4fde-8549-ba18f09af22b" />
 
 ## System Capacity
 
@@ -272,6 +278,7 @@
 ---
 
 # Failure Scenario Simulation
+<img width="1024" height="572" alt="image" src="https://github.com/user-attachments/assets/666362df-e89c-4138-a03d-4bf0540b2dd2" />
 
 Example: Chennai Flood Event
 
