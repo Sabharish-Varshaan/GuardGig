@@ -2,9 +2,25 @@
 
 # dependencies
 node_modules/
+frontend/node_modules/
+
+# python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+.venv/
+venv/
+backend/.venv/
+backend/venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
 
 # Expo
 .expo/
+frontend/.expo/
 dist/
 web-build/
 expo-env.d.ts
@@ -32,9 +48,19 @@ yarn-error.*
 
 # local env files
 .env*.local
+.env
+frontend/.env
+backend/.env
 
 # typescript
 *.tsbuildinfo
+
+# logs and runtime files
+*.log
+*.pid
+*.seed
+*.out
+*.err
 
 # generated native folders
 /ios
