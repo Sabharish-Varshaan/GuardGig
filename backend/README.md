@@ -28,6 +28,8 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
+**Note:** This installs all required libraries including APScheduler for automated claim processing.
+
 4. Create env file:
 
 ```bash
@@ -69,7 +71,18 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 API base: `http://localhost:8000`
 
-## 3. Verify Backend Quickly
+## 4. Automated Claim Processing
+
+The system includes automated claim processing that runs in the background:
+
+- **APScheduler Integration:** Automatically checks weather conditions every hour for all active policies
+- **Trigger Detection:** Creates claims when rain triggers are met (≥60mm partial, ≥100mm full)
+- **Fraud Prevention:** Automatically runs fraud checks on new claims
+- **Status Updates:** Claims are approved or rejected based on fraud scores
+
+The automation starts automatically when the server runs. No additional setup required.
+
+## 5. Verify Backend Quickly
 
 Health check:
 

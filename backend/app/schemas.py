@@ -1,4 +1,4 @@
-from typing import Literal
+from typing import Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -45,3 +45,59 @@ class OnboardingRequest(BaseModel):
 class OnboardingResponse(BaseModel):
     onboarding_completed: bool
     profile: dict
+
+
+class PolicyResponse(BaseModel):
+    id: str
+    user_id: str
+    weekly_income: int
+    premium: float
+    coverage_amount: float
+    policy_start_date: str
+    status: Literal["active", "inactive"]
+    created_at: str
+    updated_at: str
+
+
+class PolicyCreateResponse(BaseModel):
+    policy: PolicyResponse
+    message: str
+
+
+class ClaimCreateRequest(BaseModel):
+    location: str
+
+
+class ClaimResponse(BaseModel):
+    id: str
+    user_id: str
+    policy_id: str
+    trigger_type: str
+    trigger_value: float
+    payout_amount: float
+    status: Literal["pending", "approved", "rejected"]
+    fraud_score: Optional[float]
+    created_at: str
+    updated_at: str
+
+
+class ClaimCreateResponse(BaseModel):
+    claim: ClaimResponse
+    message: str
+
+
+class ClaimsListResponse(BaseModel):
+    claims: list[ClaimResponse]
+
+
+class FraudCheckRequest(BaseModel):
+    claim_id: str
+    gps: str  # e.g., "latitude,longitude" or location string
+    activity: str  # e.g., "normal", "suspicious"
+    claim_frequency: int  # number of claims in period
+
+
+class FraudCheckResponse(BaseModel):
+    fraud_score: float
+    decision: str  # "approved" or "rejected"
+    message: str

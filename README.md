@@ -198,6 +198,14 @@
 # System Architecture
 <img width="1024" height="572" alt="image" src="https://github.com/user-attachments/assets/02b75dfe-c491-4521-a0ec-f40b00e37da7" />
 
+## Automated Processing Engine
+
+* **Background Scheduler:** APScheduler runs automated claim processing every hour
+* **Weather Monitoring:** Real-time weather API integration for trigger detection
+* **Auto Claim Creation:** System automatically creates claims when conditions are met
+* **Fraud Engine:** Integrated fraud scoring with automatic approval/rejection
+* **No User Intervention:** Entire claim lifecycle runs autonomously
+
 ## Data Flow Pipeline
 
 * User (React Native App)

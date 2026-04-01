@@ -1,18 +1,18 @@
-create table if not exists public.onboarding_profiles (
-  id uuid primary key default gen_random_uuid(),
-  user_id uuid not null unique,
-  full_name text not null,
-  age int not null check (age >= 18 and age <= 70),
-  city text not null,
-  platform text not null,
-  vehicle_type text not null check (vehicle_type in ('Bike', 'Scooter', 'Cycle')),
-  work_hours int not null check (work_hours > 0 and work_hours <= 24),
-  daily_income int not null check (daily_income > 0),
-  weekly_income int not null check (weekly_income > 0),
- risk_preference text not null check (risk_preference in ('Low', 'Medium', 'High')),
-  onboarding_completed boolean not null default true,
-  created_at timestamptz not null default timezone('utc', now()),
-  updated_at timestamptz not null default timezone('utc', now())
+CREATE TABLE IF NOT EXISTS onboarding_profiles (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL UNIQUE,
+  full_name TEXT NOT NULL,
+  age INT NOT NULL CHECK (age >= 18 AND age <= 70),
+  city TEXT NOT NULL,
+  platform TEXT NOT NULL,
+  vehicle_type TEXT NOT NULL CHECK (vehicle_type IN ('Bike', 'Scooter', 'Cycle')),
+  work_hours INT NOT NULL CHECK (work_hours > 0 AND work_hours <= 24),
+  daily_income INT NOT NULL CHECK (daily_income > 0),
+  weekly_income INT NOT NULL CHECK (weekly_income > 0),
+  risk_preference TEXT NOT NULL CHECK (risk_preference IN ('Low', 'Medium', 'High')),
+  onboarding_completed BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-create index if not exists onboarding_profiles_user_id_idx on public.onboarding_profiles (user_id);
+CREATE INDEX IF NOT EXISTS onboarding_profiles_user_id_idx ON onboarding_profiles (user_id);

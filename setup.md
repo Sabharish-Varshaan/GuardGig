@@ -35,6 +35,8 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
+**Note:** This installs all required libraries including APScheduler for automated claim processing.
+
 4. Create env and fill values:
 
 ```bash
@@ -73,6 +75,8 @@ Important: paste SQL content, not file paths.
 ```bash
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
+
+**Note:** The backend includes automated claim processing that runs every hour in the background. No additional configuration needed.
 
 ## 2. Frontend (Terminal 2)
 

@@ -17,6 +17,7 @@ class Settings(BaseModel):
     supabase_service_role_key: str = Field(default="")
     supabase_onboarding_table: str = Field(default="onboarding_profiles")
     supabase_users_table: str = Field(default="app_users")
+    supabase_policies_table: str = Field(default="policies")
     jwt_secret: str = Field(default="change-me")
     jwt_algorithm: str = Field(default="HS256")
     access_token_exp_minutes: int = Field(default=60)
@@ -38,6 +39,7 @@ def get_settings() -> Settings:
         supabase_service_role_key=os.getenv("SUPABASE_SERVICE_ROLE_KEY", ""),
         supabase_onboarding_table=os.getenv("SUPABASE_ONBOARDING_TABLE", "onboarding_profiles"),
         supabase_users_table=os.getenv("SUPABASE_USERS_TABLE", "app_users"),
+        supabase_policies_table=os.getenv("SUPABASE_POLICIES_TABLE", "policies"),
         jwt_secret=os.getenv("JWT_SECRET", "change-me"),
         jwt_algorithm=os.getenv("JWT_ALGORITHM", "HS256"),
         access_token_exp_minutes=int(os.getenv("ACCESS_TOKEN_EXP_MINUTES", "60")),
