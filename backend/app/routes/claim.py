@@ -1,37 +1,28 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel
-import httpx
 
+from ..claim_rules import (
+    calculate_fraud_score,
+    enforce_exclusions,
+    enforce_max_one_claim_per_day,
+    enforce_waiting_period,
+    fetch_recent_claim_count,
+)
 from ..config import get_settings
 from ..dependencies import require_current_user
 from ..schemas import ClaimCreateRequest, ClaimCreateResponse, ClaimsListResponse, ClaimResponse
 from ..supabase_client import get_admin_client
+from ..trigger_utils import evaluate_rain_trigger, fetch_aqi, fetch_rain_mm
 
-router = APIRouter(prefix="/api/claim", tags=["claim"])
+router = APIRouter(prefix="/api", tags=["claim"])
 
-async def get_weather_rain(location: str) -> float:
-    """Fetch current rain amount from weather API."""
-    url = f"https://wttr.in/{location}?format=j1"
-    async with httpx.AsyncClient() as client:
-        try:
-            response = await client.get(url)
-            response.raise_for_status()
-            data = response.json()
-            rain = float(data['current_condition'][0]['precipMM'])
-            return rain
-        except Exception as e:
-            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Weather API error: {str(e)}")
-
-def calculate_payout(trigger: str) -> float:
-    """Calculate payout based on trigger."""
+def calculate_payout(trigger: str, coverage_amount: float) -> float:
     if trigger == "full":
-        return 700.0
-    elif trigger == "partial":
-        return 0.3 * 700.0
-    else:
-        return 0.0
+        return round(coverage_amount, 2)
+    if trigger == "partial":
+        return round(coverage_amount * 0.30, 2)
+    return 0.0
 
-@router.post("/create", response_model=ClaimCreateResponse)
+@router.post("/claim/create", response_model=ClaimCreateResponse)
 async def create_claim(request: ClaimCreateRequest, current_user: dict = Depends(require_current_user)):
     settings = get_settings()
     admin = get_admin_client()
@@ -50,21 +41,40 @@ async def create_claim(request: ClaimCreateRequest, current_user: dict = Depends
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No active policy found")
 
     policy = policy_response.data[0]
+    coverage_amount = float(policy.get("coverage_amount", 700.0))
 
-    # Get weather data
-    rain = await get_weather_rain(request.location)
+    try:
+        enforce_waiting_period(policy, waiting_hours=24)
+        enforce_max_one_claim_per_day(admin, settings.supabase_claims_table, current_user["id"])
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
-    # Determine trigger
-    trigger = "none"
-    if rain >= 100:
-        trigger = "full"
-    elif rain >= 60:
-        trigger = "partial"
+    rain = await fetch_rain_mm(request.location)
+    _aqi = await fetch_aqi(request.location)
+    trigger = evaluate_rain_trigger(rain)
 
     if trigger == "none":
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No claim trigger conditions met")
 
-    payout = calculate_payout(trigger)
+    recent_claim_count = fetch_recent_claim_count(admin, settings.supabase_claims_table, current_user["id"])
+    effective_location_valid = bool(request.location.strip()) and request.location_valid
+    fraud_score = calculate_fraud_score(
+        activity_status=request.activity_status,
+        location_valid=effective_location_valid,
+        claim_frequency=recent_claim_count,
+    )
+
+    try:
+        enforce_exclusions(
+            activity_status=request.activity_status,
+            location_valid=effective_location_valid,
+            fraud_score=fraud_score,
+            fraud_threshold=settings.claim_fraud_threshold,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+    payout = calculate_payout(trigger, coverage_amount)
 
     # Create claim
     claim_data = {
@@ -73,11 +83,14 @@ async def create_claim(request: ClaimCreateRequest, current_user: dict = Depends
         "trigger_type": "rain",
         "trigger_value": rain,
         "payout_amount": payout,
-        "status": "approved",  # Simplified: auto-approve if conditions met
-        "fraud_score": 0.0  # Placeholder
+        "status": "approved",
+        "fraud_score": fraud_score,
+        "activity_status": request.activity_status,
+        "location_valid": effective_location_valid,
+        "rule_decision_reason": "approved_after_rule_checks",
     }
 
-    claim_response = admin.table("claims").insert(claim_data).execute()
+    claim_response = admin.table(settings.supabase_claims_table).insert(claim_data).execute()
 
     if not claim_response.data:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to create claim")
@@ -89,19 +102,19 @@ async def create_claim(request: ClaimCreateRequest, current_user: dict = Depends
         message="Claim created successfully"
     )
 
-@router.get("/me", response_model=ClaimsListResponse)
+@router.get("/claims/me", response_model=ClaimsListResponse)
 def get_my_claims(current_user: dict = Depends(require_current_user)):
     settings = get_settings()
     admin = get_admin_client()
 
     claims_response = (
-        admin.table("claims")
+        admin.table(settings.supabase_claims_table)
         .select("*")
         .eq("user_id", current_user["id"])
         .order("created_at", desc=True)
         .execute()
     )
 
-    claims = [ClaimResponse(**claim) for claim in claims_response.data]
+    claims = [ClaimResponse(**claim) for claim in (claims_response.data or [])]
 
     return ClaimsListResponse(claims=claims)

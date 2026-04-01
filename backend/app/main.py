@@ -2,10 +2,15 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
-import asyncio
-import httpx
-from datetime import datetime, timedelta
+from datetime import datetime, timezone
 
+from .claim_rules import (
+    calculate_fraud_score,
+    enforce_exclusions,
+    enforce_max_one_claim_per_day,
+    enforce_waiting_period,
+    fetch_recent_claim_count,
+)
 from .config import get_settings
 from .routes.auth import router as auth_router
 from .routes.onboarding import router as onboarding_router
@@ -15,6 +20,7 @@ from .routes.trigger import router as trigger_router
 from .routes.claim import router as claim_router
 from .routes.fraud import router as fraud_router
 from .supabase_client import get_admin_client
+from .trigger_utils import evaluate_rain_trigger, fetch_aqi, fetch_rain_mm
 
 settings = get_settings()
 
@@ -46,96 +52,63 @@ async def automated_claim_check():
         if not city:
             continue
 
-        # Check weather
         try:
-            rain = await get_weather_rain(city)
-        except:
+            rain = await fetch_rain_mm(city)
+            _aqi = await fetch_aqi(city)
+        except Exception:
             continue
 
-        # Determine trigger
-        trigger = "none"
-        if rain >= 100:
-            trigger = "full"
-        elif rain >= 60:
-            trigger = "partial"
+        trigger = evaluate_rain_trigger(rain)
 
         if trigger == "none":
             continue
 
-        # Check if claim already exists for today
-        today = datetime.now().date()
-        existing_claims = (
-            admin.table("claims")
-            .select("id")
-            .eq("user_id", user_id)
-            .gte("created_at", today.isoformat())
-            .execute()
+        try:
+            enforce_waiting_period(policy, waiting_hours=24)
+            enforce_max_one_claim_per_day(admin, settings.supabase_claims_table, user_id)
+        except ValueError:
+            continue
+
+        coverage_amount = float(policy.get("coverage_amount", 700.0))
+        payout = coverage_amount if trigger == "full" else round(coverage_amount * 0.30, 2)
+
+        claim_count = fetch_recent_claim_count(
+            admin,
+            settings.supabase_claims_table,
+            user_id,
         )
 
-        if existing_claims.data:
-            continue  # Already has claim today
-
-        # Calculate payout
-        payout = 700.0 if trigger == "full" else 210.0
-
-        # Get claim frequency (claims in last 30 days)
-        thirty_days_ago = (datetime.now() - timedelta(days=30)).isoformat()
-        claim_count = len(
-            admin.table("claims")
-            .select("id")
-            .eq("user_id", user_id)
-            .gte("created_at", thirty_days_ago)
-            .execute()
-            .data
+        fraud_score = calculate_fraud_score(
+            activity_status="active",
+            location_valid=True,
+            claim_frequency=claim_count,
         )
 
-        # Create claim
+        try:
+            enforce_exclusions(
+                activity_status="active",
+                location_valid=True,
+                fraud_score=fraud_score,
+                fraud_threshold=settings.claim_fraud_threshold,
+            )
+        except ValueError:
+            continue
+
         claim_data = {
             "user_id": user_id,
             "policy_id": policy["id"],
             "trigger_type": "rain",
             "trigger_value": rain,
             "payout_amount": payout,
-            "status": "pending",
-            "fraud_score": None
+            "status": "approved",
+            "fraud_score": fraud_score,
+            "activity_status": "active",
+            "location_valid": True,
+            "rule_decision_reason": "approved_after_rule_checks",
+            "updated_at": datetime.now(timezone.utc).isoformat(),
         }
 
-        claim_response = admin.table("claims").insert(claim_data).execute()
-        claim_id = claim_response.data[0]["id"]
-
-        # Run fraud check
-        fraud_score = calculate_fraud_score(city, "normal", claim_count)
-
-        if fraud_score > 0.7:
-            status = "rejected"
-        else:
-            status = "approved"
-
-        # Update claim
-        admin.table("claims").update({
-            "fraud_score": fraud_score,
-            "status": status
-        }).eq("id", claim_id).execute()
-
-async def get_weather_rain(location: str) -> float:
-    """Fetch current rain amount from weather API."""
-    url = f"https://wttr.in/{location}?format=j1"
-    async with httpx.AsyncClient() as client:
-        response = await client.get(url)
-        response.raise_for_status()
-        data = response.json()
-        rain = float(data['current_condition'][0]['precipMM'])
-        return rain
-
-def calculate_fraud_score(gps: str, activity: str, claim_frequency: int) -> float:
-    """Calculate fraud score."""
-    score = 0.0
-    score += min(0.5, claim_frequency / 20.0)
-    if activity.lower() == "suspicious":
-        score += 0.4
-    if gps.lower() != "expected":
-        score += 0.3
-    return min(1.0, score)
+        admin.table(settings.supabase_claims_table).insert(claim_data).execute()
 
 @app.on_event("startup")
 async def startup_event():
@@ -160,13 +133,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
-@app.get("/api/health")
-def health_check():
-    return {
-        "status": "ok",
-        "environment": settings.app_env
-    }
 
 @app.get("/api/health")
 def health_check():

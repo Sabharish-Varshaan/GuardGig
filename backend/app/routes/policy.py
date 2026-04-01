@@ -4,16 +4,11 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from ..config import get_settings
 from ..dependencies import require_current_user
+from ..premium_utils import calculate_premium
 from ..schemas import PolicyCreateResponse, PolicyResponse
 from ..supabase_client import get_admin_client
 
 router = APIRouter(prefix="/api/policy", tags=["policy"])
-
-
-def _calculate_premium(weekly_income: int) -> float:
-    """Calculate premium as 5% of weekly income."""
-    return round(weekly_income * 0.05, 2)
-
 
 @router.post("/create", response_model=PolicyCreateResponse)
 def create_policy(current_user: dict = Depends(require_current_user)):
@@ -23,7 +18,7 @@ def create_policy(current_user: dict = Depends(require_current_user)):
     # Check if user has completed onboarding
     onboarding_response = (
         admin.table(settings.supabase_onboarding_table)
-        .select("weekly_income, onboarding_completed")
+        .select("weekly_income, risk_preference, onboarding_completed")
         .eq("user_id", current_user["id"])
         .limit(1)
         .execute()
@@ -44,6 +39,7 @@ def create_policy(current_user: dict = Depends(require_current_user)):
         )
 
     weekly_income = onboarding["weekly_income"]
+    risk_preference = onboarding.get("risk_preference", "Medium")
 
     # Check if policy already exists
     existing_policy = (
@@ -61,7 +57,7 @@ def create_policy(current_user: dict = Depends(require_current_user)):
         )
 
     # Calculate premium
-    premium = _calculate_premium(weekly_income)
+    premium = calculate_premium(float(weekly_income), str(risk_preference))
 
     # Create policy
     now = datetime.now(timezone.utc)

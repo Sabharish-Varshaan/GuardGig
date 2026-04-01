@@ -64,8 +64,19 @@ class PolicyCreateResponse(BaseModel):
     message: str
 
 
+class PremiumCalculateRequest(BaseModel):
+    income: float = Field(gt=0)
+    risk_preference: Literal["Low", "Medium", "High"] = "Medium"
+
+
+class PremiumCalculateResponse(BaseModel):
+    premium: float
+
+
 class ClaimCreateRequest(BaseModel):
     location: str
+    activity_status: Literal["active", "inactive", "none"] = "active"
+    location_valid: bool = True
 
 
 class ClaimResponse(BaseModel):
