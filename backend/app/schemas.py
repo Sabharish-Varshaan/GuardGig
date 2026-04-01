@@ -105,7 +105,7 @@ class FraudCheckRequest(BaseModel):
     claim_id: str
     gps: str  # e.g., "latitude,longitude" or location string
     activity: str  # e.g., "normal", "suspicious"
-    claim_frequency: int  # number of claims in period
+    claim_frequency: int = Field(ge=0)  # number of claims in period
 
 
 class FraudCheckResponse(BaseModel):

@@ -63,6 +63,7 @@ def fetch_recent_claim_count(admin, claims_table: str, user_id: str, lookback_da
 
 
 def calculate_fraud_score(activity_status: str, location_valid: bool, claim_frequency: int) -> float:
+    claim_frequency = max(0, claim_frequency)
     score = min(0.5, claim_frequency / 20.0)
 
     if activity_status.lower() in {"none", "inactive", "no_activity"}:
