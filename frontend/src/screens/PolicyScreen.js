@@ -72,9 +72,9 @@ const styles = StyleSheet.create({
     marginBottom: appTheme.spacing.md
   },
   cardTitle: {
-    color: appTheme.colors.primary,
+    color: appTheme.colors.textPrimary,
+    fontFamily: "Orbitron_600SemiBold",
     fontSize: 18,
-    fontWeight: "700",
     marginBottom: appTheme.spacing.sm
   },
   row: {
@@ -85,13 +85,13 @@ const styles = StyleSheet.create({
   },
   label: {
     color: appTheme.colors.textSecondary,
-    fontSize: 14,
-    fontWeight: "600"
+    fontFamily: "Rajdhani_600SemiBold",
+    fontSize: 15
   },
   value: {
-    color: appTheme.colors.primary,
-    fontSize: 16,
-    fontWeight: "700"
+    color: appTheme.colors.accentPrimary,
+    fontFamily: "Rajdhani_700Bold",
+    fontSize: 17
   },
   separator: {
     backgroundColor: appTheme.colors.border,
@@ -102,20 +102,20 @@ const styles = StyleSheet.create({
     marginBottom: appTheme.spacing.md
   },
   coverageLabel: {
-    color: appTheme.colors.textInverse,
+    color: appTheme.colors.textSecondary,
+    fontFamily: "Rajdhani_700Bold",
     fontSize: 13,
-    fontWeight: "700",
     textTransform: "uppercase"
   },
   coverageValue: {
-    color: appTheme.colors.accent,
+    color: appTheme.colors.accentPrimary,
+    fontFamily: "Orbitron_700Bold",
     fontSize: 40,
-    fontWeight: "700",
     marginTop: appTheme.spacing.xs
   },
   coverageSub: {
-    color: appTheme.colors.surface,
-    fontSize: 14,
-    fontWeight: "600"
+    color: appTheme.colors.textPrimary,
+    fontFamily: "Rajdhani_600SemiBold",
+    fontSize: 15
   }
 });

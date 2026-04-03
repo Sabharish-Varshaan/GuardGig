@@ -40,15 +40,16 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     marginBottom: appTheme.spacing.md,
     paddingHorizontal: appTheme.spacing.md,
-    paddingVertical: 12
+    paddingVertical: appTheme.spacing.sm
   },
   icon: {
     fontSize: 16,
     marginRight: appTheme.spacing.xs
   },
   text: {
-    fontSize: 13,
+    fontFamily: "Rajdhani_700Bold",
+    fontSize: 14,
     letterSpacing: 0.2,
-    fontWeight: "700"
+    textTransform: "uppercase"
   }
 });

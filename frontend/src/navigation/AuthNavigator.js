@@ -13,13 +13,13 @@ export default function AuthNavigator() {
     <Stack.Navigator
       initialRouteName="Login"
       screenOptions={{
-        animation: "slide_from_right",
-        contentStyle: { backgroundColor: appTheme.colors.background },
-        headerStyle: { backgroundColor: appTheme.colors.primary },
-        headerTintColor: appTheme.colors.surface,
+        animation: "fade_from_bottom",
+        contentStyle: { backgroundColor: appTheme.colors.bgPrimary },
+        headerStyle: { backgroundColor: appTheme.colors.bgCard },
+        headerTintColor: appTheme.colors.textPrimary,
         headerTitleStyle: {
-          fontSize: 17,
-          fontWeight: "700"
+          ...appTheme.typography.subtitle,
+          color: appTheme.colors.textPrimary
         }
       }}
     >

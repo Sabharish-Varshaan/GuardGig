@@ -1,5 +1,5 @@
-import React, { useState } from "react";
-import { KeyboardAvoidingView, Platform, StyleSheet, Text, View } from "react-native";
+import React, { memo, useCallback, useState } from "react";
+import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import Button from "../components/Button";
@@ -11,7 +11,7 @@ import { appTheme } from "../styles/theme";
 
 const phonePattern = /^[0-9]{10}$/;
 
-export default function RegistrationScreen({ navigation }) {
+function RegistrationScreen({ navigation }) {
   const { register, authLoading, authError, setAuthError } = useAppContext();
   const [form, setForm] = useState({
     fullName: "",
@@ -20,9 +20,13 @@ export default function RegistrationScreen({ navigation }) {
   });
   const [errors, setErrors] = useState({});
 
-  const updateField = (key, value) => {
+  const updateField = useCallback((key, value) => {
     setForm((prev) => ({ ...prev, [key]: value }));
-  };
+  }, []);
+
+  const handleFullNameChange = useCallback((value) => updateField("fullName", value), [updateField]);
+  const handlePhoneChange = useCallback((value) => updateField("phone", value), [updateField]);
+  const handlePasswordChange = useCallback((value) => updateField("password", value), [updateField]);
 
   const handleRegister = async () => {
     const nextErrors = {
@@ -50,53 +54,69 @@ export default function RegistrationScreen({ navigation }) {
     });
   };
 
+  const handleGoBackToLogin = useCallback(() => {
+    navigation.goBack();
+  }, [navigation]);
+
   return (
     <SafeAreaView style={styles.screen}>
-      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={styles.flex}>
-        <View style={styles.content}>
-          <Header
-            subtitle="Create your secure worker account to generate a personalized plan"
-            title="Register"
-          />
+      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.flex}>
+          <ScrollView
+            contentContainerStyle={styles.scrollContent}
+            keyboardDismissMode="none"
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
+            <View style={styles.content}>
+              <Header
+                subtitle="Create your secure worker account to generate a personalized plan"
+                title="Register"
+              />
 
-          <Card>
-            <InputField
-              error={errors.fullName}
-              label="Full Name"
-              onChangeText={(value) => updateField("fullName", value)}
-              placeholder="Enter your full name"
-              value={form.fullName}
-            />
-            <InputField
-              error={errors.phone}
-              keyboardType="phone-pad"
-              label="Phone"
-              onChangeText={(value) => updateField("phone", value)}
-              placeholder="10-digit mobile number"
-              value={form.phone}
-            />
-            <InputField
-              error={errors.password}
-              label="Password"
-              onChangeText={(value) => updateField("password", value)}
-              placeholder="Create password"
-              secureTextEntry
-              value={form.password}
-            />
-            {!!authError && <Text style={styles.errorText}>{authError}</Text>}
-            <Button loading={authLoading} onPress={handleRegister} style={styles.primaryCta} title="Register" />
-            <Button
-              onPress={() => navigation.goBack()}
-              style={styles.secondaryCta}
-              title="Already registered? Login"
-              variant="ghost"
-            />
-          </Card>
-        </View>
+              <Card>
+                <InputField
+                  error={errors.fullName}
+                  label="Full Name"
+                  onChangeText={handleFullNameChange}
+                  autoComplete="off"
+                  placeholder="Enter your full name"
+                  value={form.fullName}
+                />
+                <InputField
+                  error={errors.phone}
+                  keyboardType="phone-pad"
+                  label="Phone"
+                  onChangeText={handlePhoneChange}
+                  autoComplete="off"
+                  placeholder="10-digit mobile number"
+                  value={form.phone}
+                />
+                <InputField
+                  error={errors.password}
+                  label="Password"
+                  onChangeText={handlePasswordChange}
+                  autoComplete="off"
+                  placeholder="Create password"
+                  secureTextEntry
+                  value={form.password}
+                />
+                {!!authError && <Text style={styles.errorText}>{authError}</Text>}
+                <Button loading={authLoading} onPress={handleRegister} style={styles.primaryCta} title="Register" />
+                <Button
+                  onPress={handleGoBackToLogin}
+                  style={styles.secondaryCta}
+                  title="Already registered? Login"
+                  variant="ghost"
+                />
+              </Card>
+            </View>
+          </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
+
+export default memo(RegistrationScreen);
 
 const styles = StyleSheet.create({
   screen: {
@@ -106,18 +126,21 @@ const styles = StyleSheet.create({
   flex: {
     flex: 1
   },
+  scrollContent: {
+    flexGrow: 1
+  },
   content: {
-    flex: 1,
     paddingHorizontal: appTheme.spacing.lg,
-    paddingTop: appTheme.spacing.lg
+    paddingBottom: appTheme.spacing.xxl,
+    paddingTop: appTheme.spacing.xxl
   },
   primaryCta: {
     marginTop: appTheme.spacing.sm
   },
   errorText: {
     color: appTheme.colors.danger,
+    fontFamily: "Rajdhani_600SemiBold",
     fontSize: 13,
-    fontWeight: "600",
     marginBottom: appTheme.spacing.xs
   },
   secondaryCta: {

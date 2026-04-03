@@ -1,7 +1,9 @@
-import React, { useState } from "react";
+import React, { memo, useCallback, useRef, useState } from "react";
 import {
+  Animated,
   KeyboardAvoidingView,
   Platform,
+  ScrollView,
   StyleSheet,
   Text,
   View
@@ -31,7 +33,7 @@ function validatePhone(value) {
   return "";
 }
 
-export default function LoginScreen({ navigation }) {
+function LoginScreen({ navigation }) {
   const {
     login,
     authLoading,
@@ -42,6 +44,19 @@ export default function LoginScreen({ navigation }) {
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [errors, setErrors] = useState({});
+  const errorOpacity = useRef(new Animated.Value(0)).current;
+
+  const handlePhoneChange = useCallback((value) => {
+    setPhone(value);
+  }, []);
+
+  const handlePasswordChange = useCallback((value) => {
+    setPassword(value);
+  }, []);
+
+  const handleNavigateToRegister = useCallback(() => {
+    navigation.navigate("Register");
+  }, [navigation]);
 
   const handleLogin = async () => {
     const nextErrors = {
@@ -83,49 +98,73 @@ export default function LoginScreen({ navigation }) {
         style={styles.gradient}
       >
         <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
           style={styles.flex}
         >
-          <View style={styles.centeredContent}>
-            <Card style={styles.authCard}>
-              <Text style={styles.title}>GigShield AI</Text>
-              <Text style={styles.subtitle}>Income Protection for Delivery Workers</Text>
-              <Text style={styles.helperText}>Welcome back. Sign in to view your policy and risk dashboard.</Text>
+          <ScrollView
+            contentContainerStyle={styles.scrollContent}
+            keyboardDismissMode="none"
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
+            <View style={styles.centeredContent}>
+              <Card style={styles.authCard}>
+                <Text style={styles.title}>GigShield AI</Text>
+                <Text style={styles.subtitle}>Income Protection for Delivery Workers</Text>
+                <Text style={styles.helperText}>Welcome back. Sign in to view your policy and risk dashboard.</Text>
 
-              <InputField
-                error={errors.phone}
-                keyboardType="phone-pad"
-                label="Phone number"
-                onChangeText={setPhone}
-                placeholder="9876543210"
-                value={phone}
-              />
+                <InputField
+                  error={errors.phone}
+                  keyboardType="phone-pad"
+                  label="Phone number"
+                  onChangeText={handlePhoneChange}
+                  autoComplete="off"
+                  placeholder="9876543210"
+                  value={phone}
+                />
 
-              <InputField
-                error={errors.password}
-                label="Password"
-                onChangeText={setPassword}
-                placeholder="Enter your password"
-                secureTextEntry
-                value={password}
-              />
+                <InputField
+                  error={errors.password}
+                  label="Password"
+                  onChangeText={handlePasswordChange}
+                  autoComplete="off"
+                  placeholder="Enter your password"
+                  secureTextEntry
+                  value={password}
+                />
 
-              {!!authError && <Text style={styles.errorText}>{authError}</Text>}
+                {!!authError && (
+                  <Animated.Text
+                    onLayout={() => {
+                      Animated.timing(errorOpacity, {
+                        duration: appTheme.motion.duration.normal,
+                        toValue: 1,
+                        useNativeDriver: true
+                      }).start();
+                    }}
+                    style={[styles.errorText, { opacity: errorOpacity }]}
+                  >
+                    {authError}
+                  </Animated.Text>
+                )}
 
-              <Button loading={authLoading} onPress={handleLogin} style={styles.primaryAction} title="Login" />
-              <Button
-                onPress={() => navigation.navigate("Register")}
-                style={styles.secondaryAction}
-                title="New user? Register"
-                variant="ghost"
-              />
-            </Card>
-          </View>
+                <Button loading={authLoading} onPress={handleLogin} style={styles.primaryAction} title="Login" />
+                <Button
+                  onPress={handleNavigateToRegister}
+                  style={styles.secondaryAction}
+                  title="New user? Register"
+                  variant="ghost"
+                />
+              </Card>
+            </View>
+          </ScrollView>
         </KeyboardAvoidingView>
       </LinearGradient>
     </SafeAreaView>
   );
 }
+
+export default memo(LoginScreen);
 
 const styles = StyleSheet.create({
   screen: {
@@ -138,9 +177,12 @@ const styles = StyleSheet.create({
   flex: {
     flex: 1
   },
+  scrollContent: {
+    flexGrow: 1
+  },
   centeredContent: {
-    flex: 1,
-    justifyContent: "center",
+    paddingBottom: appTheme.spacing.xxl,
+    paddingTop: appTheme.spacing.xxl,
     paddingHorizontal: appTheme.spacing.lg
   },
   authCard: {
@@ -151,23 +193,19 @@ const styles = StyleSheet.create({
     ...appTheme.shadows.floating
   },
   title: {
-    color: appTheme.colors.primary,
-    fontSize: 36,
-    letterSpacing: -0.6,
-    fontWeight: "700"
+    color: appTheme.colors.textPrimary,
+    ...appTheme.typography.display
   },
   subtitle: {
-    color: appTheme.colors.textPrimary,
-    fontSize: 14,
-    letterSpacing: 0.2,
-    fontWeight: "700",
+    color: appTheme.colors.accentPrimary,
+    fontFamily: "Rajdhani_700Bold",
+    fontSize: 16,
+    letterSpacing: 0.6,
     marginTop: appTheme.spacing.xs
   },
   helperText: {
     color: appTheme.colors.textSecondary,
-    fontSize: 14,
-    fontWeight: "500",
-    lineHeight: 20,
+    ...appTheme.typography.body,
     marginBottom: appTheme.spacing.lg,
     marginTop: appTheme.spacing.sm
   },
@@ -176,8 +214,8 @@ const styles = StyleSheet.create({
   },
   errorText: {
     color: appTheme.colors.danger,
+    fontFamily: "Rajdhani_600SemiBold",
     fontSize: 13,
-    fontWeight: "600",
     marginBottom: appTheme.spacing.xs
   },
   secondaryAction: {

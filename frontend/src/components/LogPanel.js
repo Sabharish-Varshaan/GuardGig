@@ -7,7 +7,7 @@ import { appTheme } from "../styles/theme";
 const levelColorMap = {
   danger: appTheme.colors.danger,
   info: appTheme.colors.textSecondary,
-  success: appTheme.colors.accent,
+  success: appTheme.colors.accentSuccess,
   warning: appTheme.colors.warning
 };
 
@@ -18,7 +18,7 @@ export default function LogPanel({ logs = [] }) {
 
       {logs.length === 0 && <Text style={styles.emptyText}>No events yet.</Text>}
 
-      {logs.slice(0, 8).map((log) => (
+      {logs.slice(0, 5).map((log) => (
         <View key={log.id} style={styles.logRow}>
           <Text style={styles.timeText}>{`[${log.time}]`}</Text>
           <Text
@@ -40,33 +40,36 @@ const styles = StyleSheet.create({
     marginBottom: appTheme.spacing.md
   },
   title: {
-    color: appTheme.colors.primary,
+    color: appTheme.colors.textPrimary,
+    fontFamily: "Orbitron_600SemiBold",
     fontSize: 17,
     letterSpacing: 0.2,
-    fontWeight: "700",
-    marginBottom: appTheme.spacing.sm
+    marginBottom: appTheme.spacing.md
   },
   emptyText: {
     color: appTheme.colors.textSecondary,
-    fontSize: 14,
-    fontWeight: "600"
+    fontFamily: "Rajdhani_600SemiBold",
+    fontSize: 14
   },
   logRow: {
+    borderBottomColor: appTheme.colors.borderSubtle,
+    borderBottomWidth: 1,
     flexDirection: "row",
-    marginBottom: appTheme.spacing.xs
+    marginBottom: appTheme.spacing.sm,
+    paddingBottom: appTheme.spacing.sm
   },
   timeText: {
     color: appTheme.colors.textSecondary,
-    fontSize: 11,
+    fontFamily: "Rajdhani_700Bold",
+    fontSize: 13,
     letterSpacing: 0.2,
-    fontWeight: "700",
     marginRight: appTheme.spacing.xs,
-    minWidth: 52
+    minWidth: 60
   },
   messageText: {
     flex: 1,
-    fontSize: 13,
-    fontWeight: "600",
-    lineHeight: 18
+    fontFamily: "Rajdhani_600SemiBold",
+    fontSize: 14,
+    lineHeight: 20
   }
 });

@@ -1,106 +1,174 @@
 export const colors = {
-  primary: "#10243E",
-  accent: "#FF6B3D",
-  accentAlt: "#28C2A0",
-  warning: "#F7B844",
-  danger: "#E74B5E",
-  dangerText: "#B83B53",
-  dangerSoft: "#FFE7EC",
-  background: "#ECF2F8",
-  surface: "#FFFFFF",
-  textPrimary: "#142A44",
-  textSecondary: "#60758E",
-  textInverse: "#F8FBFF",
-  border: "#D7E2ED",
-  borderSoft: "#E6EEF7",
-  mutedBlue: "#DDEBFA",
-  successSoft: "#E7F8F2",
-  successText: "#0B8A63",
-  successBorder: "#C1F0E0",
-  warningSoft: "#FFF2DB",
-  warningText: "#996300",
-  warningBorder: "#F9DFA8",
-  infoSoft: "#E6F0FB",
-  infoBorder: "#C7DBF3",
-  dangerBorder: "#F9C7D1",
-  chipBg: "#E7EFF8",
-  chipBorder: "#D3E0ED",
-  cardTint: "#F7FAFE",
-  switchTrackOff: "#D9E2EC",
-  switchTrackOn: "#BDEFD9",
-  switchThumbOff: "#C9D4E0",
-  tabGlass: "rgba(255,255,255,0.92)",
-  cardGlass: "rgba(255,255,255,0.96)",
-  cardGlassBorder: "rgba(255,255,255,0.5)",
-  overlay: "rgba(16,36,62,0.08)",
-  gradientA: "#122A4A",
-  gradientB: "#214D80",
-  gradientC: "#ECF2F8"
+  bgPrimary: "#050A14",
+  bgCard: "#0A1628",
+  bgElevated: "#0F1F3D",
+  accentPrimary: "#00D4FF",
+  accentSuccess: "#00FF94",
+  accentWarning: "#FFB800",
+  accentDanger: "#FF4560",
+  textPrimary: "#E8F4FD",
+  textSecondary: "#6D8AA9",
+  textDisabled: "#3A556E",
+  borderSubtle: "rgba(0,212,255,0.15)",
+  borderStrong: "rgba(0,212,255,0.4)",
+  glowSoft: "rgba(0,212,255,0.22)",
+  glowStrong: "rgba(0,212,255,0.45)",
+  gradientCyanStart: "#00B8E6",
+  gradientCyanEnd: "#007CFF",
+  gradientDarkStart: "#081426",
+  gradientDarkEnd: "#102444",
+  overlaySoft: "rgba(5,10,20,0.55)",
+  successSoft: "rgba(0,255,148,0.14)",
+  successText: "#00FF94",
+  successBorder: "rgba(0,255,148,0.45)",
+  warningSoft: "rgba(255,184,0,0.14)",
+  warningText: "#FFB800",
+  warningBorder: "rgba(255,184,0,0.45)",
+  dangerSoft: "rgba(255,69,96,0.14)",
+  dangerText: "#FF4560",
+  dangerBorder: "rgba(255,69,96,0.45)",
+  infoSoft: "rgba(0,212,255,0.14)",
+  infoBorder: "rgba(0,212,255,0.45)",
+  mutedBlue: "#0C1A31",
+  chipBg: "#0D1C34",
+  chipBorder: "rgba(0,212,255,0.25)",
+  tabGlass: "rgba(9,20,37,0.95)",
+  cardGlass: "rgba(10,22,40,0.95)",
+  cardGlassBorder: "rgba(0,212,255,0.2)",
+  semanticSafe: "#00FF94",
+  semanticWarning: "#FFB800",
+  semanticHighRisk: "#FF4560",
+  semanticPayout: "#00D4FF",
+  semanticFocus: "rgba(0,212,255,0.4)",
+  semanticSurfaceMuted: "#0B1A30",
+  background: "#050A14",
+  surface: "#0A1628",
+  primary: "#00D4FF",
+  accent: "#00D4FF",
+  accentAlt: "#00FF94",
+  warning: "#FFB800",
+  danger: "#FF4560",
+  textInverse: "#E8F4FD",
+  border: "rgba(0,212,255,0.15)",
+  borderSoft: "rgba(0,212,255,0.24)",
+  cardTint: "#0A1628",
+  switchTrackOff: "#1A2D45",
+  switchTrackOn: "rgba(0,255,148,0.38)",
+  switchThumbOff: "#3A556E",
+  overlay: "rgba(5,10,20,0.55)",
+  gradientA: "#081426",
+  gradientB: "#102444",
+  gradientC: "#050A14"
 };
 
 export const spacing = {
-  xs: 6,
-  sm: 10,
-  md: 16,
-  lg: 22,
-  xl: 30,
-  xxl: 40
+  xs: 8,
+  sm: 16,
+  md: 24,
+  lg: 32,
+  xl: 40,
+  xxl: 48
 };
 
 export const radius = {
-  card: 20,
-  soft: 14,
-  input: 16,
+  card: 16,
+  soft: 12,
+  input: 14,
   pill: 999
 };
 
 export const typography = {
+  display: {
+    fontFamily: "Orbitron_700Bold",
+    fontSize: 34,
+    letterSpacing: 0.5,
+    lineHeight: 42
+  },
   h1: {
-    fontSize: 32,
-    fontWeight: "700",
-    letterSpacing: -0.4
+    fontFamily: "Orbitron_700Bold",
+    fontSize: 28,
+    letterSpacing: 0.3,
+    lineHeight: 34
   },
   h2: {
-    fontSize: 25,
-    fontWeight: "700"
+    fontFamily: "Orbitron_600SemiBold",
+    fontSize: 22,
+    lineHeight: 28
   },
   h3: {
-    fontSize: 19,
-    fontWeight: "700"
+    fontFamily: "Orbitron_600SemiBold",
+    fontSize: 18,
+    lineHeight: 24
+  },
+  subtitle: {
+    fontFamily: "Rajdhani_600SemiBold",
+    fontSize: 16,
+    lineHeight: 22,
+    letterSpacing: 0.4
   },
   body: {
-    fontSize: 15,
-    fontWeight: "500"
+    fontFamily: "Rajdhani_500Medium",
+    fontSize: 16,
+    lineHeight: 22
+  },
+  caption: {
+    fontFamily: "Rajdhani_500Medium",
+    fontSize: 13,
+    lineHeight: 18,
+    letterSpacing: 0.2
+  },
+  metric: {
+    fontFamily: "Orbitron_700Bold",
+    fontSize: 32,
+    lineHeight: 36,
+    letterSpacing: 0.6
   },
   label: {
+    fontFamily: "Rajdhani_700Bold",
     fontSize: 12,
     letterSpacing: 0.4,
-    fontWeight: "600"
+    textTransform: "uppercase"
   }
 };
 
 export const shadows = {
   soft: {
-    shadowColor: "#10243E",
+    shadowColor: "#00D4FF",
     shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.08,
-    shadowRadius: 14,
+    shadowOpacity: 0.15,
+    shadowRadius: 16,
     elevation: 4
   },
   card: {
-    shadowColor: "#10243E",
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.1,
-    shadowRadius: 20,
+    shadowColor: "#00D4FF",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.2,
+    shadowRadius: 18,
     elevation: 6
   },
   floating: {
-    shadowColor: "#0F2138",
+    shadowColor: "#00D4FF",
     shadowOffset: { width: 0, height: 16 },
-    shadowOpacity: 0.18,
+    shadowOpacity: 0.24,
     shadowRadius: 26,
     elevation: 10
+  },
+  glow: {
+    shadowColor: "#00D4FF",
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.35,
+    shadowRadius: 14,
+    elevation: 8
   }
+};
+
+export const motion = {
+  duration: {
+    quick: 250,
+    normal: 320,
+    slow: 420
+  },
+  disabledOpacity: 0.5
 };
 
 export const appTheme = {
@@ -108,5 +176,6 @@ export const appTheme = {
   spacing,
   radius,
   typography,
-  shadows
+  shadows,
+  motion
 };

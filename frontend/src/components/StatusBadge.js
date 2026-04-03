@@ -21,7 +21,7 @@ const statusMap = {
   },
   info: {
     background: appTheme.colors.infoSoft,
-    color: appTheme.colors.primary,
+    color: appTheme.colors.accentPrimary,
     border: appTheme.colors.infoBorder
   }
 };
@@ -54,8 +54,9 @@ const styles = StyleSheet.create({
     paddingVertical: 6
   },
   label: {
-    fontSize: 11,
+    fontFamily: "Rajdhani_700Bold",
+    fontSize: 12,
     letterSpacing: 0.3,
-    fontWeight: "700"
+    textTransform: "uppercase"
   }
 });

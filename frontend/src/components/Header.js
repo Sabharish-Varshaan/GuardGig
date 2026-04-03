@@ -31,17 +31,12 @@ const styles = StyleSheet.create({
     justifyContent: "center"
   },
   title: {
-    color: appTheme.colors.primary,
-    fontSize: appTheme.typography.h1.fontSize,
-    letterSpacing: appTheme.typography.h1.letterSpacing,
-    fontWeight: "700",
-    lineHeight: 38
+    color: appTheme.colors.textPrimary,
+    ...appTheme.typography.h1
   },
   subtitle: {
     color: appTheme.colors.textSecondary,
-    fontSize: 14,
-    fontWeight: "500",
-    lineHeight: 20,
+    ...appTheme.typography.body,
     marginTop: appTheme.spacing.xs
   }
 });

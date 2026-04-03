@@ -3,8 +3,10 @@ import { Animated, FlatList, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import Card from "../components/Card";
+import ClaimItemCard from "../components/ClaimItemCard";
 import Header from "../components/Header";
 import LogPanel from "../components/LogPanel";
+import NeonButton from "../components/NeonButton";
 import StatusCard from "../components/StatusCard";
 import StatusBadge from "../components/StatusBadge";
 import { useAppContext } from "../context/AppContext";
@@ -14,7 +16,7 @@ function formatRupee(value) {
   return `₹${value}`;
 }
 
-export default function ClaimsScreen() {
+export default function ClaimsScreen({ navigation }) {
   const {
     claimsHistory,
     workflowState,
@@ -113,19 +115,15 @@ export default function ClaimsScreen() {
               </Text>
             </Card>
           }
-          renderItem={({ item }) => (
-            <Card style={styles.historyCard}>
-              <View style={styles.historyTopRow}>
-                <Text style={styles.historyEvent}>{item.event}</Text>
-                <StatusBadge
-                  label={item.status}
-                  variant={item.status === "Approved" ? "success" : "warning"}
-                />
-              </View>
-              <Text style={styles.historyAmount}>{formatRupee(item.amount)}</Text>
-              <Text style={styles.historyTime}>{item.timestamp}</Text>
-            </Card>
-          )}
+          renderItem={({ item }) => <ClaimItemCard item={item} style={styles.historyCard} />}
+          ListFooterComponent={
+            <NeonButton
+              onPress={() => navigation.navigate("Payout")}
+              style={styles.payoutButton}
+              title="Open Payout Center"
+              variant="secondary"
+            />
+          }
           showsVerticalScrollIndicator={false}
         />
       </View>
@@ -142,89 +140,71 @@ const styles = StyleSheet.create({
     flex: 1
   },
   listContent: {
-    paddingHorizontal: appTheme.spacing.lg,
-    paddingTop: appTheme.spacing.lg,
-    paddingBottom: appTheme.spacing.xxl
+    paddingHorizontal: appTheme.spacing.sm,
+    paddingTop: appTheme.spacing.sm,
+    paddingBottom: appTheme.spacing.xxl + 200
   },
   infoCard: {
-    marginBottom: appTheme.spacing.md
+    marginBottom: appTheme.spacing.lg
   },
   infoTitle: {
-    color: appTheme.colors.primary,
-    fontSize: 18,
-    fontWeight: "700"
+    color: appTheme.colors.textPrimary,
+    fontFamily: "Orbitron_600SemiBold",
+    fontSize: 16
   },
   infoSubtext: {
     color: appTheme.colors.textSecondary,
-    fontSize: 14,
-    fontWeight: "600",
-    lineHeight: 20,
-    marginTop: appTheme.spacing.xs
+    fontFamily: "Rajdhani_600SemiBold",
+    fontSize: 15,
+    lineHeight: 22,
+    marginTop: appTheme.spacing.sm
   },
   resultCard: {
     backgroundColor: appTheme.colors.successSoft,
     borderColor: appTheme.colors.borderSoft,
-    marginBottom: appTheme.spacing.md
+    marginBottom: appTheme.spacing.lg
   },
   resultHeading: {
-    color: appTheme.colors.primary,
-    fontSize: 22,
-    fontWeight: "700"
+    color: appTheme.colors.textPrimary,
+    fontFamily: "Orbitron_700Bold",
+    fontSize: 18
   },
   resultSubHeading: {
-    color: appTheme.colors.accent,
-    fontSize: 18,
-    fontWeight: "700",
+    color: appTheme.colors.accentPrimary,
+    fontFamily: "Rajdhani_700Bold",
+    fontSize: 15,
     marginTop: appTheme.spacing.xs
   },
   resultAmount: {
     color: appTheme.colors.successText,
-    fontSize: 30,
-    fontWeight: "700",
+    fontFamily: "Orbitron_700Bold",
+    fontSize: 22,
     marginBottom: appTheme.spacing.sm,
-    marginTop: appTheme.spacing.md
+    marginTop: appTheme.spacing.sm
   },
   historyTitle: {
-    color: appTheme.colors.primary,
+    color: appTheme.colors.textPrimary,
+    fontFamily: "Orbitron_600SemiBold",
     fontSize: 18,
-    fontWeight: "700",
-    marginBottom: appTheme.spacing.sm
+    marginBottom: appTheme.spacing.md,
+    marginTop: appTheme.spacing.xs
   },
   historyCard: {
-    marginBottom: appTheme.spacing.sm
+    marginBottom: appTheme.spacing.md
   },
   emptyTitle: {
-    color: appTheme.colors.primary,
-    fontSize: 16,
-    fontWeight: "700"
+    color: appTheme.colors.textPrimary,
+    fontFamily: "Rajdhani_700Bold",
+    fontSize: 18
   },
   emptySubtitle: {
     color: appTheme.colors.textSecondary,
-    fontSize: 13,
-    fontWeight: "600",
-    lineHeight: 18,
+    fontFamily: "Rajdhani_500Medium",
+    fontSize: 14,
+    lineHeight: 20,
     marginTop: appTheme.spacing.xs
   },
-  historyTopRow: {
-    alignItems: "center",
-    flexDirection: "row",
-    justifyContent: "space-between"
-  },
-  historyEvent: {
-    color: appTheme.colors.textPrimary,
-    fontSize: 16,
-    fontWeight: "700"
-  },
-  historyAmount: {
-    color: appTheme.colors.primary,
-    fontSize: 25,
-    fontWeight: "700",
+  payoutButton: {
     marginTop: appTheme.spacing.sm
-  },
-  historyTime: {
-    color: appTheme.colors.textSecondary,
-    fontSize: 13,
-    fontWeight: "600",
-    marginTop: appTheme.spacing.xs
   }
 });

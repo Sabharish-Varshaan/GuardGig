@@ -4,7 +4,7 @@ import { LinearGradient } from "expo-linear-gradient";
 
 import { appTheme } from "../styles/theme";
 
-export default function Button({
+export default function NeonButton({
   title,
   onPress,
   variant = "primary",
@@ -15,17 +15,11 @@ export default function Button({
   const isSecondary = variant === "secondary";
   const isGhost = variant === "ghost";
 
-  const label = (
-    <Text
-      style={[
-        styles.label,
-        isSecondary ? styles.secondaryLabel : null,
-        isGhost ? styles.ghostLabel : null
-      ]}
-    >
-      {title}
-    </Text>
-  );
+  const labelStyle = [
+    styles.label,
+    isSecondary ? styles.secondaryLabel : null,
+    isGhost ? styles.ghostLabel : null
+  ];
 
   if (isSecondary || isGhost) {
     return (
@@ -40,7 +34,11 @@ export default function Button({
           style
         ]}
       >
-        {loading ? <ActivityIndicator color={appTheme.colors.primary} /> : label}
+        {loading ? (
+          <ActivityIndicator color={appTheme.colors.textPrimary} />
+        ) : (
+          <Text style={labelStyle}>{title}</Text>
+        )}
       </Pressable>
     );
   }
@@ -52,12 +50,12 @@ export default function Button({
       style={({ pressed }) => [styles.button, pressed && !disabled ? styles.pressed : null, disabled ? styles.disabled : null, style]}
     >
       <LinearGradient
-        colors={[appTheme.colors.accent, appTheme.colors.warning]}
+        colors={[appTheme.colors.gradientCyanStart, appTheme.colors.gradientCyanEnd]}
         end={{ x: 1, y: 1 }}
         start={{ x: 0, y: 0 }}
         style={styles.gradientButton}
       >
-        {loading ? <ActivityIndicator color={appTheme.colors.surface} /> : label}
+        {loading ? <ActivityIndicator color={appTheme.colors.bgPrimary} /> : <Text style={labelStyle}>{title}</Text>}
       </LinearGradient>
     </Pressable>
   );
@@ -66,47 +64,51 @@ export default function Button({
 const styles = StyleSheet.create({
   button: {
     borderRadius: appTheme.radius.input,
-    minHeight: 56,
+    minHeight: 54,
     overflow: "hidden"
   },
   gradientButton: {
     alignItems: "center",
     justifyContent: "center",
-    minHeight: 56,
-    paddingHorizontal: appTheme.spacing.md
+    minHeight: 54,
+    paddingHorizontal: appTheme.spacing.sm
   },
   secondaryButton: {
     alignItems: "center",
-    backgroundColor: appTheme.colors.cardTint,
-    borderColor: appTheme.colors.border,
+    backgroundColor: appTheme.colors.bgElevated,
+    borderColor: appTheme.colors.borderStrong,
     borderWidth: 1,
     justifyContent: "center",
-    paddingHorizontal: appTheme.spacing.md
+    minHeight: 54,
+    paddingHorizontal: appTheme.spacing.sm
   },
   ghostButton: {
     alignItems: "center",
+    borderColor: appTheme.colors.borderSubtle,
+    borderRadius: appTheme.radius.input,
+    borderWidth: 1,
     justifyContent: "center",
-    paddingHorizontal: appTheme.spacing.sm,
-    minHeight: 44
+    minHeight: 48,
+    paddingHorizontal: appTheme.spacing.sm
   },
   label: {
-    color: appTheme.colors.textInverse,
-    fontSize: 15,
-    letterSpacing: 0.3,
-    fontWeight: "700"
+    color: appTheme.colors.bgPrimary,
+    fontFamily: "Rajdhani_700Bold",
+    fontSize: 17,
+    letterSpacing: 0.4
   },
   secondaryLabel: {
-    color: appTheme.colors.primary
+    color: appTheme.colors.textPrimary
   },
   ghostLabel: {
-    color: appTheme.colors.primary,
-    fontSize: 14
+    color: appTheme.colors.accentPrimary,
+    fontSize: 15
   },
   pressed: {
-    opacity: 0.9,
+    opacity: 0.92,
     transform: [{ scale: 0.99 }]
   },
   disabled: {
-    opacity: 0.6
+    opacity: appTheme.motion.disabledOpacity
   }
 });

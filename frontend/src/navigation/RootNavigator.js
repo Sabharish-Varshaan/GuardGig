@@ -6,6 +6,7 @@ import { StatusBar } from "expo-status-bar";
 import { useAppContext } from "../context/AppContext";
 import SettingsScreen from "../screens/SettingsScreen";
 import SplashScreen from "../screens/SplashScreen";
+import PayoutScreen from "../screens/PayoutScreen";
 import { appTheme } from "../styles/theme";
 import AuthNavigator from "./AuthNavigator";
 import MainTabNavigator from "./MainTabNavigator";
@@ -16,11 +17,11 @@ const navigationTheme = {
   ...DefaultTheme,
   colors: {
     ...DefaultTheme.colors,
-    background: appTheme.colors.background,
-    card: appTheme.colors.primary,
-    primary: appTheme.colors.accent,
-    text: appTheme.colors.surface,
-    border: "transparent"
+    background: appTheme.colors.bgPrimary,
+    card: appTheme.colors.bgCard,
+    primary: appTheme.colors.accentPrimary,
+    text: appTheme.colors.textPrimary,
+    border: appTheme.colors.borderSubtle
   }
 };
 
@@ -29,6 +30,10 @@ export default function RootNavigator() {
   const [booting, setBooting] = useState(true);
 
   useEffect(() => {
+    if (authInitializing) {
+      return undefined;
+    }
+
     const timer = setTimeout(() => {
       setBooting(false);
     }, 1400);
@@ -36,7 +41,7 @@ export default function RootNavigator() {
     return () => {
       clearTimeout(timer);
     };
-  }, []);
+  }, [authInitializing]);
 
   if (booting || authInitializing) {
     return <SplashScreen />;
@@ -47,13 +52,15 @@ export default function RootNavigator() {
       <StatusBar style="light" />
       <RootStack.Navigator
         screenOptions={{
-          animation: "slide_from_right",
-          contentStyle: { backgroundColor: appTheme.colors.background },
-          headerStyle: { backgroundColor: appTheme.colors.primary },
-          headerTintColor: appTheme.colors.surface,
+          animation: "fade_from_bottom",
+          contentStyle: { backgroundColor: appTheme.colors.bgPrimary },
+          headerStyle: {
+            backgroundColor: appTheme.colors.bgCard
+          },
+          headerTintColor: appTheme.colors.textPrimary,
           headerTitleStyle: {
-            fontSize: 17,
-            fontWeight: "700"
+            ...appTheme.typography.subtitle,
+            color: appTheme.colors.textPrimary
           }
         }}
       >
@@ -68,6 +75,11 @@ export default function RootNavigator() {
               component={SettingsScreen}
               name="Settings"
               options={{ title: "Settings" }}
+            />
+            <RootStack.Screen
+              component={PayoutScreen}
+              name="PayoutDetail"
+              options={{ title: "Payout" }}
             />
           </>
         ) : (

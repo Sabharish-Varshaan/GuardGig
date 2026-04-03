@@ -68,19 +68,19 @@ export default function StatusCard({ workflowState, payoutAmount, movementScore 
 
   const resolvedMessage = useMemo(() => {
     if (workflowState === "approved") {
-      return `✅ Claim Approved - ₹${payoutAmount || 500} credited instantly 🎉`;
+      return `Payout released: ₹${payoutAmount || 500} credited instantly.`;
     }
 
     if (workflowState === "flagged") {
-      return "⚠️ Verification Required";
+      return "Verification required before payout release.";
     }
 
     if (workflowState === "checking_conditions") {
-      return "Checking conditions...";
+      return "Heavy rain detected. Checking trigger conditions...";
     }
 
     if (workflowState === "validating") {
-      return "Validating eligibility...";
+      return "Claim being processed. Validating policy eligibility...";
     }
 
     if (workflowState === "fraud_check") {
@@ -121,6 +121,7 @@ export default function StatusCard({ workflowState, payoutAmount, movementScore 
           <StatusBadge
             label={`${statusMeta.emoji} ${statusMeta.message}`}
             variant={statusMeta.tone === "info" ? "info" : statusMeta.tone}
+            style={styles.badge}
           />
         </View>
         <Text style={styles.message}>{resolvedMessage}</Text>
@@ -146,29 +147,39 @@ export default function StatusCard({ workflowState, payoutAmount, movementScore 
 
 const styles = StyleSheet.create({
   card: {
-    marginBottom: appTheme.spacing.md
+    marginBottom: appTheme.spacing.lg,
+    borderWidth: 0.8,
+    paddingVertical: 12
   },
   headerRow: {
-    alignItems: "center",
+    alignItems: "flex-start",
     flexDirection: "row",
+    flexWrap: "wrap",
     justifyContent: "space-between",
-    marginBottom: appTheme.spacing.sm
+    marginBottom: appTheme.spacing.xs
   },
   title: {
-    color: appTheme.colors.primary,
-    fontSize: 16,
+    color: appTheme.colors.textPrimary,
+    fontFamily: "Orbitron_600SemiBold",
+    fontSize: 15,
     letterSpacing: 0.2,
-    fontWeight: "700"
+    marginBottom: appTheme.spacing.xs,
+    paddingRight: appTheme.spacing.sm
   },
   message: {
     color: appTheme.colors.textPrimary,
+    fontFamily: "Rajdhani_600SemiBold",
     fontSize: 15,
-    fontWeight: "600"
+    lineHeight: 20
   },
   helperText: {
     color: appTheme.colors.textSecondary,
+    fontFamily: "Rajdhani_600SemiBold",
     fontSize: 12,
-    fontWeight: "600",
     marginTop: appTheme.spacing.xs
+  },
+  badge: {
+    flexBasis: "100%",
+    marginBottom: appTheme.spacing.xs
   }
 });

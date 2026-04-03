@@ -1,11 +1,12 @@
 import React, { useMemo } from "react";
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { ScrollView, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import Button from "../components/Button";
 import Card from "../components/Card";
 import Header from "../components/Header";
 import LogPanel from "../components/LogPanel";
+import MetricBox from "../components/MetricBox";
 import RiskBanner from "../components/RiskBanner";
 import StatusBadge from "../components/StatusBadge";
 import StatusCard from "../components/StatusCard";
@@ -84,6 +85,8 @@ export default function DashboardScreen({ navigation }) {
     eventLogs,
     startCoverageCheck
   } = useAppContext();
+  const { width } = useWindowDimensions();
+  const isCompactScreen = width < 390;
 
   const isWorkflowRunning =
     workflowState === "checking_conditions" ||
@@ -120,6 +123,23 @@ export default function DashboardScreen({ navigation }) {
             <StatusBadge label={risk.level || "Medium"} variant={riskVariant} />
           </View>
         </Card>
+
+        <View style={[styles.metricGrid, isCompactScreen ? styles.metricGridCompact : null]}>
+          <MetricBox
+            helper="live rainfall"
+            label="Rain"
+            tone={risk.rain >= 60 ? "danger" : risk.rain >= 45 ? "warning" : "safe"}
+            value={`${risk.rain} mm`}
+            style={isCompactScreen ? styles.metricBoxCompact : null}
+          />
+          <MetricBox
+            helper="air quality"
+            label="AQI"
+            tone={risk.aqi >= 300 ? "danger" : risk.aqi >= 200 ? "warning" : "safe"}
+            value={`${risk.aqi}`}
+            style={isCompactScreen ? styles.metricBoxCompact : null}
+          />
+        </View>
 
         <Card style={styles.sectionCard}>
           <View style={styles.sectionHeader}>
@@ -163,7 +183,18 @@ export default function DashboardScreen({ navigation }) {
 
         <View style={styles.actionGroup}>
           <Button onPress={() => navigation.navigate("Policy")} title="View Policy" />
-          <Button onPress={() => navigation.navigate("Claims")} style={styles.secondaryAction} title="Open Claims" variant="secondary" />
+          <Button
+            onPress={() => navigation.navigate("Claims")}
+            style={styles.secondaryAction}
+            title="Open Claims"
+            variant="secondary"
+          />
+          <Button
+            onPress={() => navigation.navigate("Payout")}
+            style={styles.secondaryAction}
+            title="View Payout"
+            variant="ghost"
+          />
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -176,36 +207,48 @@ const styles = StyleSheet.create({
     flex: 1
   },
   content: {
-    paddingBottom: appTheme.spacing.xxl,
-    paddingHorizontal: appTheme.spacing.lg,
-    paddingTop: appTheme.spacing.lg
+    paddingBottom: appTheme.spacing.xxl + 200,
+    paddingHorizontal: appTheme.spacing.sm,
+    paddingTop: appTheme.spacing.sm
   },
   heroCard: {
-    marginBottom: appTheme.spacing.md,
+    marginBottom: appTheme.spacing.lg,
     paddingBottom: appTheme.spacing.md
   },
   heroCaption: {
-    color: appTheme.colors.textInverse,
-    fontSize: 11,
-    letterSpacing: 1.2,
-    fontWeight: "700",
+    color: appTheme.colors.textSecondary,
+    fontFamily: "Rajdhani_700Bold",
+    fontSize: 12,
+    letterSpacing: 1,
     textTransform: "uppercase"
+  },
+  metricGrid: {
+    flexDirection: "row",
+    gap: appTheme.spacing.sm,
+    marginBottom: appTheme.spacing.md
+  },
+  metricGridCompact: {
+    flexDirection: "column"
+  },
+  metricBoxCompact: {
+    flex: 0,
+    width: "100%"
   },
   heroRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginTop: appTheme.spacing.md
+    marginTop: appTheme.spacing.sm
   },
   heroLabel: {
-    color: appTheme.colors.textInverse,
-    fontSize: 13,
-    fontWeight: "600"
+    color: appTheme.colors.textSecondary,
+    fontFamily: "Rajdhani_700Bold",
+    fontSize: 14
   },
   heroValue: {
-    color: appTheme.colors.textInverse,
+    color: appTheme.colors.textPrimary,
+    fontFamily: "Orbitron_700Bold",
     fontSize: 26,
-    fontWeight: "700",
-    marginTop: 2
+    marginTop: appTheme.spacing.xs
   },
   heroRiskRow: {
     alignItems: "center",
@@ -214,51 +257,53 @@ const styles = StyleSheet.create({
     marginTop: appTheme.spacing.md
   },
   heroRiskText: {
-    color: appTheme.colors.textInverse,
-    fontSize: 15,
-    fontWeight: "700"
+    color: appTheme.colors.textPrimary,
+    fontFamily: "Rajdhani_700Bold",
+    fontSize: 16
   },
   sectionCard: {
-    marginBottom: appTheme.spacing.md
+    marginBottom: appTheme.spacing.lg
   },
   sectionHeader: {
     alignItems: "center",
     flexDirection: "row",
     justifyContent: "space-between",
-    marginBottom: appTheme.spacing.sm
+    marginBottom: appTheme.spacing.md
   },
   sectionTitle: {
-    color: appTheme.colors.primary,
+    color: appTheme.colors.textPrimary,
+    fontFamily: "Orbitron_600SemiBold",
     fontSize: 18,
-    letterSpacing: 0.2,
-    fontWeight: "700"
+    letterSpacing: 0.2
   },
   infoRow: {
     alignItems: "center",
     flexDirection: "row",
     justifyContent: "space-between",
-    marginBottom: appTheme.spacing.sm
+    marginBottom: appTheme.spacing.sm,
+    paddingVertical: 2
   },
   infoLabel: {
     color: appTheme.colors.textPrimary,
-    fontSize: 15,
-    fontWeight: "600"
+    fontFamily: "Rajdhani_600SemiBold",
+    fontSize: 16
   },
   infoValue: {
-    color: appTheme.colors.primary,
-    fontSize: 15,
-    fontWeight: "700"
+    color: appTheme.colors.accentPrimary,
+    fontFamily: "Rajdhani_700Bold",
+    fontSize: 16
   },
   fraudBadgeWrap: {
-    marginTop: appTheme.spacing.xs
+    marginTop: appTheme.spacing.sm
   },
   checkCoverageButton: {
-    marginBottom: appTheme.spacing.md
+    marginBottom: appTheme.spacing.lg
   },
   actionGroup: {
-    marginTop: appTheme.spacing.sm
+    marginBottom: appTheme.spacing.xxl,
+    marginTop: appTheme.spacing.md
   },
   secondaryAction: {
-    marginTop: appTheme.spacing.sm
+    marginTop: appTheme.spacing.md
   }
 });

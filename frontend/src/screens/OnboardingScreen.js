@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { memo, useCallback, useMemo, useState } from "react";
 import {
   KeyboardAvoidingView,
   Platform,
@@ -35,7 +35,7 @@ function Chip({ label, selected, onPress }) {
   );
 }
 
-export default function OnboardingScreen({ navigation, route }) {
+function OnboardingScreen({ navigation, route }) {
   const {
     completeOnboarding,
     authLoading,
@@ -60,15 +60,24 @@ export default function OnboardingScreen({ navigation, route }) {
 
   const stepProgress = useMemo(() => ((step + 1) / 4) * 100, [step]);
 
-  const updateField = (key, value) => {
-    setForm((prev) => ({ ...prev, [key]: value }));
+  const updateField = useCallback((key, value) => {
+    setForm((prev) => {
+      const nextForm = { ...prev, [key]: value };
 
-    if (key === "dailyIncome") {
-      const parsedDaily = Number(value);
-      const weekly = parsedDaily > 0 ? parsedDaily * 7 : 0;
-      setForm((prev) => ({ ...prev, weeklyIncome: weekly ? String(weekly) : "" }));
-    }
-  };
+      if (key === "dailyIncome") {
+        const parsedDaily = Number(value);
+        const weekly = parsedDaily > 0 ? parsedDaily * 7 : 0;
+        nextForm.weeklyIncome = weekly ? String(weekly) : "";
+      }
+
+      return nextForm;
+    });
+  }, []);
+
+  const handleFullNameChange = useCallback((value) => updateField("fullName", value), [updateField]);
+  const handleAgeChange = useCallback((value) => updateField("age", value), [updateField]);
+  const handleWorkHoursChange = useCallback((value) => updateField("workHours", value), [updateField]);
+  const handleDailyIncomeChange = useCallback((value) => updateField("dailyIncome", value), [updateField]);
 
   const validateStep = () => {
     let nextErrors = {};
@@ -137,8 +146,13 @@ export default function OnboardingScreen({ navigation, route }) {
 
   return (
     <SafeAreaView style={styles.screen}>
-      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={styles.flex}>
-        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.flex}>
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          keyboardDismissMode="none"
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
           <Header
             subtitle="Complete your 4-step profile to generate your personalized insurance plan"
             title="Onboarding"
@@ -162,7 +176,7 @@ export default function OnboardingScreen({ navigation, route }) {
                 <InputField
                   error={errors.fullName}
                   label="Name"
-                  onChangeText={(value) => updateField("fullName", value)}
+                  onChangeText={handleFullNameChange}
                   placeholder="Full name"
                   value={form.fullName}
                 />
@@ -170,35 +184,37 @@ export default function OnboardingScreen({ navigation, route }) {
                   error={errors.age}
                   keyboardType="number-pad"
                   label="Age"
-                  onChangeText={(value) => updateField("age", value)}
+                  onChangeText={handleAgeChange}
                   placeholder="Age"
                   value={form.age}
                 />
                 <Text style={styles.selectLabel}>City (Dropdown)</Text>
-                <Pressable
-                  onPress={() => setShowCityDropdown((prev) => !prev)}
-                  style={({ pressed }) => [styles.dropdownTrigger, pressed ? styles.chipPressed : null]}
-                >
-                  <Text style={styles.dropdownText}>{form.city || "Select city"}</Text>
-                  <Text style={styles.dropdownArrow}>▼</Text>
-                </Pressable>
+                <View style={styles.dropdownWrap}>
+                  <Pressable
+                    onPress={() => setShowCityDropdown((prev) => !prev)}
+                    style={({ pressed }) => [styles.dropdownTrigger, pressed ? styles.chipPressed : null]}
+                  >
+                    <Text style={styles.dropdownText}>{form.city || "Select city"}</Text>
+                    <Text style={styles.dropdownArrow}>▼</Text>
+                  </Pressable>
+                  {showCityDropdown && (
+                    <View style={styles.dropdownPanel}>
+                      {cities.map((city) => (
+                        <Pressable
+                          key={city}
+                          onPress={() => {
+                            updateField("city", city);
+                            setShowCityDropdown(false);
+                          }}
+                          style={styles.dropdownOption}
+                        >
+                          <Text style={styles.dropdownOptionText}>{city}</Text>
+                        </Pressable>
+                      ))}
+                    </View>
+                  )}
+                </View>
                 {!!errors.city && <Text style={styles.errorText}>{errors.city}</Text>}
-                {showCityDropdown && (
-                  <View style={styles.dropdownPanel}>
-                    {cities.map((city) => (
-                      <Pressable
-                        key={city}
-                        onPress={() => {
-                          updateField("city", city);
-                          setShowCityDropdown(false);
-                        }}
-                        style={styles.dropdownOption}
-                      >
-                        <Text style={styles.dropdownOptionText}>{city}</Text>
-                      </Pressable>
-                    ))}
-                  </View>
-                )}
               </View>
             )}
 
@@ -235,7 +251,7 @@ export default function OnboardingScreen({ navigation, route }) {
                   error={errors.workHours}
                   keyboardType="number-pad"
                   label="Work hours/day"
-                  onChangeText={(value) => updateField("workHours", value)}
+                  onChangeText={handleWorkHoursChange}
                   placeholder="Hours per day"
                   value={form.workHours}
                 />
@@ -249,7 +265,7 @@ export default function OnboardingScreen({ navigation, route }) {
                   error={errors.dailyIncome}
                   keyboardType="number-pad"
                   label="Daily Income"
-                  onChangeText={(value) => updateField("dailyIncome", value)}
+                  onChangeText={handleDailyIncomeChange}
                   placeholder="Daily income in INR"
                   value={form.dailyIncome}
                 />
@@ -257,7 +273,6 @@ export default function OnboardingScreen({ navigation, route }) {
                   editable={false}
                   keyboardType="number-pad"
                   label="Weekly Income (Auto)"
-                  onChangeText={(value) => updateField("weeklyIncome", value)}
                   value={form.weeklyIncome}
                 />
               </View>
@@ -299,6 +314,7 @@ export default function OnboardingScreen({ navigation, route }) {
                 <Button onPress={nextStep} style={styles.nextButton} title="Next" />
               ) : (
                 <Button
+                  disabled={authLoading}
                   loading={authLoading}
                   onPress={handleGenerate}
                   style={styles.nextButton}
@@ -314,6 +330,8 @@ export default function OnboardingScreen({ navigation, route }) {
   );
 }
 
+export default memo(OnboardingScreen);
+
 const styles = StyleSheet.create({
   screen: {
     backgroundColor: appTheme.colors.background,
@@ -325,22 +343,22 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: appTheme.spacing.lg,
     paddingTop: appTheme.spacing.lg,
-    paddingBottom: appTheme.spacing.xxl
+    paddingBottom: 150
   },
   progressCard: {
     marginBottom: appTheme.spacing.md,
     paddingVertical: appTheme.spacing.md
   },
   sectionTitle: {
-    color: appTheme.colors.primary,
+    color: appTheme.colors.textPrimary,
+    fontFamily: "Orbitron_600SemiBold",
     fontSize: 20,
-    fontWeight: "700",
     marginBottom: appTheme.spacing.md
   },
   selectLabel: {
-    color: appTheme.colors.textPrimary,
+    color: appTheme.colors.textSecondary,
+    fontFamily: "Rajdhani_700Bold",
     fontSize: 14,
-    fontWeight: "700",
     marginBottom: appTheme.spacing.xs
   },
   chipRow: {
@@ -363,13 +381,13 @@ const styles = StyleSheet.create({
     borderColor: appTheme.colors.primary
   },
   chipLabel: {
-    color: appTheme.colors.primary,
+    color: appTheme.colors.accentPrimary,
+    fontFamily: "Rajdhani_700Bold",
     fontSize: 12,
-    letterSpacing: 0.2,
-    fontWeight: "700"
+    letterSpacing: 0.2
   },
   chipLabelSelected: {
-    color: appTheme.colors.surface
+    color: appTheme.colors.bgPrimary
   },
   chipPressed: {
     opacity: 0.85
@@ -385,10 +403,14 @@ const styles = StyleSheet.create({
     minHeight: 56,
     paddingHorizontal: appTheme.spacing.md
   },
+  dropdownWrap: {
+    position: "relative",
+    zIndex: 20
+  },
   dropdownText: {
     color: appTheme.colors.textPrimary,
-    fontSize: 15,
-    fontWeight: "600"
+    fontFamily: "Rajdhani_600SemiBold",
+    fontSize: 16
   },
   dropdownArrow: {
     color: appTheme.colors.primary,
@@ -400,7 +422,13 @@ const styles = StyleSheet.create({
     borderColor: appTheme.colors.border,
     borderRadius: appTheme.radius.input,
     borderWidth: 1,
+    left: 0,
     marginTop: appTheme.spacing.xs,
+    maxHeight: 220,
+    position: "absolute",
+    right: 0,
+    top: 56,
+    zIndex: 30,
     overflow: "hidden"
   },
   dropdownOption: {
@@ -409,13 +437,13 @@ const styles = StyleSheet.create({
   },
   dropdownOptionText: {
     color: appTheme.colors.textPrimary,
-    fontSize: 14,
-    fontWeight: "600"
+    fontFamily: "Rajdhani_600SemiBold",
+    fontSize: 15
   },
   errorText: {
     color: appTheme.colors.danger,
+    fontFamily: "Rajdhani_600SemiBold",
     fontSize: 12,
-    fontWeight: "600",
     marginBottom: appTheme.spacing.sm,
     marginTop: 2
   },
@@ -425,8 +453,8 @@ const styles = StyleSheet.create({
   },
   submitError: {
     color: appTheme.colors.danger,
+    fontFamily: "Rajdhani_600SemiBold",
     fontSize: 13,
-    fontWeight: "600",
     marginTop: appTheme.spacing.sm
   },
   backButton: {

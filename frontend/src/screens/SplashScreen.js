@@ -59,30 +59,34 @@ const styles = StyleSheet.create({
   },
   logoCircle: {
     alignItems: "center",
-    backgroundColor: appTheme.colors.overlay,
+    backgroundColor: appTheme.colors.overlaySoft,
+    borderColor: appTheme.colors.borderStrong,
     borderRadius: appTheme.radius.pill,
+    borderWidth: 1,
     height: 92,
     justifyContent: "center",
     marginBottom: appTheme.spacing.lg,
-    width: 92
+    width: 92,
+    ...appTheme.shadows.glow
   },
   logoEmoji: {
     fontSize: 42
   },
   title: {
-    color: appTheme.colors.surface,
-    fontSize: 36,
-    fontWeight: "700"
+    color: appTheme.colors.textPrimary,
+    ...appTheme.typography.display
   },
   subtitle: {
-    color: appTheme.colors.infoSoft,
-    fontSize: 15,
-    fontWeight: "600",
+    color: appTheme.colors.textSecondary,
+    fontFamily: "Rajdhani_600SemiBold",
+    fontSize: 16,
     marginTop: appTheme.spacing.xs
   },
   loadingTrack: {
-    backgroundColor: appTheme.colors.overlay,
+    backgroundColor: appTheme.colors.overlaySoft,
+    borderColor: appTheme.colors.borderSubtle,
     borderRadius: appTheme.radius.pill,
+    borderWidth: 1,
     height: 8,
     marginTop: appTheme.spacing.xl,
     overflow: "hidden",

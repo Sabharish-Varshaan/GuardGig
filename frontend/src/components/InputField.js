@@ -1,9 +1,9 @@
-import React from "react";
+import React, { memo } from "react";
 import { StyleSheet, Text, TextInput, View } from "react-native";
 
 import { appTheme } from "../styles/theme";
 
-export default function InputField({
+function InputField({
   label,
   value,
   onChangeText,
@@ -13,20 +13,51 @@ export default function InputField({
   error,
   editable = true,
   rightElement,
-  multiline = false
+  multiline = false,
+  autoComplete = "off",
+  autoCapitalize = "none",
+  blurOnSubmit = true,
+  enablesReturnKeyAutomatically = true,
+  onSubmitEditing,
+  returnKeyType = "done",
+  textContentType = "none",
+  onFocus,
+  onBlur
 }) {
   return (
     <View style={styles.wrapper}>
       {!!label && <Text style={styles.label}>{label}</Text>}
-      <View style={[styles.inputShell, error ? styles.inputShellError : null, !editable ? styles.inputDisabled : null]}>
+      <View
+        style={[
+          styles.inputShell,
+          error ? styles.inputShellError : null,
+          !editable ? styles.inputDisabled : null
+        ]}
+      >
         <TextInput
           editable={editable}
+          autoCapitalize={autoCapitalize}
+          autoComplete={autoComplete}
+          autoCorrect={false}
+          blurOnSubmit={blurOnSubmit}
+          enablesReturnKeyAutomatically={enablesReturnKeyAutomatically}
+          onBlur={() => {
+            onBlur?.();
+          }}
           keyboardType={keyboardType}
           multiline={multiline}
           onChangeText={onChangeText}
+          onFocus={() => {
+            onFocus?.();
+          }}
+          onSubmitEditing={onSubmitEditing}
           placeholder={placeholder}
           placeholderTextColor={appTheme.colors.textSecondary}
           secureTextEntry={secureTextEntry}
+          returnKeyType={returnKeyType}
+          spellCheck={false}
+          textContentType={textContentType}
+          importantForAutofill="no"
           style={[styles.input, multiline ? styles.multilineInput : null]}
           value={value}
         />
@@ -37,22 +68,24 @@ export default function InputField({
   );
 }
 
+export default memo(InputField);
+
 const styles = StyleSheet.create({
   wrapper: {
     marginBottom: appTheme.spacing.md
   },
   label: {
-    color: appTheme.colors.textPrimary,
+    color: appTheme.colors.textSecondary,
+    fontFamily: "Rajdhani_700Bold",
     fontSize: 12,
     letterSpacing: 0.4,
     textTransform: "uppercase",
-    fontWeight: "700",
     marginBottom: appTheme.spacing.xs
   },
   inputShell: {
     alignItems: "center",
-    backgroundColor: appTheme.colors.surface,
-    borderColor: appTheme.colors.border,
+    backgroundColor: appTheme.colors.semanticSurfaceMuted,
+    borderColor: appTheme.colors.borderSubtle,
     borderRadius: appTheme.radius.input,
     borderWidth: 1,
     flexDirection: "row",
@@ -68,8 +101,8 @@ const styles = StyleSheet.create({
   input: {
     color: appTheme.colors.textPrimary,
     flex: 1,
-    fontSize: 15,
-    fontWeight: "500",
+    fontFamily: "Rajdhani_500Medium",
+    fontSize: 17,
     paddingVertical: 12
   },
   multilineInput: {
@@ -81,8 +114,8 @@ const styles = StyleSheet.create({
   },
   errorText: {
     color: appTheme.colors.danger,
+    fontFamily: "Rajdhani_600SemiBold",
     fontSize: 12,
-    fontWeight: "600",
     marginTop: 4
   }
 });

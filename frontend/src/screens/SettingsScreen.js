@@ -16,7 +16,7 @@ function ToggleRow({ label, value, onValueChange, description }) {
       </View>
       <Switch
         onValueChange={onValueChange}
-        thumbColor={value ? appTheme.colors.accent : appTheme.colors.switchThumbOff}
+        thumbColor={value ? appTheme.colors.accentSuccess : appTheme.colors.switchThumbOff}
         trackColor={{ false: appTheme.colors.switchTrackOff, true: appTheme.colors.switchTrackOn }}
         value={value}
       />
@@ -92,26 +92,26 @@ const styles = StyleSheet.create({
     paddingRight: appTheme.spacing.sm
   },
   toggleLabel: {
-    color: appTheme.colors.primary,
-    fontSize: 16,
-    fontWeight: "700"
+    color: appTheme.colors.textPrimary,
+    fontFamily: "Rajdhani_700Bold",
+    fontSize: 17
   },
   toggleDescription: {
     color: appTheme.colors.textSecondary,
-    fontSize: 13,
-    fontWeight: "600",
+    fontFamily: "Rajdhani_600SemiBold",
+    fontSize: 14,
     marginTop: appTheme.spacing.xs
   },
   aboutTitle: {
-    color: appTheme.colors.primary,
+    color: appTheme.colors.textPrimary,
+    fontFamily: "Orbitron_600SemiBold",
     fontSize: 18,
-    fontWeight: "700",
     marginBottom: appTheme.spacing.sm
   },
   aboutBody: {
     color: appTheme.colors.textSecondary,
-    fontSize: 14,
-    fontWeight: "600",
+    fontFamily: "Rajdhani_600SemiBold",
+    fontSize: 15,
     lineHeight: 20
   }
 });

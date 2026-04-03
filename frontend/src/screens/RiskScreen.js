@@ -108,23 +108,23 @@ const styles = StyleSheet.create({
     marginBottom: appTheme.spacing.xs
   },
   bannerTitle: {
-    color: appTheme.colors.primary,
-    fontSize: 20,
-    fontWeight: "700"
+    color: appTheme.colors.textPrimary,
+    fontFamily: "Orbitron_600SemiBold",
+    fontSize: 20
   },
   bannerBody: {
     color: appTheme.colors.textSecondary,
-    fontSize: 14,
-    fontWeight: "600",
+    fontFamily: "Rajdhani_600SemiBold",
+    fontSize: 15,
     lineHeight: 20
   },
   graphCard: {
     marginBottom: appTheme.spacing.md
   },
   legendTitle: {
-    color: appTheme.colors.primary,
+    color: appTheme.colors.textPrimary,
+    fontFamily: "Orbitron_600SemiBold",
     fontSize: 17,
-    fontWeight: "700",
     marginBottom: appTheme.spacing.sm
   },
   legendRow: {
@@ -140,7 +140,7 @@ const styles = StyleSheet.create({
   },
   legendText: {
     color: appTheme.colors.textPrimary,
-    fontSize: 14,
-    fontWeight: "600"
+    fontFamily: "Rajdhani_600SemiBold",
+    fontSize: 15
   }
 });
