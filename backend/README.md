@@ -111,6 +111,10 @@ APScheduler runs hourly.
 - Supabase project
 - OpenWeather API key
 
+Optional for demo validation:
+
+- `APP_DEMO_MODE=true` to enable demo behavior for policy, trigger, and claim flow
+
 ## 4. Setup (Step by Step)
 
 1. Open terminal in backend:
@@ -144,6 +148,7 @@ cp .env.example .env
 APP_ENV=development
 APP_HOST=0.0.0.0
 APP_PORT=8000
+APP_DEMO_MODE=false
 CORS_ORIGINS=http://localhost:8081,http://127.0.0.1:8081
 
 SUPABASE_URL=https://<your-project-ref>.supabase.co
@@ -169,16 +174,24 @@ CLAIM_FRAUD_THRESHOLD=0.7
 - `backend/sql/002_create_app_users_and_link_onboarding.sql`
 - `backend/sql/003_create_policies_and_claims.sql`
 - `backend/sql/004_add_claim_rule_support.sql`
+- `backend/sql/005_income_range_model.sql`
+- `backend/sql/006_add_user_fks.sql`
+- `backend/sql/007_relax_legacy_income_not_null.sql`
+- `backend/sql/008_add_policy_onboarding_fk.sql`
+- `backend/sql/009_normalize_fraud_score_scale.sql`
 
 Important: paste SQL file contents into Supabase SQL Editor, not file path strings.
 
 7. Start backend:
 
 ```bash
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+cd /Users/sabharishvarshaans/Documents/GuardGig/backend
+APP_DEMO_MODE=true .venv/bin/uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 Base URL: `http://localhost:8000`
+
+If you want normal production-like behavior instead of the demo flow, omit `APP_DEMO_MODE=true`.
 
 ## 5. Quick Verification
 
@@ -221,6 +234,14 @@ curl -X POST http://localhost:8000/api/trigger/check \
       "lon": 80.2707
    }'
 ```
+
+Demo flow check:
+
+1. Set `APP_DEMO_MODE=true` before starting the backend.
+2. Create or log in with a test user.
+3. Verify `/api/policy/create` returns `status: "created"`.
+4. Verify `/api/trigger/check` returns `rain: 75` and `aqi: 320`.
+5. Verify `/api/claim/create` succeeds with an approved claim.
 
 ## 6. Failure Handling Behavior
 

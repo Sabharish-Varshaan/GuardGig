@@ -81,6 +81,7 @@ class PolicyCreateResponse(BaseModel):
 
 class PremiumCalculateRequest(BaseModel):
     income: float = Field(gt=0)
+    income_variance: Optional[float] = 0
     risk_preference: Literal["Low", "Medium", "High"] = "Medium"
 
 
@@ -91,7 +92,7 @@ class PremiumCalculateResponse(BaseModel):
 class ClaimCreateRequest(BaseModel):
     lat: Optional[float] = None
     lon: Optional[float] = None
-    activity_status: Literal["active", "inactive", "none"] = "active"
+    activity_status: Literal["active", "inactive", "none", "unknown", "suspicious"] = "unknown"
 
 
 class ClaimResponse(BaseModel):
@@ -102,7 +103,7 @@ class ClaimResponse(BaseModel):
     trigger_value: float
     payout_amount: float
     status: Literal["pending", "approved", "rejected"]
-    fraud_score: Optional[float]
+    fraud_score: Optional[float] = Field(None, ge=0, le=1)
     created_at: str
     updated_at: str
 

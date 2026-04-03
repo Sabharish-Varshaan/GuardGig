@@ -71,15 +71,19 @@ async def create_claim(request: ClaimCreateRequest, current_user: dict = Depends
     mean_income = onboarding_profile.get("mean_income")
 
     if mean_income is None or float(mean_income) <= 0:
-        mean_income = coverage_amount
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid onboarding income model. Please resubmit onboarding details."
+        )
 
     payout_base = min(float(mean_income), coverage_amount)
 
-    try:
-        enforce_waiting_period(policy, waiting_hours=24)
-        enforce_max_one_claim_per_day(admin, settings.supabase_claims_table, current_user["id"])
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    if not settings.demo_mode:
+        try:
+            enforce_waiting_period(policy, waiting_hours=24)
+            enforce_max_one_claim_per_day(admin, settings.supabase_claims_table, current_user["id"])
+        except ValueError as exc:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
     rain = await fetch_rain_mm(None, request.lat, request.lon)
     aqi = await fetch_aqi(None, request.lat, request.lon)
@@ -91,7 +95,7 @@ async def create_claim(request: ClaimCreateRequest, current_user: dict = Depends
     trigger_type = trigger_data["type"]
     severity = trigger_data["severity"]
 
-    recent_claim_count = fetch_recent_claim_count(admin, settings.supabase_claims_table, current_user["id"])
+    recent_claim_count = 0 if settings.demo_mode else fetch_recent_claim_count(admin, settings.supabase_claims_table, current_user["id"])
     effective_location_valid = _coordinates_are_valid(request.lat, request.lon)
     fraud_score = calculate_fraud_score(
         activity_status=request.activity_status,
@@ -99,15 +103,16 @@ async def create_claim(request: ClaimCreateRequest, current_user: dict = Depends
         claim_frequency=recent_claim_count,
     )
 
-    try:
-        enforce_exclusions(
-            activity_status=request.activity_status,
-            location_valid=effective_location_valid,
-            fraud_score=fraud_score,
-            fraud_threshold=settings.claim_fraud_threshold,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    if not settings.demo_mode:
+        try:
+            enforce_exclusions(
+                activity_status=request.activity_status,
+                location_valid=effective_location_valid,
+                fraud_score=fraud_score,
+                fraud_threshold=settings.claim_fraud_threshold,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
     payout = calculate_payout(severity, payout_base, coverage_amount)
 

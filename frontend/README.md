@@ -57,6 +57,11 @@ When `Check Coverage` is tapped:
 - npm
 - Backend running at a reachable URL
 
+Recommended backend setup for local development:
+
+- Start the backend from the `backend` directory with the project virtualenv
+- Use `APP_DEMO_MODE=true` if you want the demo flow to always create a policy and claim
+
 ## 3. Setup (Step by Step)
 
 1. Open terminal in frontend:
@@ -109,6 +114,8 @@ Example:
 EXPO_PUBLIC_API_BASE_URL=http://192.168.1.42:8000
 ```
 
+For iOS simulator and Android emulator, keep the backend running locally and set the frontend API base URL to the matching host for your device type.
+
 Fallback behavior if env is missing:
 
 - Android fallback: `http://10.0.2.2:8000`
@@ -122,6 +129,8 @@ Fallback behavior if env is missing:
 4. Dashboard shows rain/AQI values
 5. `Check Coverage` progresses through workflow states
 6. Claims screen shows real claim entries
+
+For demo mode validation, confirm the backend returns a created policy, trigger values of rain 75 and aqi 320, and an approved claim.
 
 ## 6. Useful Commands
 

@@ -31,7 +31,7 @@ CREATE TABLE IF NOT EXISTS claims (
   trigger_value DECIMAL(10,2),
   payout_amount DECIMAL(10,2) NOT NULL CHECK (payout_amount >= 0),
   status TEXT NOT NULL CHECK (status IN ('pending', 'approved', 'rejected')),
-  fraud_score DECIMAL(5,2) CHECK (fraud_score >= 0 AND fraud_score <= 100),
+  fraud_score DECIMAL(5,4) CHECK (fraud_score >= 0 AND fraud_score <= 1),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

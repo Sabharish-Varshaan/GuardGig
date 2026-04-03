@@ -67,6 +67,13 @@ REFRESH_TOKEN_EXP_DAYS=7
 
 - `backend/sql/001_create_onboarding_profiles.sql`
 - `backend/sql/002_create_app_users_and_link_onboarding.sql`
+- `backend/sql/003_create_policies_and_claims.sql`
+- `backend/sql/004_add_claim_rule_support.sql`
+- `backend/sql/005_income_range_model.sql`
+- `backend/sql/006_add_user_fks.sql`
+- `backend/sql/007_relax_legacy_income_not_null.sql`
+- `backend/sql/008_add_policy_onboarding_fk.sql`
+- `backend/sql/009_normalize_fraud_score_scale.sql`
 
 Important: paste SQL content, not file paths.
 

@@ -32,6 +32,24 @@ app = FastAPI(
 
 scheduler = AsyncIOScheduler()
 
+
+def _verify_migration_007_applied() -> None:
+    admin = get_admin_client()
+
+    try:
+        response = admin.rpc("guardgig_migration_007_applied").execute()
+    except Exception as exc:
+        raise RuntimeError("Migration 007 not applied. System cannot start.") from exc
+
+    result = response.data
+    if isinstance(result, list):
+        is_applied = bool(result[0]) if result else False
+    else:
+        is_applied = bool(result)
+
+    if not is_applied:
+        raise RuntimeError("Migration 007 not applied. System cannot start.")
+
 async def automated_claim_check():
     """Automated task to check triggers and create claims for all active policies."""
     settings = get_settings()
@@ -136,6 +154,8 @@ async def automated_claim_check():
 
 @app.on_event("startup")
 async def startup_event():
+    _verify_migration_007_applied()
+
     # Add automated job to run every hour
     scheduler.add_job(
         automated_claim_check,

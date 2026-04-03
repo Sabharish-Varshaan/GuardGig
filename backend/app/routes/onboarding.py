@@ -18,25 +18,13 @@ def _compute_variance(min_income: float, max_income: float, mean_income: float) 
 
 def _normalize_profile(profile: dict) -> dict:
     normalized = dict(profile)
-    # Legacy fallback path for rows created before the income-range rollout.
-    daily_income = normalized.get("daily_income")
-
     min_income = normalized.get("min_income")
     max_income = normalized.get("max_income")
     mean_income = normalized.get("mean_income")
     income_variance = normalized.get("income_variance")
 
-    if min_income is None and daily_income is not None:
-        min_income = round(float(daily_income) * 0.7, 2)
-
-    if max_income is None and daily_income is not None:
-        max_income = round(float(daily_income) * 1.3, 2)
-
-    if mean_income is None:
-        if daily_income is not None:
-            mean_income = float(daily_income)
-        elif min_income is not None and max_income is not None:
-            mean_income = (float(min_income) + float(max_income)) / 2
+    if mean_income is None and min_income is not None and max_income is not None:
+        mean_income = (float(min_income) + float(max_income)) / 2
 
     if income_variance is None and min_income is not None and max_income is not None and mean_income is not None:
         income_variance = _compute_variance(float(min_income), float(max_income), float(mean_income))

@@ -7,6 +7,8 @@ from typing import Literal
 import requests
 from dotenv import load_dotenv
 
+from .config import get_settings
+
 load_dotenv()
 
 _RAIN_URL = "https://api.open-meteo.com/v1/forecast"
@@ -124,6 +126,10 @@ async def fetch_rain_mm(
     lon: float | None = None,
     timeout: float = 5.0,
 ) -> float:
+    settings = get_settings()
+    if settings.demo_mode:
+        return 75.0
+
     coordinates = resolve_coordinates(location=location, lat=lat, lon=lon, timeout=timeout)
     if coordinates is None:
         return 0.0
@@ -137,6 +143,10 @@ async def fetch_aqi(
     lon: float | None = None,
     timeout: float = 5.0,
 ) -> float:
+    settings = get_settings()
+    if settings.demo_mode:
+        return 320.0
+
     coordinates = resolve_coordinates(location=location, lat=lat, lon=lon, timeout=timeout)
     if coordinates is None:
         return 0.0

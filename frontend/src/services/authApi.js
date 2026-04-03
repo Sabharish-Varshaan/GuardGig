@@ -22,6 +22,12 @@ export async function loginUser({ phone, password }) {
 }
 
 export async function submitOnboardingProfile(payload, token) {
+  const minIncome = Number(payload.minIncome);
+  const maxIncome = Number(payload.maxIncome);
+  const meanIncome = minIncome > 0 && maxIncome > minIncome ? (minIncome + maxIncome) / 2 : null;
+  const incomeVariance =
+    meanIncome && meanIncome > 0 ? (maxIncome - minIncome) / meanIncome : 0;
+
   return apiRequest("/api/onboarding", {
     method: "POST",
     token,
@@ -32,8 +38,10 @@ export async function submitOnboardingProfile(payload, token) {
       platform: payload.platform,
       vehicle_type: payload.vehicleType,
       work_hours: Number(payload.workHours),
-      min_income: Number(payload.minIncome),
-      max_income: Number(payload.maxIncome),
+      min_income: minIncome,
+      max_income: maxIncome,
+      mean_income: meanIncome,
+      income_variance: incomeVariance,
       risk_preference: payload.riskPreference
     }
   });

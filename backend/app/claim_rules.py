@@ -66,7 +66,7 @@ def calculate_fraud_score(activity_status: str, location_valid: bool, claim_freq
     claim_frequency = max(0, claim_frequency)
     score = min(0.5, claim_frequency / 20.0)
 
-    if activity_status.lower() in {"none", "inactive", "no_activity"}:
+    if activity_status.lower() in {"none", "inactive", "no_activity", "suspicious"}:
         score += 0.4
 
     if not location_valid:
@@ -76,7 +76,9 @@ def calculate_fraud_score(activity_status: str, location_valid: bool, claim_freq
 
 
 def enforce_exclusions(activity_status: str, location_valid: bool, fraud_score: float, fraud_threshold: float) -> None:
-    if activity_status.lower() in {"none", "inactive", "no_activity"}:
+    if activity_status.lower() in {"inactive", "suspicious"}:
+        raise ValueError("Claim excluded: inactive or suspicious activity")
+    if activity_status.lower() in {"none", "no_activity"}:
         raise ValueError("Claim excluded: no activity")
     if not location_valid:
         raise ValueError("Claim excluded: invalid location")

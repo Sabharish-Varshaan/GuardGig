@@ -11,6 +11,7 @@ class Settings(BaseModel):
     app_env: str = Field(default="development")
     app_host: str = Field(default="0.0.0.0")
     app_port: int = Field(default=8000)
+    demo_mode: bool = Field(default=False)
     cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:8081"])
     supabase_url: str = Field(default="")
     supabase_anon_key: str = Field(default="")
@@ -30,11 +31,13 @@ class Settings(BaseModel):
 def get_settings() -> Settings:
     origins_value = os.getenv("CORS_ORIGINS", "http://localhost:8081")
     origins = [item.strip() for item in origins_value.split(",") if item.strip()]
+    demo_mode_value = os.getenv("APP_DEMO_MODE", os.getenv("DEMO_MODE", "false"))
 
     return Settings(
         app_env=os.getenv("APP_ENV", "development"),
         app_host=os.getenv("APP_HOST", "0.0.0.0"),
         app_port=int(os.getenv("APP_PORT", "8000")),
+        demo_mode=demo_mode_value.lower() == "true",
         cors_origins=origins,
         supabase_url=os.getenv("SUPABASE_URL", ""),
         supabase_anon_key=os.getenv("SUPABASE_ANON_KEY", ""),

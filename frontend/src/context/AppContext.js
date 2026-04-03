@@ -689,8 +689,7 @@ export function AppProvider({ children }) {
 
       const claimResponse = await createClaim(authToken, {
         lat: snapshot.lat,
-        lon: snapshot.lon,
-        activityStatus: "active"
+        lon: snapshot.lon
       });
 
       setWorkflowState(WORKFLOW_STATES.fraud_check);

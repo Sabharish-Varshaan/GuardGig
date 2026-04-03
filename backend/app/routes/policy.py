@@ -67,6 +67,8 @@ def create_policy(current_user: dict = Depends(require_current_user)):
         )
 
     mean_income = onboarding.get("mean_income")
+    min_income = onboarding.get("min_income")
+    max_income = onboarding.get("max_income")
 
     if mean_income is None or float(mean_income) <= 0:
         raise HTTPException(
@@ -74,11 +76,29 @@ def create_policy(current_user: dict = Depends(require_current_user)):
             detail="Invalid onboarding income model. Please resubmit onboarding details."
         )
 
+    if min_income is None or max_income is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Incomplete onboarding income range. Please resubmit onboarding details."
+        )
+
+    min_income = float(min_income)
+    max_income = float(max_income)
+    if min_income <= 0 or max_income <= min_income:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid onboarding income range. Please resubmit onboarding details."
+        )
+
     mean_income = float(mean_income)
     income_variance = float(onboarding.get("income_variance") or 0)
     weekly_income = int(round(mean_income * 7))
     risk_preference = onboarding.get("risk_preference", "Medium")
     eligibility_status, worker_tier, active_days = _derive_underwriting(onboarding.get("created_at"))
+
+    if settings.demo_mode:
+        eligibility_status = "eligible"
+        worker_tier = "medium"
 
     if eligibility_status == "ineligible":
         return PolicyCreateResponse(
@@ -110,8 +130,8 @@ def create_policy(current_user: dict = Depends(require_current_user)):
     policy_data = {
         "user_id": current_user["id"],
         "weekly_income": weekly_income,
-        "min_income": float(onboarding.get("min_income") or round(mean_income * 0.7, 2)),
-        "max_income": float(onboarding.get("max_income") or round(mean_income * 1.3, 2)),
+        "min_income": round(min_income, 2),
+        "max_income": round(max_income, 2),
         "mean_income": round(mean_income, 2),
         "income_variance": round(income_variance, 4),
         "premium": premium,
