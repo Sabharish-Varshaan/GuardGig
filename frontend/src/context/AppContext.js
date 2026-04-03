@@ -65,6 +65,24 @@ const initialLocation = {
   error: ""
 };
 
+const INELIGIBLE_MESSAGE = "You need 5 active days to activate coverage";
+
+const createIneligiblePolicy = () => ({
+  id: "",
+  weeklyIncome: 0,
+  meanIncome: 0,
+  minIncome: 0,
+  maxIncome: 0,
+  incomeVariance: 0,
+  premium: 0,
+  coverageAmount: 0,
+  policyStartDate: "",
+  status: "inactive",
+  eligibilityStatus: "ineligible",
+  workerTier: "low",
+  updatedAt: ""
+});
+
 const toStringValue = (value, fallback = "") => {
   if (value === null || value === undefined) {
     return fallback;
@@ -270,6 +288,13 @@ export function AppProvider({ children }) {
 
       try {
         const response = await createPolicy(token);
+
+        if (response?.status === "ineligible") {
+          const ineligiblePolicy = createIneligiblePolicy();
+          setPolicy(ineligiblePolicy);
+          return ineligiblePolicy;
+        }
+
         const normalized = normalizePolicy(response?.policy);
         setPolicy(normalized);
         return normalized;
@@ -629,6 +654,13 @@ export function AppProvider({ children }) {
       return { success: false, approved: false, error: message };
     }
 
+    const coverageEligible = !!policy && policy.status === "active" && policy.eligibilityStatus === "eligible";
+    if (!coverageEligible) {
+      setWorkflowState(WORKFLOW_STATES.flagged);
+      setWorkflowMessage(INELIGIBLE_MESSAGE);
+      return { success: true, approved: false, reason: "ineligible" };
+    }
+
     setCoverageLoading(true);
     setDataError("");
 
@@ -656,8 +688,9 @@ export function AppProvider({ children }) {
       setWorkflowMessage("Validating eligibility...");
 
       const claimResponse = await createClaim(authToken, {
-        triggerType: snapshot.trigger.type,
-        severity: snapshot.trigger.severity
+        lat: snapshot.lat,
+        lon: snapshot.lon,
+        activityStatus: "active"
       });
 
       setWorkflowState(WORKFLOW_STATES.fraud_check);
@@ -708,7 +741,7 @@ export function AppProvider({ children }) {
     } finally {
       setCoverageLoading(false);
     }
-  }, [authToken, coverageLoading, refreshClaims, refreshPolicy, refreshRisk]);
+  }, [authToken, coverageLoading, policy, refreshClaims, refreshPolicy, refreshRisk]);
 
   const value = useMemo(
     () => ({
@@ -734,6 +767,7 @@ export function AppProvider({ children }) {
       movementScore,
       claimsHistory,
       claimsLoading,
+      eligibilityMessage: INELIGIBLE_MESSAGE,
       notificationsEnabled,
       themeEnabled,
       login,
@@ -773,6 +807,7 @@ export function AppProvider({ children }) {
       movementScore,
       claimsHistory,
       claimsLoading,
+      INELIGIBLE_MESSAGE,
       notificationsEnabled,
       themeEnabled,
       startCoverageCheck,

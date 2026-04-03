@@ -15,6 +15,13 @@ from ..trigger_utils import check_trigger, fetch_aqi, fetch_rain_mm
 
 router = APIRouter(prefix="/api", tags=["claim"])
 
+
+def _coordinates_are_valid(lat: float | None, lon: float | None) -> bool:
+    if lat is None or lon is None:
+        return False
+
+    return -90.0 <= float(lat) <= 90.0 and -180.0 <= float(lon) <= 180.0
+
 def calculate_payout(severity: str, base_amount: float, coverage_amount: float) -> float:
     capped_base = min(base_amount, coverage_amount)
 
@@ -28,6 +35,12 @@ def calculate_payout(severity: str, base_amount: float, coverage_amount: float) 
 async def create_claim(request: ClaimCreateRequest, current_user: dict = Depends(require_current_user)):
     settings = get_settings()
     admin = get_admin_client()
+
+    if not _coordinates_are_valid(request.lat, request.lon):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Valid lat/lon coordinates are required"
+        )
 
     # Get user's active policy
     policy_response = (
@@ -47,7 +60,7 @@ async def create_claim(request: ClaimCreateRequest, current_user: dict = Depends
 
     onboarding_response = (
         admin.table(settings.supabase_onboarding_table)
-        .select("mean_income, daily_income")
+        .select("mean_income")
         .eq("user_id", current_user["id"])
         .limit(1)
         .execute()
@@ -56,8 +69,6 @@ async def create_claim(request: ClaimCreateRequest, current_user: dict = Depends
     onboarding_rows = onboarding_response.data or []
     onboarding_profile = onboarding_rows[0] if onboarding_rows else {}
     mean_income = onboarding_profile.get("mean_income")
-    if mean_income is None and onboarding_profile.get("daily_income") is not None:
-        mean_income = float(onboarding_profile["daily_income"])
 
     if mean_income is None or float(mean_income) <= 0:
         mean_income = coverage_amount
@@ -70,8 +81,8 @@ async def create_claim(request: ClaimCreateRequest, current_user: dict = Depends
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
-    rain = await fetch_rain_mm(request.location, request.lat, request.lon)
-    aqi = await fetch_aqi(request.location, request.lat, request.lon)
+    rain = await fetch_rain_mm(None, request.lat, request.lon)
+    aqi = await fetch_aqi(None, request.lat, request.lon)
     trigger_data = check_trigger(rain, aqi)
 
     if not trigger_data.get("trigger"):
@@ -81,7 +92,7 @@ async def create_claim(request: ClaimCreateRequest, current_user: dict = Depends
     severity = trigger_data["severity"]
 
     recent_claim_count = fetch_recent_claim_count(admin, settings.supabase_claims_table, current_user["id"])
-    effective_location_valid = bool((request.location or "").strip() or request.lat is not None or request.lon is not None) and request.location_valid
+    effective_location_valid = _coordinates_are_valid(request.lat, request.lon)
     fraud_score = calculate_fraud_score(
         activity_status=request.activity_status,
         location_valid=effective_location_valid,

@@ -45,12 +45,21 @@ function formatRelativeTime(timestamp) {
 }
 
 function PayoutScreen() {
-  const { workflowState, payoutAmount, claimsHistory } = useAppContext();
+  const { workflowState, payoutAmount, claimsHistory, policy, eligibilityMessage } = useAppContext();
 
   const latestClaim = claimsHistory[0] || null;
-  const latestAmount = payoutAmount || latestClaim?.amount || 0;
+  const isCoverageEligible = !!policy && policy.status === "active" && policy.eligibilityStatus === "eligible";
+  const latestAmount = isCoverageEligible ? (payoutAmount || latestClaim?.amount || 0) : 0;
 
   const payoutMeta = useMemo(() => {
+    if (!isCoverageEligible) {
+      return {
+        badge: "Coverage Locked",
+        description: eligibilityMessage,
+        tone: "warning"
+      };
+    }
+
     if (workflowState === "approved") {
       return {
         badge: "Payout Successful",
@@ -72,9 +81,11 @@ function PayoutScreen() {
       description: "Payout appears after a trigger-based approved claim.",
       tone: "info"
     };
-  }, [workflowState]);
+  }, [eligibilityMessage, isCoverageEligible, workflowState]);
 
-  const payoutReason = latestClaim
+  const payoutReason = !isCoverageEligible
+    ? "Coverage is inactive during waiting period"
+    : latestClaim
     ? latestClaim.type === "aqi"
       ? "Credited due to unsafe air quality"
       : "Credited due to heavy rainfall"

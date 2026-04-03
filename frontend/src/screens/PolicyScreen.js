@@ -23,7 +23,7 @@ function Row({ label, value }) {
 }
 
 export default function PolicyScreen() {
-  const { policy, policyLoading, dataError, refreshPolicy } = useAppContext();
+  const { policy, policyLoading, dataError, refreshPolicy, eligibilityMessage } = useAppContext();
 
   useFocusEffect(
     React.useCallback(() => {
@@ -61,6 +61,12 @@ export default function PolicyScreen() {
           <Text style={styles.coverageHint}>Coverage based on average income</Text>
           <Text style={styles.coverageSub}>{policyLoading ? "Refreshing policy..." : "Live backend policy"}</Text>
         </Card>
+
+        {policyReady && policy.eligibilityStatus !== "eligible" && (
+          <Card style={styles.warningCard}>
+            <Text style={styles.warningText}>{eligibilityMessage}</Text>
+          </Card>
+        )}
 
         {!!dataError && <Text style={styles.errorText}>{dataError}</Text>}
       </ScrollView>
@@ -128,6 +134,14 @@ const styles = StyleSheet.create({
     fontFamily: "Rajdhani_600SemiBold",
     fontSize: 14,
     marginTop: appTheme.spacing.xs
+  },
+  warningCard: {
+    marginBottom: appTheme.spacing.md
+  },
+  warningText: {
+    color: appTheme.colors.warningText,
+    fontFamily: "Rajdhani_700Bold",
+    fontSize: 14
   },
   errorText: {
     color: appTheme.colors.danger,

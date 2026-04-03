@@ -37,17 +37,28 @@ async def automated_claim_check():
     settings = get_settings()
     admin = get_admin_client()
 
-    # Get all active policies with user onboarding info
+    # Fetch active policies first, then explicitly fetch onboarding by user_id.
     policies_response = (
         admin.table(settings.supabase_policies_table)
-        .select("*, onboarding_profiles(city)")
+        .select("*")
         .eq("status", "active")
         .execute()
     )
 
-    for policy in policies_response.data:
+    for policy in (policies_response.data or []):
         user_id = policy["user_id"]
-        city = policy.get("onboarding_profiles", {}).get("city")
+
+        onboarding_response = (
+            admin.table(settings.supabase_onboarding_table)
+            .select("city,mean_income")
+            .eq("user_id", user_id)
+            .limit(1)
+            .execute()
+        )
+
+        onboarding_rows = onboarding_response.data or []
+        onboarding = onboarding_rows[0] if onboarding_rows else {}
+        city = onboarding.get("city")
 
         if not city:
             continue
@@ -73,7 +84,17 @@ async def automated_claim_check():
             continue
 
         coverage_amount = float(policy.get("coverage_amount", 700.0))
-        payout = coverage_amount if severity == "full" else round(coverage_amount * 0.30, 2)
+        mean_income = float(onboarding.get("mean_income") or 0)
+        payout_base = min(mean_income, coverage_amount)
+        if severity == "full":
+            payout = payout_base
+        elif severity == "severe":
+            payout = payout_base * 0.70
+        elif severity == "partial":
+            payout = payout_base * 0.30
+        else:
+            payout = 0.0
+        payout = round(min(payout, coverage_amount), 2)
 
         claim_count = fetch_recent_claim_count(
             admin,

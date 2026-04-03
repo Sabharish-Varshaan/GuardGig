@@ -18,6 +18,7 @@ def _compute_variance(min_income: float, max_income: float, mean_income: float) 
 
 def _normalize_profile(profile: dict) -> dict:
     normalized = dict(profile)
+    # Legacy fallback path for rows created before the income-range rollout.
     daily_income = normalized.get("daily_income")
 
     min_income = normalized.get("min_income")
@@ -90,9 +91,6 @@ def submit_onboarding(
     max_income = float(payload.max_income)
     mean_income = (min_income + max_income) / 2
     income_variance = _compute_variance(min_income, max_income, mean_income)
-    # Keep legacy columns populated for transition safety.
-    daily_income = int(round(mean_income))
-    weekly_income = int(round(mean_income * 7))
 
     onboarding_row = {
         "user_id": current_user["id"],
@@ -102,8 +100,6 @@ def submit_onboarding(
         "platform": payload.platform,
         "vehicle_type": payload.vehicle_type,
         "work_hours": payload.work_hours,
-        "daily_income": daily_income,
-        "weekly_income": weekly_income,
         "min_income": round(min_income, 2),
         "max_income": round(max_income, 2),
         "mean_income": round(mean_income, 2),

@@ -32,6 +32,35 @@ function formatRupee(value) {
   return `₹${value}`;
 }
 
+function formatRelativeTime(timestamp) {
+  if (!timestamp) {
+    return "Just now";
+  }
+
+  const date = new Date(timestamp);
+  const deltaMs = Date.now() - date.getTime();
+
+  if (Number.isNaN(deltaMs) || deltaMs < 0) {
+    return "Just now";
+  }
+
+  const minutes = Math.floor(deltaMs / 60000);
+  if (minutes < 1) {
+    return "Just now";
+  }
+  if (minutes < 60) {
+    return `${minutes} minute${minutes === 1 ? "" : "s"} ago`;
+  }
+
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) {
+    return `${hours} hour${hours === 1 ? "" : "s"} ago`;
+  }
+
+  const days = Math.floor(hours / 24);
+  return `${days} day${days === 1 ? "" : "s"} ago`;
+}
+
 function getVariantFromRiskLevel(level) {
   const normalized = (level || "safe").toLowerCase();
 
@@ -94,6 +123,8 @@ function DashboardScreen({ navigation }) {
     workflowState,
     workflowMessage,
     coverageLoading,
+    claimsHistory,
+    eligibilityMessage,
     requestLocation,
     refreshRisk,
     startCoverageCheck
@@ -127,16 +158,33 @@ function DashboardScreen({ navigation }) {
   const workflowMeta = useMemo(() => getWorkflowStatusMeta(workflowState), [workflowState]);
   const liveRiskLabel = riskLoading ? "CHECKING" : compactRiskLabel;
   const policyReady = !policyLoading && !!policy;
+  const isCoverageEligible =
+    policyReady && policy.status === "active" && policy.eligibilityStatus === "eligible";
   const premiumValue = policyReady ? `${formatRupee(policy.premium)}/week` : "Loading...";
   const meanIncomeValue = policyReady ? `${formatRupee(policy.meanIncome)}/day` : "Loading...";
   const coverageValue = policyReady ? `${formatRupee(policy.coverageAmount)}/day` : "Loading...";
+  const recentEvents = useMemo(() => {
+    const claimEvents = claimsHistory.slice(0, 3).map((claim) => {
+      const label = claim.type === "aqi" ? "AQI trigger" : "Rain trigger";
+      return `${label}: ${claim.status} (${formatRelativeTime(claim.createdAt)})`;
+    });
+
+    const workflowEvent = workflowMessage ? `Workflow: ${workflowMessage}` : null;
+    const riskEvent = riskMessage ? `Risk: ${riskMessage}` : null;
+
+    return [workflowEvent, riskEvent, ...claimEvents].filter(Boolean);
+  }, [claimsHistory, riskMessage, workflowMessage]);
 
   const handleCheckCoverage = React.useCallback(async () => {
+    if (!isCoverageEligible) {
+      return;
+    }
+
     const result = await startCoverageCheck();
     if (result?.approved) {
       navigation.navigate("Payout");
     }
-  }, [navigation, startCoverageCheck]);
+  }, [isCoverageEligible, navigation, startCoverageCheck]);
 
   return (
     <SafeAreaView style={styles.screen}>
@@ -181,20 +229,27 @@ function DashboardScreen({ navigation }) {
           <StatusBadge label={riskMessage} variant={riskLoading ? "warning" : riskVariant} />
         </View>
 
+        {!isCoverageEligible && policyReady && (
+          <Text style={styles.warningText}>{eligibilityMessage}</Text>
+        )}
+
         <Card style={styles.messageCard}>
           <Text style={styles.messageHeading}>Automation Feed</Text>
-          <Text style={styles.feedItem}>Checking live conditions...</Text>
-          <Text style={styles.feedItem}>Heavy rain detected</Text>
-          <Text style={styles.feedItem}>Air quality unsafe</Text>
-          <Text style={styles.feedItem}>System evaluating eligibility...</Text>
+          {recentEvents.length === 0 ? (
+            <Text style={styles.feedItem}>No activity yet</Text>
+          ) : (
+            recentEvents.map((event) => (
+              <Text key={event} style={styles.feedItem}>{event}</Text>
+            ))
+          )}
         </Card>
 
         <Button
-          disabled={coverageLoading}
+          disabled={coverageLoading || !isCoverageEligible}
           loading={coverageLoading}
           onPress={handleCheckCoverage}
           style={styles.primaryAction}
-          title="Check Coverage"
+          title={isCoverageEligible ? "Check Coverage" : "Coverage Locked"}
         />
 
         <View style={styles.inlineStatusRow}>
@@ -336,6 +391,12 @@ const styles = StyleSheet.create({
     textTransform: "uppercase"
   },
   messageCard: {
+    marginBottom: appTheme.spacing.md
+  },
+  warningText: {
+    color: appTheme.colors.warningText,
+    fontFamily: "Rajdhani_700Bold",
+    fontSize: 14,
     marginBottom: appTheme.spacing.md
   },
   messageHeading: {

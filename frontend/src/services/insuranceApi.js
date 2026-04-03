@@ -29,8 +29,9 @@ export async function createClaim(token, payload) {
     method: "POST",
     token,
     body: {
-      trigger_type: payload.triggerType,
-      severity: payload.severity
+      lat: payload.lat,
+      lon: payload.lon,
+      activity_status: payload.activityStatus
     }
   });
 }

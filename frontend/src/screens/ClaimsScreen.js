@@ -27,6 +27,8 @@ function ClaimsScreen({ navigation }) {
     workflowState,
     payoutAmount,
     movementScore,
+    policy,
+    eligibilityMessage,
     claimsLoading,
     refreshClaims,
     dataError
@@ -45,6 +47,7 @@ function ClaimsScreen({ navigation }) {
   const latestClaim = useMemo(() => {
     return claimsHistory.length > 0 ? claimsHistory[0] : null;
   }, [claimsHistory]);
+  const isCoverageEligible = !!policy && policy.status === "active" && policy.eligibilityStatus === "eligible";
 
   const animateStateTransition = () => {
     fade.setValue(0);
@@ -109,6 +112,7 @@ function ClaimsScreen({ navigation }) {
               )}
 
               <Text style={styles.historyTitle}>Claim History</Text>
+              {!isCoverageEligible && <Text style={styles.warningText}>{eligibilityMessage}</Text>}
               {claimsLoading && <Text style={styles.loadingText}>Refreshing claims...</Text>}
               {!!dataError && <Text style={styles.errorText}>{dataError}</Text>}
             </View>
@@ -127,9 +131,10 @@ function ClaimsScreen({ navigation }) {
           renderItem={({ item }) => <ClaimItemCard item={item} style={styles.historyCard} />}
           ListFooterComponent={
             <NeonButton
+              disabled={!isCoverageEligible}
               onPress={() => navigation.navigate("Payout")}
               style={styles.payoutButton}
-              title="Open Payout Center"
+              title={isCoverageEligible ? "Open Payout Center" : "Coverage Locked"}
               variant="secondary"
             />
           }
@@ -207,6 +212,12 @@ const styles = StyleSheet.create({
   loadingText: {
     color: appTheme.colors.textSecondary,
     fontFamily: "Rajdhani_600SemiBold",
+    fontSize: 14,
+    marginBottom: appTheme.spacing.sm
+  },
+  warningText: {
+    color: appTheme.colors.warningText,
+    fontFamily: "Rajdhani_700Bold",
     fontSize: 14,
     marginBottom: appTheme.spacing.sm
   },

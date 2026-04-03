@@ -89,13 +89,9 @@ class PremiumCalculateResponse(BaseModel):
 
 
 class ClaimCreateRequest(BaseModel):
-    location: str | None = None
     lat: Optional[float] = None
     lon: Optional[float] = None
     activity_status: Literal["active", "inactive", "none"] = "active"
-    location_valid: bool = True
-    trigger_type: Optional[str] = None
-    severity: Optional[str] = None
 
 
 class ClaimResponse(BaseModel):
