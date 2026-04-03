@@ -74,7 +74,11 @@ function PayoutScreen() {
     };
   }, [workflowState]);
 
-  const payoutReason = latestClaim ? "Due to rainfall trigger" : "Awaiting rainfall trigger";
+  const payoutReason = latestClaim
+    ? latestClaim.type === "aqi"
+      ? "Credited due to unsafe air quality"
+      : "Credited due to heavy rainfall"
+    : "Awaiting verified trigger";
   const payoutTime = latestClaim ? formatRelativeTime(latestClaim.createdAt) : "--";
 
   return (
@@ -88,7 +92,7 @@ function PayoutScreen() {
 
         <NeonCard glow variant="gradient">
           <Text style={styles.highlightLabel}>Current Payout</Text>
-          <Text style={styles.highlightValue}>{`${formatRupee(latestAmount)} credited`}</Text>
+          <Text style={styles.highlightValue}>{formatRupee(latestAmount)}</Text>
           <Text style={styles.highlightSub}>{payoutReason}</Text>
           <Text style={styles.highlightSubMuted}>{payoutTime}</Text>
         </NeonCard>
@@ -105,7 +109,7 @@ function PayoutScreen() {
           </View>
           <View style={styles.row}>
             <Text style={styles.rowLabel}>Latest Claim</Text>
-            <Text style={styles.rowValue}>{latestClaim?.status || "No claim yet"}</Text>
+            <Text style={styles.rowValue}>{latestClaim?.status || "no claim yet"}</Text>
           </View>
           <View style={styles.row}>
             <Text style={styles.rowLabel}>Timestamp</Text>

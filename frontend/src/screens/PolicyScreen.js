@@ -49,6 +49,8 @@ export default function PolicyScreen() {
           <Row label="Premium" value={`${formatRupee(policy?.premium || 0)}/week`} />
           <Row label="Coverage" value="₹700/day" />
           <Row label="Status" value={policyStatus} />
+          <Row label="Eligibility" value={policy?.eligibilityStatus || "eligible"} />
+          <Row label="Worker Tier" value={policy?.workerTier || "medium"} />
         </Card>
 
         <Card gradient style={styles.coverageCard}>

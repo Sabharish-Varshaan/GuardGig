@@ -33,17 +33,29 @@ function formatRupee(value) {
 }
 
 function getVariantFromRiskLevel(level) {
-  const normalized = (level || "Low").toLowerCase();
+  const normalized = (level || "safe").toLowerCase();
 
   if (normalized === "high") {
     return "danger";
   }
 
-  if (normalized === "medium") {
+  if (normalized === "moderate") {
     return "warning";
   }
 
   return "success";
+}
+
+function resolveRiskHeadline(severity) {
+  if (severity === "full") {
+    return "HIGH RISK DETECTED";
+  }
+
+  if (severity === "partial") {
+    return "MODERATE RISK";
+  }
+
+  return "SAFE CONDITIONS";
 }
 
 function getWorkflowStatusMeta(workflowState) {
@@ -56,15 +68,15 @@ function getWorkflowStatusMeta(workflowState) {
   }
 
   if (workflowState === "fraud_check") {
-    return { label: "Running fraud checks...", variant: "warning" };
+    return { label: "Processing claim...", variant: "warning" };
   }
 
   if (workflowState === "approved") {
-    return { label: "Claim Approved", variant: "success" };
+    return { label: "Claim Approved ✅", variant: "success" };
   }
 
   if (workflowState === "flagged") {
-    return { label: "Manual review required", variant: "danger" };
+    return { label: "Conditions not met", variant: "danger" };
   }
 
   return { label: "No active claim check", variant: "info" };
@@ -75,11 +87,13 @@ function DashboardScreen({ navigation }) {
     user,
     policy,
     risk,
+    location,
     riskLoading,
     riskMessage,
     workflowState,
     workflowMessage,
     coverageLoading,
+    requestLocation,
     refreshRisk,
     startCoverageCheck
   } = useAppContext();
@@ -88,13 +102,27 @@ function DashboardScreen({ navigation }) {
 
   useFocusEffect(
     React.useCallback(() => {
-      refreshRisk().catch(() => {});
-      return undefined;
-    }, [refreshRisk])
+      let active = true;
+
+      const syncLiveSnapshot = async () => {
+        const coords = await requestLocation();
+        if (!active) {
+          return;
+        }
+
+        await refreshRisk(coords || undefined);
+      };
+
+      syncLiveSnapshot().catch(() => {});
+
+      return () => {
+        active = false;
+      };
+    }, [refreshRisk, requestLocation])
   );
 
   const riskVariant = useMemo(() => getVariantFromRiskLevel(risk.level), [risk.level]);
-  const compactRiskLabel = useMemo(() => (risk.level || "LOW").toUpperCase(), [risk.level]);
+  const compactRiskLabel = useMemo(() => resolveRiskHeadline(risk.severity), [risk.severity]);
   const workflowMeta = useMemo(() => getWorkflowStatusMeta(workflowState), [workflowState]);
   const liveRiskLabel = riskLoading ? "CHECKING" : compactRiskLabel;
 
@@ -137,8 +165,9 @@ function DashboardScreen({ navigation }) {
           <View style={[styles.liveRiskGrid, isCompactScreen ? styles.liveRiskGridCompact : null]}>
             <InfoRow icon="🌧️" label="Rain" value={risk.rain === null ? "--" : `${risk.rain} mm`} />
             <InfoRow icon="🌫️" label="AQI" value={risk.aqi === null ? "--" : `${risk.aqi}`} />
-            <InfoRow icon="🌡️" label="Temp" value={risk.temp === null ? "--" : `${risk.temp}°C`} />
-            <InfoRow icon="⚡" label="Risk" value={liveRiskLabel} />
+            <InfoRow icon="📍" label="Latitude" value={location.lat === null ? "--" : `${location.lat.toFixed(4)}`} />
+            <InfoRow icon="📍" label="Longitude" value={location.lon === null ? "--" : `${location.lon.toFixed(4)}`} />
+            <InfoRow icon="⚡" label="Risk Status" value={liveRiskLabel} />
           </View>
         </Card>
 
@@ -146,6 +175,14 @@ function DashboardScreen({ navigation }) {
           <Text style={styles.inlineStatusLabel}>Live</Text>
           <StatusBadge label={riskMessage} variant={riskLoading ? "warning" : riskVariant} />
         </View>
+
+        <Card style={styles.messageCard}>
+          <Text style={styles.messageHeading}>Automation Feed</Text>
+          <Text style={styles.feedItem}>Checking live conditions...</Text>
+          <Text style={styles.feedItem}>Heavy rain detected</Text>
+          <Text style={styles.feedItem}>Air quality unsafe</Text>
+          <Text style={styles.feedItem}>System evaluating eligibility...</Text>
+        </Card>
 
         <Button
           disabled={coverageLoading}
@@ -171,12 +208,6 @@ function DashboardScreen({ navigation }) {
             style={styles.secondaryAction}
             title="Open Claims"
             variant="secondary"
-          />
-          <Button
-            onPress={() => navigation.navigate("Payout")}
-            style={styles.secondaryAction}
-            title="View Payout"
-            variant="ghost"
           />
         </View>
       </ScrollView>
@@ -311,6 +342,21 @@ const styles = StyleSheet.create({
     fontSize: 12,
     letterSpacing: 0.8,
     textTransform: "uppercase"
+  },
+  messageCard: {
+    marginBottom: appTheme.spacing.md
+  },
+  messageHeading: {
+    color: appTheme.colors.textPrimary,
+    fontFamily: "Orbitron_600SemiBold",
+    fontSize: 16,
+    marginBottom: appTheme.spacing.xs
+  },
+  feedItem: {
+    color: appTheme.colors.textSecondary,
+    fontFamily: "Rajdhani_600SemiBold",
+    fontSize: 15,
+    lineHeight: 22
   },
   actionGroup: {
     marginBottom: appTheme.spacing.xxl,

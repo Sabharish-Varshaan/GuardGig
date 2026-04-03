@@ -4,7 +4,6 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import Card from "../components/Card";
 import Header from "../components/Header";
-import ProgressBar from "../components/ProgressBar";
 import StatusBadge from "../components/StatusBadge";
 import { useAppContext } from "../context/AppContext";
 import { appTheme } from "../styles/theme";
@@ -13,17 +12,17 @@ function RiskScreen() {
   const { risk } = useAppContext();
 
   const bannerMeta = useMemo(() => {
-    const severity = (risk.severity || "normal").toLowerCase();
+    const severity = (risk.severity || "none").toLowerCase();
 
-    if (severity === "high") {
+    if (severity === "full") {
       return { label: "High Risk", variant: "danger" };
     }
 
-    if (severity === "moderate") {
+    if (severity === "partial") {
       return { label: "Moderate", variant: "warning" };
     }
 
-    return { label: "Normal", variant: "success" };
+    return { label: "Safe", variant: "success" };
   }, [risk.severity]);
 
   return (
@@ -44,26 +43,18 @@ function RiskScreen() {
         </Card>
 
         <Card style={styles.graphCard}>
-          <ProgressBar
-            color={appTheme.colors.warning}
-            label="Rainfall"
-            progress={Math.min((Number(risk.rain) / 100) * 100, 100)}
-            unit=" mm"
-            value={risk.rain}
-          />
-          <ProgressBar
-            color={appTheme.colors.danger}
-            label="AQI"
-            progress={Math.min((Number(risk.aqi) / 400) * 100, 100)}
-            value={risk.aqi}
-          />
-          <ProgressBar
-            color={appTheme.colors.accent}
-            label="Temperature"
-            progress={Math.min((Number(risk.temp) / 50) * 100, 100)}
-            unit="°C"
-            value={risk.temp}
-          />
+          <View style={styles.row}>
+            <Text style={styles.rowLabel}>Rainfall</Text>
+            <Text style={styles.rowValue}>{risk.rain === null ? "--" : `${risk.rain} mm`}</Text>
+          </View>
+          <View style={styles.row}>
+            <Text style={styles.rowLabel}>AQI</Text>
+            <Text style={styles.rowValue}>{risk.aqi === null ? "--" : `${risk.aqi}`}</Text>
+          </View>
+          <View style={styles.row}>
+            <Text style={styles.rowLabel}>Severity</Text>
+            <Text style={styles.rowValue}>{risk.severity || "none"}</Text>
+          </View>
         </Card>
 
       </ScrollView>
@@ -103,6 +94,25 @@ const styles = StyleSheet.create({
   },
   graphCard: {
     marginBottom: appTheme.spacing.md
+  },
+  row: {
+    alignItems: "center",
+    borderTopColor: appTheme.colors.borderSubtle,
+    borderTopWidth: 1,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingVertical: appTheme.spacing.sm
+  },
+  rowLabel: {
+    color: appTheme.colors.textSecondary,
+    fontFamily: "Rajdhani_600SemiBold",
+    fontSize: 16
+  },
+  rowValue: {
+    color: appTheme.colors.textPrimary,
+    fontFamily: "Rajdhani_700Bold",
+    fontSize: 16,
+    textTransform: "capitalize"
   }
 });
 

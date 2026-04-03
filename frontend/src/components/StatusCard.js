@@ -8,27 +8,27 @@ import { appTheme } from "../styles/theme";
 
 const STATE_META = {
   idle: {
-    message: "Idle",
+    message: "Standby",
     tone: "info"
   },
   checking_conditions: {
-    message: "Checking",
+    message: "Checking conditions",
     tone: "warning"
   },
   validating: {
-    message: "Validating",
+    message: "Trigger detected",
     tone: "warning"
   },
   fraud_check: {
-    message: "Fraud Check",
+    message: "Processing claim",
     tone: "warning"
   },
   approved: {
-    message: "Approved",
+    message: "Claim approved",
     tone: "success"
   },
   flagged: {
-    message: "Flagged",
+    message: "Conditions not met",
     tone: "danger"
   }
 };
@@ -62,26 +62,26 @@ export default function StatusCard({ workflowState, payoutAmount, movementScore 
 
   const resolvedMessage = useMemo(() => {
     if (workflowState === "approved") {
-      return `Payout released: ₹${payoutAmount || 0} credited.`;
+      return `Claim Approved ✅ Payout released: ₹${payoutAmount || 0}.`;
     }
 
     if (workflowState === "flagged") {
-      return "Verification required before payout release.";
+      return "Conditions not met for automated claim approval.";
     }
 
     if (workflowState === "checking_conditions") {
-      return "Heavy rain detected. Checking trigger conditions...";
+      return "Checking live conditions...";
     }
 
     if (workflowState === "validating") {
-      return "Claim being processed. Validating policy eligibility...";
+      return "Trigger detected... Validating eligibility...";
     }
 
     if (workflowState === "fraud_check") {
-      return "Running fraud detection...";
+      return "Processing claim...";
     }
 
-    return "Monitoring conditions. Tap Check Coverage to start workflow.";
+    return "System idle. Tap Check Coverage to run automated verification.";
   }, [workflowState, payoutAmount]);
 
   const isInProgress =
@@ -126,7 +126,7 @@ export default function StatusCard({ workflowState, payoutAmount, movementScore 
                 ? "Checking conditions"
                 : workflowState === "validating"
                   ? "Validating eligibility"
-                  : "Running fraud detection"
+                  : "Processing claim"
             }
             tone="warning"
           />

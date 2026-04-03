@@ -1,4 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import * as Location from "expo-location";
 import * as SecureStore from "expo-secure-store";
 
 import {
@@ -46,12 +47,19 @@ const initialUser = {
 
 const initialRisk = {
   aqi: null,
-  isHighRisk: false,
-  level: "LOW",
+  level: "SAFE",
   rain: null,
   status: "Awaiting live check",
-  temp: null,
-  trigger: "none"
+  severity: null,
+  trigger: null,
+  triggerType: null
+};
+
+const initialLocation = {
+  lat: null,
+  lon: null,
+  permission: "prompt",
+  error: ""
 };
 
 const toStringValue = (value, fallback = "") => {
@@ -94,6 +102,8 @@ const normalizePolicy = (policy) => {
     coverageAmount: Number(policy.coverage_amount || 0),
     policyStartDate: policy.policy_start_date || "",
     status: policy.status || "inactive",
+    eligibilityStatus: policy.eligibility_status || "eligible",
+    workerTier: policy.worker_tier || "medium",
     updatedAt: policy.updated_at || ""
   };
 };
@@ -104,7 +114,7 @@ const normalizeClaim = (claim) => {
   return {
     id: claim?.id || String(Date.now()),
     type: claim?.trigger_type || "rain",
-    status: claim?.status ? claim.status[0].toUpperCase() + claim.status.slice(1) : "Pending",
+    status: (claim?.status || "pending").toLowerCase(),
     amount: Number(claim?.payout_amount || 0),
     triggerValue: Number(claim?.trigger_value || 0),
     createdAt,
@@ -121,16 +131,16 @@ const normalizeClaim = (claim) => {
 
 const sleep = (delayMs) => new Promise((resolve) => setTimeout(resolve, delayMs));
 
-const computeRiskLevel = (rain) => {
-  if (rain >= 100) {
+const resolveRiskLevel = (severity) => {
+  if (severity === "full") {
     return "HIGH";
   }
 
-  if (rain >= 60) {
-    return "MEDIUM";
+  if (severity === "partial") {
+    return "MODERATE";
   }
 
-  return "LOW";
+  return "SAFE";
 };
 
 const toErrorMessage = (error, fallback) => {
@@ -156,6 +166,7 @@ export function AppProvider({ children }) {
   const [claimsHistory, setClaimsHistory] = useState([]);
   const [claimsLoading, setClaimsLoading] = useState(false);
   const [risk, setRisk] = useState(initialRisk);
+  const [location, setLocation] = useState(initialLocation);
   const [riskLoading, setRiskLoading] = useState(false);
   const [riskMessage, setRiskMessage] = useState("Awaiting live check");
   const [workflowState, setWorkflowState] = useState(WORKFLOW_STATES.idle);
@@ -299,51 +310,99 @@ export function AppProvider({ children }) {
     [authToken]
   );
 
-  const refreshRisk = useCallback(async () => {
-    if (!user.city) {
-      setRiskMessage("Location not available");
+  const requestLocation = useCallback(async () => {
+    try {
+      const permission = await Location.requestForegroundPermissionsAsync();
+      if (permission.status !== "granted") {
+        setLocation((prev) => ({
+          ...prev,
+          permission: "denied",
+          error: "Location permission denied"
+        }));
+        return null;
+      }
+
+      const position = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced
+      });
+
+      const next = {
+        lat: Number(position.coords.latitude),
+        lon: Number(position.coords.longitude),
+        permission: "granted",
+        error: ""
+      };
+
+      setLocation(next);
+      return next;
+    } catch (error) {
+      const message = toErrorMessage(error, "Unable to fetch location");
+      setLocation((prev) => ({
+        ...prev,
+        permission: "denied",
+        error: message
+      }));
       return null;
     }
+  }, []);
 
+  const refreshRisk = useCallback(async (locationOverride) => {
     setRiskLoading(true);
     setDataError("");
 
     try {
-      setRiskMessage("Checking conditions...");
-      await sleep(300);
-      setRiskMessage("Analyzing environmental data...");
-      await sleep(300);
-      setRiskMessage("Evaluating risk...");
+      setRiskMessage("Checking live conditions...");
+      const resolvedLocation = locationOverride || (location.lat !== null && location.lon !== null ? location : await requestLocation());
 
-      const triggerResponse = await checkTrigger(user.city);
-      const rain = Number(triggerResponse?.rain_mm || 0);
-      const aqi = triggerResponse?.aqi === null || triggerResponse?.aqi === undefined
-        ? null
-        : Number(triggerResponse.aqi);
-      const level = computeRiskLevel(rain);
-      const isHighRisk = rain >= 60;
+      if (!resolvedLocation || resolvedLocation.lat === null || resolvedLocation.lon === null) {
+        setRiskMessage(location.error || "Location permission required");
+        return null;
+      }
+
+      const triggerResponse = await checkTrigger({
+        lat: resolvedLocation.lat,
+        lon: resolvedLocation.lon
+      });
+      const rain = Number(triggerResponse?.rain ?? 0);
+      const aqi = Number(triggerResponse?.aqi ?? 0);
+      const trigger = triggerResponse?.trigger || { trigger: false };
+      const severity = trigger?.severity || null;
+      const triggerType = trigger?.type || null;
+      const detected = !!trigger?.trigger;
+
+      await sleep(180);
+      setRiskMessage("System evaluating eligibility...");
 
       setRisk({
         rain,
         aqi,
-        temp: null,
-        level,
-        status: isHighRisk ? "Heavy rain detected" : "No disruption detected",
-        isHighRisk,
-        trigger: triggerResponse?.trigger || "none"
+        level: resolveRiskLevel(severity),
+        status:
+          triggerType === "rain"
+            ? "Heavy rain detected"
+            : triggerType === "aqi"
+              ? "Air quality unsafe"
+              : "Safe conditions",
+        severity,
+        trigger: detected,
+        triggerType
       });
 
-      if (rain >= 60) {
-        setRiskMessage("Heavy rain detected. Trigger condition met");
+      if (triggerType === "rain") {
+        setRiskMessage("Heavy rain detected");
+      } else if (triggerType === "aqi") {
+        setRiskMessage("Air quality unsafe");
       } else {
         setRiskMessage("No disruption detected");
       }
 
       return {
-        exists: (triggerResponse?.trigger || "none") !== "none",
-        trigger: triggerResponse?.trigger || "none",
+        trigger,
+        detected,
         rain,
-        aqi
+        aqi,
+        lat: resolvedLocation.lat,
+        lon: resolvedLocation.lon
       };
     } catch (error) {
       const message = toErrorMessage(error, "Failed to check trigger");
@@ -355,7 +414,7 @@ export function AppProvider({ children }) {
     } finally {
       setRiskLoading(false);
     }
-  }, [user.city]);
+  }, [location, requestLocation]);
 
   useEffect(() => {
     let mounted = true;
@@ -538,6 +597,7 @@ export function AppProvider({ children }) {
     setUser(initialUser);
     setPolicy(null);
     setRisk(initialRisk);
+    setLocation(initialLocation);
     setRiskMessage("Awaiting live check");
     setClaimsHistory([]);
     setPayoutAmount(0);
@@ -559,13 +619,6 @@ export function AppProvider({ children }) {
       return { success: false, approved: false, error: message };
     }
 
-    if (!user.city) {
-      const message = "Location unavailable. Update your profile city.";
-      setWorkflowState(WORKFLOW_STATES.flagged);
-      setWorkflowMessage(message);
-      return { success: false, approved: false, error: message };
-    }
-
     setCoverageLoading(true);
     setDataError("");
 
@@ -573,35 +626,30 @@ export function AppProvider({ children }) {
       setWorkflowState(WORKFLOW_STATES.checking_conditions);
       setWorkflowMessage("Checking conditions...");
 
-      const triggerResponse = await checkTrigger(user.city);
-      const rain = Number(triggerResponse?.rain_mm || 0);
-      const aqi = triggerResponse?.aqi === null || triggerResponse?.aqi === undefined
-        ? null
-        : Number(triggerResponse.aqi);
+      const snapshot = await refreshRisk();
 
-      setRisk((prev) => ({
-        ...prev,
-        rain,
-        aqi,
-        level: computeRiskLevel(rain),
-        isHighRisk: rain >= 60,
-        status: rain >= 60 ? "Heavy rain detected" : "No disruption detected",
-        trigger: triggerResponse?.trigger || "none"
-      }));
+      if (!snapshot) {
+        setWorkflowState(WORKFLOW_STATES.flagged);
+        setWorkflowMessage("Unable to verify location");
+        return { success: false, approved: false, reason: "location_missing" };
+      }
 
-      if ((triggerResponse?.trigger || "none") === "none") {
+      if (!snapshot.detected) {
         setWorkflowState(WORKFLOW_STATES.idle);
         setWorkflowMessage("No disruption detected");
         return { success: true, approved: false, reason: "no_trigger" };
       }
 
       setWorkflowState(WORKFLOW_STATES.validating);
-      setWorkflowMessage("Trigger detected");
+      setWorkflowMessage("Trigger detected...");
       await sleep(250);
       setWorkflowMessage("Validating eligibility...");
 
       const claimResponse = await createClaim(authToken, {
-        location: user.city,
+        triggerType: snapshot.trigger.type,
+        severity: snapshot.trigger.severity,
+        lat: snapshot.lat,
+        lon: snapshot.lon,
         activityStatus: "active",
         locationValid: true
       });
@@ -615,7 +663,7 @@ export function AppProvider({ children }) {
 
       if ((claimResponse?.claim?.status || "").toLowerCase() === "approved") {
         setWorkflowState(WORKFLOW_STATES.approved);
-        setWorkflowMessage("Claim Approved");
+        setWorkflowMessage("Claim Approved ✅");
         setPayoutAmount(createdClaim.amount || 0);
         await Promise.allSettled([refreshClaims(authToken), refreshPolicy(authToken)]);
         return { success: true, approved: true, claim: createdClaim };
@@ -654,7 +702,7 @@ export function AppProvider({ children }) {
     } finally {
       setCoverageLoading(false);
     }
-  }, [authToken, coverageLoading, refreshClaims, refreshPolicy, user.city]);
+  }, [authToken, coverageLoading, refreshClaims, refreshPolicy, refreshRisk]);
 
   const value = useMemo(
     () => ({
@@ -670,6 +718,7 @@ export function AppProvider({ children }) {
       policy,
       policyLoading,
       risk,
+      location,
       riskLoading,
       riskMessage,
       workflowState,
@@ -687,6 +736,7 @@ export function AppProvider({ children }) {
       updateProfile,
       logout,
       startCoverageCheck,
+      requestLocation,
       refreshRisk,
       refreshPolicy,
       refreshClaims,
@@ -707,6 +757,7 @@ export function AppProvider({ children }) {
       policy,
       policyLoading,
       risk,
+      location,
       riskLoading,
       riskMessage,
       workflowState,
@@ -719,6 +770,7 @@ export function AppProvider({ children }) {
       notificationsEnabled,
       themeEnabled,
       startCoverageCheck,
+      requestLocation,
       refreshRisk,
       refreshPolicy,
       refreshClaims

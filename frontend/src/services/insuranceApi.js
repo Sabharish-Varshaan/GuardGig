@@ -14,11 +14,12 @@ export async function getMyPolicy(token) {
   });
 }
 
-export async function checkTrigger(location) {
+export async function checkTrigger({ lat, lon }) {
   return apiRequest("/api/trigger/check", {
     method: "POST",
     body: {
-      location
+      lat,
+      lon
     }
   });
 }
@@ -28,7 +29,10 @@ export async function createClaim(token, payload) {
     method: "POST",
     token,
     body: {
-      location: payload.location,
+      trigger_type: payload.triggerType,
+      severity: payload.severity,
+      lat: payload.lat,
+      lon: payload.lon,
       activity_status: payload.activityStatus || "active",
       location_valid: payload.locationValid !== false
     }

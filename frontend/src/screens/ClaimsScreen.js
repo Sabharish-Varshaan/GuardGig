@@ -16,6 +16,11 @@ function formatRupee(value) {
   return `₹${value}`;
 }
 
+function capitalizeStatus(value) {
+  const normalized = String(value || "pending").toLowerCase();
+  return normalized[0].toUpperCase() + normalized.slice(1);
+}
+
 function ClaimsScreen({ navigation }) {
   const {
     claimsHistory,
@@ -87,15 +92,17 @@ function ClaimsScreen({ navigation }) {
                 <Animated.View style={{ opacity: fade, transform: [{ translateY: rise }] }}>
                   <Card style={styles.resultCard}>
                     <Text style={styles.resultHeading}>Latest Claim Update</Text>
-                    <Text style={styles.resultSubHeading}>{latestClaim.status}</Text>
+                    <Text style={styles.resultSubHeading}>{capitalizeStatus(latestClaim.status)}</Text>
                     <Text style={styles.resultAmount}>
                       {latestClaim.amount > 0
                         ? `${formatRupee(latestClaim.amount)} Credited 🎉`
-                        : "Verification Pending"}
+                        : latestClaim.status === "rejected"
+                          ? "Conditions not met"
+                          : "Verification Pending"}
                     </Text>
                     <StatusBadge
-                      label={latestClaim.status}
-                      variant={latestClaim.status === "Approved" ? "success" : "warning"}
+                      label={capitalizeStatus(latestClaim.status)}
+                      variant={latestClaim.status === "approved" ? "success" : latestClaim.status === "rejected" ? "danger" : "warning"}
                     />
                   </Card>
                 </Animated.View>

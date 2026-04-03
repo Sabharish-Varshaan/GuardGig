@@ -11,8 +11,8 @@ export const colors = {
   textDisabled: "#3A556E",
   borderSubtle: "rgba(0,212,255,0.15)",
   borderStrong: "rgba(0,212,255,0.4)",
-  glowSoft: "rgba(0,212,255,0.22)",
-  glowStrong: "rgba(0,212,255,0.45)",
+  glowSoft: "rgba(0,212,255,0.14)",
+  glowStrong: "rgba(0,212,255,0.28)",
   gradientCyanStart: "#00B8E6",
   gradientCyanEnd: "#007CFF",
   gradientDarkStart: "#081426",
@@ -63,8 +63,8 @@ export const colors = {
 
 export const spacing = {
   xs: 8,
-  sm: 16,
-  md: 24,
+  sm: 18,
+  md: 26,
   lg: 32,
   xl: 40,
   xxl: 48
@@ -135,28 +135,28 @@ export const shadows = {
   soft: {
     shadowColor: "#00D4FF",
     shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.12,
+    shadowOpacity: 0.08,
     shadowRadius: 12,
     elevation: 3
   },
   card: {
     shadowColor: "#00D4FF",
     shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.14,
+    shadowOpacity: 0.1,
     shadowRadius: 14,
     elevation: 4
   },
   floating: {
     shadowColor: "#00D4FF",
     shadowOffset: { width: 0, height: 16 },
-    shadowOpacity: 0.18,
+    shadowOpacity: 0.12,
     shadowRadius: 18,
     elevation: 6
   },
   glow: {
     shadowColor: "#00D4FF",
     shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.22,
+    shadowOpacity: 0.14,
     shadowRadius: 10,
     elevation: 5
   }
