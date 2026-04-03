@@ -40,7 +40,10 @@ const initialUser = {
   platform: "",
   vehicleType: "",
   workHours: "",
-  dailyIncome: "",
+  minIncome: "",
+  maxIncome: "",
+  meanIncome: "",
+  incomeVariance: "",
   weeklyIncome: "",
   riskPreference: "Medium"
 };
@@ -83,7 +86,10 @@ const mapProfileToUser = (profile, previousUser) => {
     platform: profile.platform || previousUser.platform,
     vehicleType: profile.vehicle_type || previousUser.vehicleType,
     workHours: toStringValue(profile.work_hours, previousUser.workHours),
-    dailyIncome: toStringValue(profile.daily_income, previousUser.dailyIncome),
+    minIncome: toStringValue(profile.min_income, previousUser.minIncome),
+    maxIncome: toStringValue(profile.max_income, previousUser.maxIncome),
+    meanIncome: toStringValue(profile.mean_income, previousUser.meanIncome),
+    incomeVariance: toStringValue(profile.income_variance, previousUser.incomeVariance),
     weeklyIncome: toStringValue(profile.weekly_income, previousUser.weeklyIncome),
     riskPreference: profile.risk_preference || previousUser.riskPreference,
     phone: profile.phone || previousUser.phone
@@ -98,6 +104,10 @@ const normalizePolicy = (policy) => {
   return {
     id: policy.id,
     weeklyIncome: Number(policy.weekly_income || 0),
+    meanIncome: Number(policy.mean_income || 0),
+    minIncome: Number(policy.min_income || 0),
+    maxIncome: Number(policy.max_income || 0),
+    incomeVariance: Number(policy.income_variance || 0),
     premium: Number(policy.premium || 0),
     coverageAmount: Number(policy.coverage_amount || 0),
     policyStartDate: policy.policy_start_date || "",

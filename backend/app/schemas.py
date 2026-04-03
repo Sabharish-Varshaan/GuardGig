@@ -1,6 +1,6 @@
 from typing import Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator
 
 PHONE_PATTERN = r"^[0-9]{10}$"
 
@@ -37,9 +37,17 @@ class OnboardingRequest(BaseModel):
     platform: str = Field(min_length=2, max_length=80)
     vehicle_type: Literal["Bike", "Scooter", "Cycle"]
     work_hours: int = Field(gt=0, le=24)
-    daily_income: int = Field(gt=0)
-    weekly_income: int = Field(gt=0)
+    min_income: float = Field(gt=0)
+    max_income: float = Field(gt=0)
     risk_preference: Literal["Low", "Medium", "High"]
+
+    @field_validator("max_income")
+    @classmethod
+    def validate_income_range(cls, value: float, info: ValidationInfo) -> float:
+        min_income = info.data.get("min_income")
+        if min_income is not None and value <= min_income:
+            raise ValueError("max_income must be greater than min_income")
+        return value
 
 
 class OnboardingResponse(BaseModel):
@@ -51,6 +59,10 @@ class PolicyResponse(BaseModel):
     id: str
     user_id: str
     weekly_income: int
+    min_income: Optional[float] = None
+    max_income: Optional[float] = None
+    mean_income: Optional[float] = None
+    income_variance: Optional[float] = None
     premium: float
     coverage_amount: float
     policy_start_date: str

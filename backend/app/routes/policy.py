@@ -44,7 +44,7 @@ def create_policy(current_user: dict = Depends(require_current_user)):
     # Check if user has completed onboarding
     onboarding_response = (
         admin.table(settings.supabase_onboarding_table)
-        .select("weekly_income, risk_preference, onboarding_completed, created_at")
+        .select("mean_income, income_variance, min_income, max_income, daily_income, risk_preference, onboarding_completed, created_at")
         .eq("user_id", current_user["id"])
         .limit(1)
         .execute()
@@ -66,7 +66,19 @@ def create_policy(current_user: dict = Depends(require_current_user)):
             message="Onboarding not completed. Please complete onboarding first.",
         )
 
-    weekly_income = onboarding["weekly_income"]
+    mean_income = onboarding.get("mean_income")
+    if mean_income is None and onboarding.get("daily_income") is not None:
+        mean_income = float(onboarding["daily_income"])
+
+    if mean_income is None or float(mean_income) <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid onboarding income model. Please resubmit onboarding details."
+        )
+
+    mean_income = float(mean_income)
+    income_variance = float(onboarding.get("income_variance") or 0)
+    weekly_income = int(round(mean_income * 7))
     risk_preference = onboarding.get("risk_preference", "Medium")
     eligibility_status, worker_tier, active_days = _derive_underwriting(onboarding.get("created_at"))
 
@@ -93,13 +105,17 @@ def create_policy(current_user: dict = Depends(require_current_user)):
         )
 
     # Calculate premium
-    premium = calculate_premium(float(weekly_income), str(risk_preference))
+    premium = calculate_premium(float(weekly_income), str(risk_preference), income_variance=income_variance)
 
     # Create policy
     now = datetime.now(timezone.utc)
     policy_data = {
         "user_id": current_user["id"],
         "weekly_income": weekly_income,
+        "min_income": float(onboarding.get("min_income") or round(mean_income * 0.7, 2)),
+        "max_income": float(onboarding.get("max_income") or round(mean_income * 1.3, 2)),
+        "mean_income": round(mean_income, 2),
+        "income_variance": round(income_variance, 4),
         "premium": premium,
         "coverage_amount": 700.00,
         "policy_start_date": now.date().isoformat(),

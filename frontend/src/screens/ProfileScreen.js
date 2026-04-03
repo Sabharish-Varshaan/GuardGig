@@ -68,7 +68,10 @@ function ProfileScreen({ navigation }) {
               <ProfileRow label="Name" value={user.fullName} />
               <ProfileRow label="Vehicle" value={user.vehicleType} />
               <ProfileRow label="Work Hours" value={user.workHours} />
-              <ProfileRow label="Income" value={`${user.dailyIncome}/day`} />
+              <ProfileRow
+                label="Income"
+                value={user.minIncome && user.maxIncome ? `₹${user.minIncome} - ₹${user.maxIncome} / day` : "Loading..."}
+              />
             </View>
           ) : (
             <View>

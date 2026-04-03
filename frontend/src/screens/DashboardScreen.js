@@ -128,7 +128,7 @@ function DashboardScreen({ navigation }) {
   const liveRiskLabel = riskLoading ? "CHECKING" : compactRiskLabel;
   const policyReady = !policyLoading && !!policy;
   const premiumValue = policyReady ? `${formatRupee(policy.premium)}/week` : "Loading...";
-  const weeklyIncomeValue = policyReady ? formatRupee(policy.weeklyIncome) : "Loading...";
+  const meanIncomeValue = policyReady ? `${formatRupee(policy.meanIncome)}/day` : "Loading...";
   const coverageValue = policyReady ? `${formatRupee(policy.coverageAmount)}/day` : "Loading...";
 
   const handleCheckCoverage = React.useCallback(async () => {
@@ -157,7 +157,7 @@ function DashboardScreen({ navigation }) {
             <StatusBadge label={liveRiskLabel} variant={riskVariant} />
           </View>
           <View style={[styles.summaryStatsRow, isCompactScreen ? styles.summaryStatsRowCompact : null]}>
-            <SummaryStat label="Weekly Income" value={weeklyIncomeValue} />
+            <SummaryStat label="Average Daily Income" value={meanIncomeValue} />
             <SummaryStat label="Daily Coverage" value={coverageValue} />
           </View>
         </Card>

@@ -10,6 +10,44 @@ from ..supabase_client import get_admin_client
 router = APIRouter(prefix="/api/onboarding", tags=["onboarding"])
 
 
+def _compute_variance(min_income: float, max_income: float, mean_income: float) -> float:
+    if mean_income == 0:
+        return 0.0
+    return (max_income - min_income) / mean_income
+
+
+def _normalize_profile(profile: dict) -> dict:
+    normalized = dict(profile)
+    daily_income = normalized.get("daily_income")
+
+    min_income = normalized.get("min_income")
+    max_income = normalized.get("max_income")
+    mean_income = normalized.get("mean_income")
+    income_variance = normalized.get("income_variance")
+
+    if min_income is None and daily_income is not None:
+        min_income = round(float(daily_income) * 0.7, 2)
+
+    if max_income is None and daily_income is not None:
+        max_income = round(float(daily_income) * 1.3, 2)
+
+    if mean_income is None:
+        if daily_income is not None:
+            mean_income = float(daily_income)
+        elif min_income is not None and max_income is not None:
+            mean_income = (float(min_income) + float(max_income)) / 2
+
+    if income_variance is None and min_income is not None and max_income is not None and mean_income is not None:
+        income_variance = _compute_variance(float(min_income), float(max_income), float(mean_income))
+
+    normalized["min_income"] = min_income
+    normalized["max_income"] = max_income
+    normalized["mean_income"] = mean_income
+    normalized["income_variance"] = income_variance if income_variance is not None else 0.0
+
+    return normalized
+
+
 @router.get("/me", response_model=OnboardingResponse)
 def get_my_onboarding_profile(current_user: dict = Depends(require_current_user)):
     settings = get_settings()
@@ -33,7 +71,7 @@ def get_my_onboarding_profile(current_user: dict = Depends(require_current_user)
     if not rows:
         return OnboardingResponse(onboarding_completed=False, profile={})
 
-    profile = rows[0]
+    profile = _normalize_profile(rows[0])
     return OnboardingResponse(
         onboarding_completed=bool(profile.get("onboarding_completed", False)),
         profile=profile
@@ -48,6 +86,14 @@ def submit_onboarding(
     settings = get_settings()
     admin = get_admin_client()
 
+    min_income = float(payload.min_income)
+    max_income = float(payload.max_income)
+    mean_income = (min_income + max_income) / 2
+    income_variance = _compute_variance(min_income, max_income, mean_income)
+    # Keep legacy columns populated for transition safety.
+    daily_income = int(round(mean_income))
+    weekly_income = int(round(mean_income * 7))
+
     onboarding_row = {
         "user_id": current_user["id"],
         "full_name": payload.full_name,
@@ -56,8 +102,12 @@ def submit_onboarding(
         "platform": payload.platform,
         "vehicle_type": payload.vehicle_type,
         "work_hours": payload.work_hours,
-        "daily_income": payload.daily_income,
-        "weekly_income": payload.weekly_income,
+        "daily_income": daily_income,
+        "weekly_income": weekly_income,
+        "min_income": round(min_income, 2),
+        "max_income": round(max_income, 2),
+        "mean_income": round(mean_income, 2),
+        "income_variance": round(income_variance, 4),
         "risk_preference": payload.risk_preference,
         "onboarding_completed": True,
         "updated_at": datetime.now(timezone.utc).isoformat()
@@ -82,4 +132,4 @@ def submit_onboarding(
             detail="Onboarding save completed but no profile returned"
         )
 
-    return OnboardingResponse(onboarding_completed=True, profile=rows[0])
+    return OnboardingResponse(onboarding_completed=True, profile=_normalize_profile(rows[0]))

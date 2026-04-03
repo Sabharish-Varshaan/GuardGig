@@ -32,7 +32,8 @@ export async function submitOnboardingProfile(payload, token) {
       platform: payload.platform,
       vehicle_type: payload.vehicleType,
       work_hours: Number(payload.workHours),
-      daily_income: Number(payload.dailyIncome),
+      min_income: Number(payload.minIncome),
+      max_income: Number(payload.maxIncome),
       risk_preference: payload.riskPreference
     }
   });

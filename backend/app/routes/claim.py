@@ -15,11 +15,13 @@ from ..trigger_utils import check_trigger, fetch_aqi, fetch_rain_mm
 
 router = APIRouter(prefix="/api", tags=["claim"])
 
-def calculate_payout(severity: str, coverage_amount: float) -> float:
+def calculate_payout(severity: str, base_amount: float, coverage_amount: float) -> float:
+    capped_base = min(base_amount, coverage_amount)
+
     if severity == "full":
-        return round(coverage_amount, 2)
+        return round(min(capped_base, coverage_amount), 2)
     if severity == "partial":
-        return round(coverage_amount * 0.30, 2)
+        return round(min(capped_base * 0.30, coverage_amount), 2)
     return 0.0
 
 @router.post("/claim/create", response_model=ClaimCreateResponse)
@@ -42,6 +44,25 @@ async def create_claim(request: ClaimCreateRequest, current_user: dict = Depends
 
     policy = policy_response.data[0]
     coverage_amount = float(policy.get("coverage_amount", 700.0))
+
+    onboarding_response = (
+        admin.table(settings.supabase_onboarding_table)
+        .select("mean_income, daily_income")
+        .eq("user_id", current_user["id"])
+        .limit(1)
+        .execute()
+    )
+
+    onboarding_rows = onboarding_response.data or []
+    onboarding_profile = onboarding_rows[0] if onboarding_rows else {}
+    mean_income = onboarding_profile.get("mean_income")
+    if mean_income is None and onboarding_profile.get("daily_income") is not None:
+        mean_income = float(onboarding_profile["daily_income"])
+
+    if mean_income is None or float(mean_income) <= 0:
+        mean_income = coverage_amount
+
+    payout_base = min(float(mean_income), coverage_amount)
 
     try:
         enforce_waiting_period(policy, waiting_hours=24)
@@ -77,7 +98,7 @@ async def create_claim(request: ClaimCreateRequest, current_user: dict = Depends
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
-    payout = calculate_payout(severity, coverage_amount)
+    payout = calculate_payout(severity, payout_base, coverage_amount)
 
     trigger_value = rain if trigger_type == "rain" else aqi
 

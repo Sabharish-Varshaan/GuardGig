@@ -46,6 +46,7 @@ export default function PolicyScreen() {
 
         <Card style={styles.cardGap}>
           <Text style={styles.cardTitle}>Policy Details</Text>
+          <Row label="Average Daily Income" value={policyReady ? formatRupee(policy.meanIncome) : "Loading..."} />
           <Row label="Weekly Income" value={policyReady ? formatRupee(policy.weeklyIncome) : "Loading..."} />
           <Row label="Premium" value={policyReady ? `${formatRupee(policy.premium)}/week` : "Loading..."} />
           <Row label="Coverage" value={policyReady ? `${formatRupee(policy.coverageAmount)}/day` : "Loading..."} />
@@ -57,6 +58,7 @@ export default function PolicyScreen() {
         <Card gradient style={styles.coverageCard}>
           <Text style={styles.coverageLabel}>Policy Start</Text>
           <Text style={styles.coverageValue}>{policyReady ? policy.policyStartDate || "Unavailable" : "Loading..."}</Text>
+          <Text style={styles.coverageHint}>Coverage based on average income</Text>
           <Text style={styles.coverageSub}>{policyLoading ? "Refreshing policy..." : "Live backend policy"}</Text>
         </Card>
 
@@ -120,6 +122,12 @@ const styles = StyleSheet.create({
     color: appTheme.colors.textPrimary,
     fontFamily: "Rajdhani_600SemiBold",
     fontSize: 15
+  },
+  coverageHint: {
+    color: appTheme.colors.textSecondary,
+    fontFamily: "Rajdhani_600SemiBold",
+    fontSize: 14,
+    marginTop: appTheme.spacing.xs
   },
   errorText: {
     color: appTheme.colors.danger,

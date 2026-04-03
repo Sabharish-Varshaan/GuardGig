@@ -53,7 +53,8 @@ function OnboardingScreen({ navigation, route }) {
     platform: "",
     vehicleType: "",
     workHours: "",
-    dailyIncome: "",
+    minIncome: "",
+    maxIncome: "",
     riskPreference: "Medium"
   });
 
@@ -66,7 +67,8 @@ function OnboardingScreen({ navigation, route }) {
   const handleFullNameChange = useCallback((value) => updateField("fullName", value), [updateField]);
   const handleAgeChange = useCallback((value) => updateField("age", value), [updateField]);
   const handleWorkHoursChange = useCallback((value) => updateField("workHours", value), [updateField]);
-  const handleDailyIncomeChange = useCallback((value) => updateField("dailyIncome", value), [updateField]);
+  const handleMinIncomeChange = useCallback((value) => updateField("minIncome", value), [updateField]);
+  const handleMaxIncomeChange = useCallback((value) => updateField("maxIncome", value), [updateField]);
 
   const validateStep = () => {
     let nextErrors = {};
@@ -92,9 +94,12 @@ function OnboardingScreen({ navigation, route }) {
     }
 
     if (step === 2) {
+      const minIncome = Number(form.minIncome);
+      const maxIncome = Number(form.maxIncome);
+
       nextErrors = {
-        dailyIncome:
-          Number(form.dailyIncome) > 0 ? "" : "Daily income must be greater than zero."
+        minIncome: minIncome > 0 ? "" : "Minimum income must be greater than zero.",
+        maxIncome: maxIncome > minIncome ? "" : "Max must be greater than min"
       };
     }
 
@@ -250,13 +255,22 @@ function OnboardingScreen({ navigation, route }) {
             {step === 2 && (
               <View>
                 <Text style={styles.sectionTitle}>Step 3: Income Info</Text>
+                <Text style={styles.helperHint}>Your income varies daily. Enter a realistic range.</Text>
                 <InputField
-                  error={errors.dailyIncome}
+                  error={errors.minIncome}
                   keyboardType="number-pad"
-                  label="Daily Income"
-                  onChangeText={handleDailyIncomeChange}
-                  placeholder="Daily income in INR"
-                  value={form.dailyIncome}
+                  label="Minimum Daily Income"
+                  onChangeText={handleMinIncomeChange}
+                  placeholder="Minimum daily income in INR"
+                  value={form.minIncome}
+                />
+                <InputField
+                  error={errors.maxIncome}
+                  keyboardType="number-pad"
+                  label="Maximum Daily Income"
+                  onChangeText={handleMaxIncomeChange}
+                  placeholder="Maximum daily income in INR"
+                  value={form.maxIncome}
                 />
               </View>
             )}
@@ -337,6 +351,12 @@ const styles = StyleSheet.create({
     fontFamily: "Orbitron_600SemiBold",
     fontSize: 20,
     marginBottom: appTheme.spacing.md
+  },
+  helperHint: {
+    color: appTheme.colors.textSecondary,
+    fontFamily: "Rajdhani_600SemiBold",
+    fontSize: 14,
+    marginBottom: appTheme.spacing.sm
   },
   selectLabel: {
     color: appTheme.colors.textSecondary,
