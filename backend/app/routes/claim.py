@@ -11,14 +11,14 @@ from ..config import get_settings
 from ..dependencies import require_current_user
 from ..schemas import ClaimCreateRequest, ClaimCreateResponse, ClaimsListResponse, ClaimResponse
 from ..supabase_client import get_admin_client
-from ..trigger_utils import evaluate_rain_trigger, fetch_aqi, fetch_rain_mm
+from ..trigger_utils import check_trigger, fetch_aqi, fetch_rain_mm
 
 router = APIRouter(prefix="/api", tags=["claim"])
 
-def calculate_payout(trigger: str, coverage_amount: float) -> float:
-    if trigger == "full":
+def calculate_payout(severity: str, coverage_amount: float) -> float:
+    if severity == "full":
         return round(coverage_amount, 2)
-    if trigger == "partial":
+    if severity == "partial":
         return round(coverage_amount * 0.30, 2)
     return 0.0
 
@@ -49,15 +49,18 @@ async def create_claim(request: ClaimCreateRequest, current_user: dict = Depends
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
-    rain = await fetch_rain_mm(request.location)
-    _aqi = await fetch_aqi(request.location)
-    trigger = evaluate_rain_trigger(rain)
+    rain = await fetch_rain_mm(request.location, request.lat, request.lon)
+    aqi = await fetch_aqi(request.location, request.lat, request.lon)
+    trigger_data = check_trigger(rain, aqi)
 
-    if trigger == "none":
+    if not trigger_data.get("trigger"):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No claim trigger conditions met")
 
+    trigger_type = trigger_data["type"]
+    severity = trigger_data["severity"]
+
     recent_claim_count = fetch_recent_claim_count(admin, settings.supabase_claims_table, current_user["id"])
-    effective_location_valid = bool(request.location.strip()) and request.location_valid
+    effective_location_valid = bool((request.location or "").strip() or request.lat is not None or request.lon is not None) and request.location_valid
     fraud_score = calculate_fraud_score(
         activity_status=request.activity_status,
         location_valid=effective_location_valid,
@@ -74,20 +77,22 @@ async def create_claim(request: ClaimCreateRequest, current_user: dict = Depends
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
-    payout = calculate_payout(trigger, coverage_amount)
+    payout = calculate_payout(severity, coverage_amount)
+
+    trigger_value = rain if trigger_type == "rain" else aqi
 
     # Create claim
     claim_data = {
         "user_id": current_user["id"],
         "policy_id": policy["id"],
-        "trigger_type": "rain",
-        "trigger_value": rain,
+        "trigger_type": trigger_type,
+        "trigger_value": trigger_value,
         "payout_amount": payout,
         "status": "approved",
         "fraud_score": fraud_score,
         "activity_status": request.activity_status,
         "location_valid": effective_location_valid,
-        "rule_decision_reason": "approved_after_rule_checks",
+        "rule_decision_reason": f"approved_after_{trigger_type}_{severity}_checks",
     }
 
     claim_response = admin.table(settings.supabase_claims_table).insert(claim_data).execute()

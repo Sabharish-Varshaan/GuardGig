@@ -55,12 +55,15 @@ class PolicyResponse(BaseModel):
     coverage_amount: float
     policy_start_date: str
     status: Literal["active", "inactive"]
+    eligibility_status: str = "eligible"
+    worker_tier: str = "medium"
     created_at: str
     updated_at: str
 
 
 class PolicyCreateResponse(BaseModel):
-    policy: PolicyResponse
+    status: Literal["created", "ineligible"]
+    policy: PolicyResponse | None = None
     message: str
 
 
@@ -74,9 +77,13 @@ class PremiumCalculateResponse(BaseModel):
 
 
 class ClaimCreateRequest(BaseModel):
-    location: str
+    location: str | None = None
+    lat: Optional[float] = None
+    lon: Optional[float] = None
     activity_status: Literal["active", "inactive", "none"] = "active"
     location_valid: bool = True
+    trigger_type: Optional[str] = None
+    severity: Optional[str] = None
 
 
 class ClaimResponse(BaseModel):

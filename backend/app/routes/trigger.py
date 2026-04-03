@@ -1,24 +1,34 @@
-from fastapi import APIRouter, HTTPException, status
-from pydantic import BaseModel
+from fastapi import APIRouter
+from pydantic import BaseModel, ConfigDict
 
-from ..trigger_utils import evaluate_rain_trigger, fetch_aqi, fetch_rain_mm
+from ..trigger_utils import check_trigger as evaluate_trigger, fetch_aqi, fetch_rain_mm
 
 router = APIRouter(prefix="/api/trigger", tags=["trigger"])
 
 class TriggerCheckRequest(BaseModel):
-    location: str
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    location: str | None = None
+    lat: float | None = None
+    lon: float | None = None
+
+
+class TriggerDecision(BaseModel):
+    trigger: bool
+    type: str | None = None
+    severity: str | None = None
 
 class TriggerCheckResponse(BaseModel):
-    trigger: str
-    rain_mm: float
-    aqi: float | None
+    rain: float
+    aqi: float
+    trigger: TriggerDecision
 
 @router.post("/check", response_model=TriggerCheckResponse)
 async def check_trigger(request: TriggerCheckRequest):
     try:
-        rain = await fetch_rain_mm(request.location)
-        aqi = await fetch_aqi(request.location)
-        trigger = evaluate_rain_trigger(rain)
-        return TriggerCheckResponse(trigger=trigger, rain_mm=rain, aqi=aqi)
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+        rain = await fetch_rain_mm(request.location, request.lat, request.lon)
+        aqi = await fetch_aqi(request.location, request.lat, request.lon)
+        trigger = evaluate_trigger(rain, aqi)
+        return TriggerCheckResponse(rain=rain, aqi=aqi, trigger=TriggerDecision(**trigger))
+    except Exception:
+        return TriggerCheckResponse(rain=0.0, aqi=0.0, trigger=TriggerDecision(trigger=False))

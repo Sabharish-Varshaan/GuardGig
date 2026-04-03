@@ -7,12 +7,20 @@ CREATE TABLE IF NOT EXISTS policies (
   coverage_amount DECIMAL(10,2) NOT NULL DEFAULT 700.00,
   policy_start_date DATE NOT NULL,
   status TEXT NOT NULL CHECK (status IN ('active', 'inactive')),
+  eligibility_status TEXT NOT NULL DEFAULT 'eligible',
+  worker_tier TEXT NOT NULL DEFAULT 'medium',
+  active_days INT NOT NULL DEFAULT 0,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 -- Create index on user_id for policies
 CREATE INDEX IF NOT EXISTS policies_user_id_idx ON policies (user_id);
+
+ALTER TABLE IF EXISTS policies
+  ADD COLUMN IF NOT EXISTS eligibility_status TEXT NOT NULL DEFAULT 'eligible',
+  ADD COLUMN IF NOT EXISTS worker_tier TEXT NOT NULL DEFAULT 'medium',
+  ADD COLUMN IF NOT EXISTS active_days INT NOT NULL DEFAULT 0;
 
 -- Create claims table
 CREATE TABLE IF NOT EXISTS claims (

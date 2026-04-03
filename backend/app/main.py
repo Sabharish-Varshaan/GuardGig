@@ -20,7 +20,7 @@ from .routes.trigger import router as trigger_router
 from .routes.claim import router as claim_router
 from .routes.fraud import router as fraud_router
 from .supabase_client import get_admin_client
-from .trigger_utils import evaluate_rain_trigger, fetch_aqi, fetch_rain_mm
+from .trigger_utils import check_trigger, fetch_aqi, fetch_rain_mm
 
 settings = get_settings()
 
@@ -54,14 +54,17 @@ async def automated_claim_check():
 
         try:
             rain = await fetch_rain_mm(city)
-            _aqi = await fetch_aqi(city)
+            aqi = await fetch_aqi(city)
         except Exception:
             continue
 
-        trigger = evaluate_rain_trigger(rain)
+        trigger_data = check_trigger(rain, aqi)
 
-        if trigger == "none":
+        if not trigger_data.get("trigger"):
             continue
+
+        trigger_type = trigger_data["type"]
+        severity = trigger_data["severity"]
 
         try:
             enforce_waiting_period(policy, waiting_hours=24)
@@ -70,7 +73,7 @@ async def automated_claim_check():
             continue
 
         coverage_amount = float(policy.get("coverage_amount", 700.0))
-        payout = coverage_amount if trigger == "full" else round(coverage_amount * 0.30, 2)
+        payout = coverage_amount if severity == "full" else round(coverage_amount * 0.30, 2)
 
         claim_count = fetch_recent_claim_count(
             admin,
@@ -97,14 +100,14 @@ async def automated_claim_check():
         claim_data = {
             "user_id": user_id,
             "policy_id": policy["id"],
-            "trigger_type": "rain",
-            "trigger_value": rain,
+            "trigger_type": trigger_type,
+            "trigger_value": rain if trigger_type == "rain" else aqi,
             "payout_amount": payout,
             "status": "approved",
             "fraud_score": fraud_score,
             "activity_status": "active",
             "location_valid": True,
-            "rule_decision_reason": "approved_after_rule_checks",
+            "rule_decision_reason": f"approved_after_{trigger_type}_{severity}_checks",
             "updated_at": datetime.now(timezone.utc).isoformat(),
         }
 

@@ -10,6 +10,32 @@ from ..supabase_client import get_admin_client
 
 router = APIRouter(prefix="/api/policy", tags=["policy"])
 
+
+def _parse_datetime(value: str | None) -> datetime | None:
+    if not value:
+        return None
+
+    parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed
+
+
+def _derive_underwriting(onboarding_created_at: str | None) -> tuple[str, str, int]:
+    created_at = _parse_datetime(onboarding_created_at)
+    if created_at is None:
+        return "ineligible", "low", 0
+
+    active_days = max(0, (datetime.now(timezone.utc) - created_at).days)
+
+    if active_days < 5:
+        return "ineligible", "low", active_days
+
+    if 5 <= active_days < 7:
+        return "eligible", "low", active_days
+
+    return "eligible", "medium", active_days
+
 @router.post("/create", response_model=PolicyCreateResponse)
 def create_policy(current_user: dict = Depends(require_current_user)):
     settings = get_settings()
@@ -18,7 +44,7 @@ def create_policy(current_user: dict = Depends(require_current_user)):
     # Check if user has completed onboarding
     onboarding_response = (
         admin.table(settings.supabase_onboarding_table)
-        .select("weekly_income, risk_preference, onboarding_completed")
+        .select("weekly_income, risk_preference, onboarding_completed, created_at")
         .eq("user_id", current_user["id"])
         .limit(1)
         .execute()
@@ -26,20 +52,30 @@ def create_policy(current_user: dict = Depends(require_current_user)):
 
     onboarding_rows = onboarding_response.data or []
     if not onboarding_rows:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Onboarding not completed. Please complete onboarding first."
+        return PolicyCreateResponse(
+            status="ineligible",
+            policy=None,
+            message="Onboarding not completed. Please complete onboarding first.",
         )
 
     onboarding = onboarding_rows[0]
     if not onboarding.get("onboarding_completed", False):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Onboarding not completed. Please complete onboarding first."
+        return PolicyCreateResponse(
+            status="ineligible",
+            policy=None,
+            message="Onboarding not completed. Please complete onboarding first.",
         )
 
     weekly_income = onboarding["weekly_income"]
     risk_preference = onboarding.get("risk_preference", "Medium")
+    eligibility_status, worker_tier, active_days = _derive_underwriting(onboarding.get("created_at"))
+
+    if eligibility_status == "ineligible":
+        return PolicyCreateResponse(
+            status="ineligible",
+            policy=None,
+            message="User is ineligible for policy creation based on onboarding age.",
+        )
 
     # Check if policy already exists
     existing_policy = (
@@ -68,6 +104,9 @@ def create_policy(current_user: dict = Depends(require_current_user)):
         "coverage_amount": 700.00,
         "policy_start_date": now.date().isoformat(),
         "status": "active",
+        "eligibility_status": eligibility_status,
+        "worker_tier": worker_tier,
+        "active_days": active_days,
         "created_at": now.isoformat(),
         "updated_at": now.isoformat()
     }
@@ -93,6 +132,7 @@ def create_policy(current_user: dict = Depends(require_current_user)):
 
     policy = rows[0]
     return PolicyCreateResponse(
+        status="created",
         policy=PolicyResponse(**policy),
         message="Policy created successfully"
     )

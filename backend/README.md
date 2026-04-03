@@ -36,7 +36,7 @@ pip install -r requirements.txt
 cp .env.example .env
 ```
 
-5. Update `backend/.env` values:
+5. Update the project `.env` values:
 
 ```env
 APP_ENV=development
@@ -49,6 +49,7 @@ SUPABASE_ANON_KEY=<your-anon-key>
 SUPABASE_SERVICE_ROLE_KEY=<your-service-role-key>
 SUPABASE_USERS_TABLE=app_users
 SUPABASE_ONBOARDING_TABLE=onboarding_profiles
+OPENWEATHER_API_KEY=your_api_key_here
 
 JWT_SECRET=<use-a-long-random-secret>
 JWT_ALGORITHM=HS256
@@ -76,7 +77,7 @@ API base: `http://localhost:8000`
 The system includes automated claim processing that runs in the background:
 
 - **APScheduler Integration:** Automatically checks weather conditions every hour for all active policies
-- **Trigger Detection:** Creates claims when rain triggers are met (≥60mm partial, ≥100mm full)
+- **Trigger Detection:** Creates claims when rain or AQI triggers are met (rain ≥60mm partial, rain ≥100mm full, AQI ≥300 partial, AQI ≥400 full)
 - **Fraud Prevention:** Automatically runs fraud checks on new claims
 - **Status Updates:** Claims are approved or rejected based on fraud scores
 

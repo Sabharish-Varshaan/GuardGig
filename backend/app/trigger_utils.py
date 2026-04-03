@@ -1,55 +1,147 @@
+from __future__ import annotations
+
+import asyncio
+import os
 from typing import Literal
 
-import httpx
+import requests
+from dotenv import load_dotenv
+
+load_dotenv()
+
+_RAIN_URL = "https://api.open-meteo.com/v1/forecast"
+_GEOCODE_URL = "https://geocoding-api.open-meteo.com/v1/search"
+_AQI_URL = "http://api.openweathermap.org/data/2.5/air_pollution"
 
 
-async def _fetch_json(client: httpx.AsyncClient, url: str, params: dict | None = None) -> dict:
-    response = await client.get(url, params=params)
-    response.raise_for_status()
-    return response.json()
+def _safe_float(value: object, default: float = 0.0) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
 
 
-async def fetch_rain_mm(location: str, timeout: float = 8.0) -> float:
-    url = f"https://wttr.in/{location}?format=j1"
-    async with httpx.AsyncClient(timeout=timeout) as client:
-        data = await _fetch_json(client, url)
-    current = data.get("current_condition", [{}])[0]
-    return float(current.get("precipMM", 0.0))
+def _request_json(url: str, params: dict | None = None, timeout: float = 5.0) -> dict:
+    try:
+        response = requests.get(url, params=params, timeout=timeout)
+        response.raise_for_status()
+        payload = response.json()
+        return payload if isinstance(payload, dict) else {}
+    except Exception:
+        return {}
 
 
-async def fetch_aqi(location: str, timeout: float = 8.0) -> float | None:
-    geocode_url = "https://geocoding-api.open-meteo.com/v1/search"
-    air_url = "https://air-quality-api.open-meteo.com/v1/air-quality"
-
-    async with httpx.AsyncClient(timeout=timeout) as client:
-        geo_data = await _fetch_json(client, geocode_url, params={"name": location, "count": 1})
-        results = geo_data.get("results") or []
-        if not results:
+def resolve_coordinates(
+    location: str | None = None,
+    lat: float | None = None,
+    lon: float | None = None,
+    timeout: float = 5.0,
+) -> tuple[float, float] | None:
+    if lat is not None and lon is not None:
+        try:
+            return float(lat), float(lon)
+        except (TypeError, ValueError):
             return None
 
-        latitude = results[0].get("latitude")
-        longitude = results[0].get("longitude")
-        if latitude is None or longitude is None:
-            return None
+    if not location:
+        return None
 
-        aqi_data = await _fetch_json(
-            client,
-            air_url,
-            params={
-                "latitude": latitude,
-                "longitude": longitude,
-                "hourly": "us_aqi",
-                "timezone": "UTC",
-            },
-        )
+    data = _request_json(
+        _GEOCODE_URL,
+        params={"name": location, "count": 1, "language": "en", "format": "json"},
+        timeout=timeout,
+    )
+    results = data.get("results") or []
+    if not results:
+        return None
 
-    hourly = aqi_data.get("hourly", {})
-    aqi_values = hourly.get("us_aqi") or []
-    for value in reversed(aqi_values):
-        if value is not None:
-            return float(value)
+    first = results[0]
+    try:
+        return float(first.get("latitude")), float(first.get("longitude"))
+    except (TypeError, ValueError):
+        return None
 
-    return None
+
+def get_rain(lat: float, lon: float) -> float:
+    url = f"{_RAIN_URL}?latitude={lat}&longitude={lon}&hourly=rain"
+
+    try:
+        res = requests.get(url, timeout=5)
+        res.raise_for_status()
+        data = res.json()
+        rain = data["hourly"]["rain"][0]
+    except Exception:
+        rain = 0
+
+    return _safe_float(rain, 0.0)
+
+
+def get_aqi(lat: float, lon: float) -> float:
+    api_key = os.getenv("OPENWEATHER_API_KEY")
+    if not api_key:
+        return 0.0
+
+    url = f"{_AQI_URL}?lat={lat}&lon={lon}&appid={api_key}"
+
+    try:
+        res = requests.get(url, timeout=5)
+        res.raise_for_status()
+        data = res.json()
+        aqi_index = int(data["list"][0]["main"]["aqi"])
+    except Exception:
+        return 0.0
+
+    mapping = {
+        1: 50,
+        2: 100,
+        3: 150,
+        4: 300,
+        5: 400,
+    }
+
+    return float(mapping.get(aqi_index, 0))
+
+
+def check_trigger(rain: float, aqi: float) -> dict:
+    if rain >= 100:
+        return {"trigger": True, "type": "rain", "severity": "full"}
+
+    if rain >= 60:
+        return {"trigger": True, "type": "rain", "severity": "partial"}
+
+    if aqi >= 400:
+        return {"trigger": True, "type": "aqi", "severity": "full"}
+
+    if aqi >= 300:
+        return {"trigger": True, "type": "aqi", "severity": "partial"}
+
+    return {"trigger": False}
+
+
+async def fetch_rain_mm(
+    location: str | None = None,
+    lat: float | None = None,
+    lon: float | None = None,
+    timeout: float = 5.0,
+) -> float:
+    coordinates = resolve_coordinates(location=location, lat=lat, lon=lon, timeout=timeout)
+    if coordinates is None:
+        return 0.0
+
+    return await asyncio.to_thread(get_rain, coordinates[0], coordinates[1])
+
+
+async def fetch_aqi(
+    location: str | None = None,
+    lat: float | None = None,
+    lon: float | None = None,
+    timeout: float = 5.0,
+) -> float:
+    coordinates = resolve_coordinates(location=location, lat=lat, lon=lon, timeout=timeout)
+    if coordinates is None:
+        return 0.0
+
+    return await asyncio.to_thread(get_aqi, coordinates[0], coordinates[1])
 
 
 def evaluate_rain_trigger(rain_mm: float) -> Literal["none", "partial", "full"]:
