@@ -8,6 +8,7 @@ import {
   Text,
   View
 } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 
@@ -36,6 +37,7 @@ function validatePhone(value) {
 function LoginScreen({ navigation }) {
   const {
     login,
+    updateProfile,
     authLoading,
     authError,
     setAuthError,
@@ -82,12 +84,43 @@ function LoginScreen({ navigation }) {
       return;
     }
 
-    if (!result.onboardingCompleted) {
-      navigation.navigate("Onboarding", {
-        fullName: pendingOnboardingUser?.fullName || "",
-        phone: phone.trim()
-      });
+    if (!result.accessToken) {
+      setAuthError("Login succeeded but token was missing.");
+      return;
     }
+
+    await AsyncStorage.setItem("token", result.accessToken);
+    updateProfile({ token: result.accessToken });
+    console.log("LOGIN SUCCESS, TOKEN SET");
+
+    if (!result.onboardingCompleted) {
+      navigation.reset({
+        index: 0,
+        routes: [
+          {
+            name: "Onboarding",
+            params: {
+              fullName: pendingOnboardingUser?.fullName || "",
+              phone: phone.trim()
+            }
+          }
+        ]
+      });
+      return;
+    }
+
+    navigation.getParent()?.reset({
+      index: 0,
+      routes: [
+        {
+          name: "MainTabs",
+          state: {
+            index: 0,
+            routes: [{ name: "Home" }]
+          }
+        }
+      ]
+    });
   };
 
   return (

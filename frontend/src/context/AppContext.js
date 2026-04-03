@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import * as Location from "expo-location";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as SecureStore from "expo-secure-store";
 
 import {
@@ -28,11 +29,13 @@ const WORKFLOW_STATES = {
 };
 
 const STORAGE_KEYS = {
+  token: "token",
   accessToken: "guardgig.accessToken",
   userId: "guardgig.userId"
 };
 
 const initialUser = {
+  token: "",
   fullName: "",
   phone: "",
   age: "",
@@ -179,6 +182,30 @@ const toErrorMessage = (error, fallback) => {
   return fallback;
 };
 
+const toBooleanFlag = (value) => {
+  if (typeof value === "boolean") {
+    return value;
+  }
+
+  if (typeof value === "number") {
+    return value === 1;
+  }
+
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+
+    if (normalized === "true" || normalized === "1" || normalized === "yes") {
+      return true;
+    }
+
+    if (normalized === "false" || normalized === "0" || normalized === "no" || normalized === "") {
+      return false;
+    }
+  }
+
+  return Boolean(value);
+};
+
 export function AppProvider({ children }) {
   const [authInitializing, setAuthInitializing] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -224,16 +251,19 @@ export function AppProvider({ children }) {
     const userId = session?.user_id || "";
 
     if (!accessToken || !userId) {
+      await AsyncStorage.removeItem(STORAGE_KEYS.token);
       await SecureStore.deleteItemAsync(STORAGE_KEYS.accessToken);
       await SecureStore.deleteItemAsync(STORAGE_KEYS.userId);
       return;
     }
 
+    await AsyncStorage.setItem(STORAGE_KEYS.token, accessToken);
     await SecureStore.setItemAsync(STORAGE_KEYS.accessToken, accessToken);
     await SecureStore.setItemAsync(STORAGE_KEYS.userId, userId);
   }, []);
 
   const clearPersistedSession = useCallback(async () => {
+    await AsyncStorage.removeItem(STORAGE_KEYS.token);
     await SecureStore.deleteItemAsync(STORAGE_KEYS.accessToken);
     await SecureStore.deleteItemAsync(STORAGE_KEYS.userId);
   }, []);
@@ -458,13 +488,17 @@ export function AppProvider({ children }) {
       setAuthInitializing(true);
 
       try {
-        const [accessToken, userId] = await Promise.all([
+        const [secureAccessToken, secureUserId, asyncToken] = await Promise.all([
           SecureStore.getItemAsync(STORAGE_KEYS.accessToken),
-          SecureStore.getItemAsync(STORAGE_KEYS.userId)
+          SecureStore.getItemAsync(STORAGE_KEYS.userId),
+          AsyncStorage.getItem(STORAGE_KEYS.token)
         ]);
+        const accessToken = secureAccessToken || asyncToken || "";
+        const userId = secureUserId || "";
 
-        if (!accessToken || !userId) {
+        if (!accessToken) {
           if (mounted) {
+            console.log("Current user:", null);
             setAuthInitializing(false);
           }
           return;
@@ -473,10 +507,11 @@ export function AppProvider({ children }) {
         if (mounted) {
           setAuthToken(accessToken);
           setAuthUserId(userId);
+          setUser((prev) => ({ ...prev, token: accessToken }));
         }
 
         const onboardingData = await getOnboardingProfile(accessToken);
-        const hasOnboarded = !!onboardingData?.onboarding_completed;
+        const hasOnboarded = toBooleanFlag(onboardingData?.onboarding_completed);
 
         if (!mounted) {
           return;
@@ -486,6 +521,7 @@ export function AppProvider({ children }) {
           hydrateFromProfile(onboardingData.profile || {});
           setPendingOnboardingUser(null);
           setIsAuthenticated(true);
+          console.log("Current user:", { token: "present", onboardingCompleted: true });
           await Promise.allSettled([
             refreshPolicy(accessToken),
             refreshClaims(accessToken)
@@ -496,6 +532,7 @@ export function AppProvider({ children }) {
             fullName: initialUser.fullName
           });
           setIsAuthenticated(false);
+          console.log("Current user:", { token: "present", onboardingCompleted: false });
         }
       } catch (_error) {
         if (!mounted) {
@@ -505,6 +542,7 @@ export function AppProvider({ children }) {
         clearAuthState();
         setIsAuthenticated(false);
         await clearPersistedSession();
+        console.log("Current user:", null);
       } finally {
         if (mounted) {
           setAuthInitializing(false);
@@ -555,13 +593,15 @@ export function AppProvider({ children }) {
 
     try {
       const session = await loginUser({ phone, password });
+      const hasCompletedOnboarding = toBooleanFlag(session?.onboarding_completed);
 
       applyAuthSession(session);
       await persistSession(session);
 
-      setUser((prev) => ({ ...prev, phone }));
+      setUser((prev) => ({ ...prev, phone, token: session.access_token || "" }));
+      console.log("Current user:", { token: session.access_token ? "present" : "missing", phone });
 
-      if (session.onboarding_completed) {
+      if (hasCompletedOnboarding) {
         const onboardingData = await getOnboardingProfile(session.access_token);
         if (onboardingData?.profile) {
           hydrateFromProfile(onboardingData.profile);
@@ -576,12 +616,16 @@ export function AppProvider({ children }) {
         setPendingOnboardingUser(null);
       } else {
         setIsAuthenticated(false);
-        setPendingOnboardingUser({ phone, fullName: user.fullName });
+        setPendingOnboardingUser((prev) => ({
+          phone,
+          fullName: prev?.fullName || user.fullName || ""
+        }));
       }
 
       return {
         success: true,
-        onboardingCompleted: !!session.onboarding_completed
+        accessToken: session.access_token || "",
+        onboardingCompleted: hasCompletedOnboarding
       };
     } catch (error) {
       const message = toErrorMessage(error, "Login failed");
@@ -612,6 +656,7 @@ export function AppProvider({ children }) {
 
       setPendingOnboardingUser(null);
       setIsAuthenticated(true);
+      console.log("Current user:", { token: authToken ? "present" : "missing", onboardingCompleted: true });
       return { success: true };
     } catch (error) {
       const message = toErrorMessage(error, "Onboarding submit failed");
@@ -639,6 +684,7 @@ export function AppProvider({ children }) {
     setWorkflowState(WORKFLOW_STATES.idle);
     setWorkflowMessage("No active claim check");
     setIsAuthenticated(false);
+    console.log("Current user:", null);
   };
 
   const startCoverageCheck = useCallback(async () => {

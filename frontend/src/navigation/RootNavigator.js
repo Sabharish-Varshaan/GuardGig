@@ -1,5 +1,9 @@
-import React, { useEffect, useState } from "react";
-import { NavigationContainer, DefaultTheme } from "@react-navigation/native";
+import React, { useEffect, useRef, useState } from "react";
+import {
+  NavigationContainer,
+  DefaultTheme,
+  useNavigationContainerRef
+} from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { StatusBar } from "expo-status-bar";
 
@@ -27,6 +31,12 @@ const navigationTheme = {
 export default function RootNavigator() {
   const { isAuthenticated, authInitializing } = useAppContext();
   const [booting, setBooting] = useState(true);
+  const navigationRef = useNavigationContainerRef();
+  const routeNameRef = useRef("");
+
+  useEffect(() => {
+    console.log("Current user:", isAuthenticated ? "authenticated" : "unauthenticated");
+  }, [isAuthenticated]);
 
   useEffect(() => {
     if (authInitializing) {
@@ -47,7 +57,21 @@ export default function RootNavigator() {
   }
 
   return (
-    <NavigationContainer theme={navigationTheme}>
+    <NavigationContainer
+      ref={navigationRef}
+      theme={navigationTheme}
+      onReady={() => {
+        routeNameRef.current = navigationRef.getCurrentRoute()?.name || "unknown";
+        console.log("Navigation state:", routeNameRef.current);
+      }}
+      onStateChange={() => {
+        const routeName = navigationRef.getCurrentRoute()?.name || "unknown";
+        if (routeNameRef.current !== routeName) {
+          routeNameRef.current = routeName;
+          console.log("Navigation state:", routeName);
+        }
+      }}
+    >
       <StatusBar style="light" />
       <RootStack.Navigator
         screenOptions={{
