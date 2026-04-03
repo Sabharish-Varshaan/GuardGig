@@ -1,16 +1,65 @@
 # GuardGig Frontend
 
-Expo React Native app for GuardGig user auth, onboarding, dashboard, risk, policy, and claims flows.
+Expo React Native app for the GuardGig parametric insurance experience.
 
-## 1. Prerequisites
+This frontend is backend-driven: risk, trigger, claim, policy, and payout values are sourced from API responses, not calculated in UI.
+
+## 1. Product Logic (What the App Is Doing)
+
+### 1.1 High-Level User Flow
+
+1. Login/Register
+2. Onboarding profile submission
+3. Policy creation and sync
+4. Dashboard requests location and checks live trigger conditions
+5. User taps `Check Coverage`
+6. Frontend calls trigger API and auto-starts claim creation if trigger exists
+7. Claim status appears in Claims and Payout screens
+
+### 1.2 Backend-Driven Data Model in UI
+
+The app context stores normalized backend data for:
+
+- `policy` (`weekly_income`, `premium`, `coverage_amount`, status, tier, eligibility)
+- `risk` (`rain`, `aqi`, `severity`, `trigger type`, text status)
+- `claimsHistory` (`trigger_type`, status, payout amount, timestamps)
+- `workflowState` (automation step progress)
+
+No premium or payout computation is performed in the frontend.
+
+### 1.3 Real-Time Trigger + Auto Claim Flow
+
+Dashboard logic:
+
+1. Ask location permission via `expo-location`
+2. Fetch `lat/lon`
+3. `POST /api/trigger/check` with coordinates
+4. Display rain, AQI, and risk status from backend response
+
+When `Check Coverage` is tapped:
+
+1. Trigger check runs again
+2. If `trigger.trigger === true`, call `POST /api/claim/create`
+3. Claim request includes trigger context (`trigger_type`, `severity`) and coordinates
+4. UI workflow states progress through checking -> validating -> processing -> approved/failed
+
+### 1.4 Screen Responsibilities
+
+- Dashboard: live risk and automated workflow entry point
+- Risk: current risk snapshot from backend values
+- Policy: backend policy details (income, premium, coverage, status, tier)
+- Claims: backend claim history and statuses
+- Payout: backend-linked payout amount and reason from latest claim
+
+## 2. Prerequisites
 
 - Node.js 18+
 - npm
-- Backend running on port 8000
+- Backend running at a reachable URL
 
-## 2. Install and Run (Step by Step)
+## 3. Setup (Step by Step)
 
-1. Open terminal in frontend folder:
+1. Open terminal in frontend:
 
 ```bash
 cd /Users/sabharishvarshaans/Documents/GuardGig/frontend
@@ -22,16 +71,15 @@ cd /Users/sabharishvarshaans/Documents/GuardGig/frontend
 npm install
 ```
 
-3. Create `frontend/.env`:
+3. Ensure location dependency exists (already in this project):
 
 ```bash
-touch .env
+CI=1 npx expo install expo-location
 ```
 
-4. Put this in `frontend/.env`:
+4. Create/update `frontend/.env`:
 
 ```env
-# Use your backend URL reachable from device/simulator
 EXPO_PUBLIC_API_BASE_URL=http://127.0.0.1:8000
 ```
 
@@ -41,60 +89,19 @@ EXPO_PUBLIC_API_BASE_URL=http://127.0.0.1:8000
 npm run start
 ```
 
-For device connection issues, use tunnel:
+If needed:
 
 ```bash
 npm run start -- --tunnel --clear
 ```
 
-## 3. API URL Guidance
+## 4. API URL Configuration
 
-Choose `EXPO_PUBLIC_API_BASE_URL` based on where the app runs:
+Use environment value based on runtime target:
 
-- iOS Simulator (same machine): `http://127.0.0.1:8000`
-- Android Emulator (same machine): `http://10.0.2.2:8000`
-- Physical phone (same Wi-Fi): `http://<your-mac-lan-ip>:8000`
-
-Example for physical device:
-
-```env
-EXPO_PUBLIC_API_BASE_URL=http://192.168.1.42:8000
-```
-
-If this variable is empty, app fallback logic tries:
-
-- Android: `http://10.0.2.2:8000`
-- iOS/Web: `http://127.0.0.1:8000`
-
-## 4. How to Get IP for Physical Device (Mac and Windows)
-
-When testing on a physical phone, your phone must call backend using your computer's LAN IP.
-
-Mac (Wi-Fi):
-
-```bash
-ipconfig getifaddr en0
-```
-
-If no output, try:
-
-```bash
-ipconfig getifaddr en1
-```
-
-Windows (PowerShell):
-
-```powershell
-ipconfig
-```
-
-Then find `IPv4 Address` under your active adapter (`Wi-Fi` or `Ethernet`).
-
-Set `frontend/.env` with that IP:
-
-```env
-EXPO_PUBLIC_API_BASE_URL=http://<YOUR_COMPUTER_LAN_IP>:8000
-```
+- iOS simulator: `http://127.0.0.1:8000`
+- Android emulator: `http://10.0.2.2:8000`
+- Physical device (same Wi-Fi): `http://<your-lan-ip>:8000`
 
 Example:
 
@@ -102,17 +109,21 @@ Example:
 EXPO_PUBLIC_API_BASE_URL=http://192.168.1.42:8000
 ```
 
-Important:
+Fallback behavior if env is missing:
 
-- Phone and computer must be on the same Wi-Fi.
-- Backend must be running on port `8000`.
-- After changing `.env`, restart Expo with cache clear:
+- Android fallback: `http://10.0.2.2:8000`
+- iOS/Web fallback: `http://127.0.0.1:8000`
 
-```bash
-npm run start -- --clear
-```
+## 5. Setup Verification Checklist
 
-## 5. Useful Commands
+1. Backend `/api/health` responds
+2. App can register/login
+3. Dashboard prompts for location permission
+4. Dashboard shows rain/AQI values
+5. `Check Coverage` progresses through workflow states
+6. Claims screen shows real claim entries
+
+## 6. Useful Commands
 
 ```bash
 npm run start
@@ -121,8 +132,27 @@ npm run ios
 npm run web
 ```
 
-## 6. Common Troubleshooting
+## 7. Troubleshooting
 
-- `Network request failed` on phone: use LAN IP in `.env` instead of `127.0.0.1`.
-- App points to old API URL: stop Expo and restart with `--clear`.
-- Auth fails: ensure backend is running and migrations were applied in Supabase.
+- `Network request failed`
+	- Verify `EXPO_PUBLIC_API_BASE_URL`
+	- For phone testing, do not use `127.0.0.1`
+	- Restart Expo with cache clear
+
+- Location not available
+	- Ensure app location permission is granted
+	- Retry Dashboard load
+
+- No live risk values
+	- Confirm backend trigger route is running
+	- Confirm backend has weather API key configured
+
+- Claim not created
+	- Trigger may be false (`No disruption detected`)
+	- Backend waiting period/exclusion rules may block claim creation
+
+## 8. Key Implementation Notes
+
+- Frontend intentionally avoids financial/trigger calculations.
+- UI status text is designed to communicate automation steps in real time.
+- Data is synchronized through app context and API service modules.

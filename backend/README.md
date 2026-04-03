@@ -1,15 +1,119 @@
 # GuardGig Backend
 
-FastAPI service for custom phone/password auth (JWT) and onboarding profile storage in Supabase Postgres.
+FastAPI backend for GuardGig's parametric insurance workflow.
 
-## 1. Prerequisites
+This service handles:
+
+- custom auth (phone/password + JWT)
+- onboarding profile persistence
+- policy creation with underwriting
+- real-time trigger checks using weather and AQI APIs
+- automated and manual claim creation
+- fraud-rule based exclusions
+
+## 1. Architecture and Logic (What It Does)
+
+### 1.1 Core Business Flow
+
+1. User registers and logs in via custom auth routes.
+2. User submits onboarding profile.
+3. Policy is created only if underwriting conditions pass.
+4. Trigger engine evaluates live rain + AQI at coordinates.
+5. Claim creation happens when trigger conditions are met.
+6. Fraud/exclusion rules gate claim approval.
+7. Payout amount is produced from trigger severity.
+
+### 1.2 Trigger Engine Logic
+
+Trigger checks use two external APIs:
+
+- Open-Meteo for rain (`hourly=rain`)
+- OpenWeather Air Pollution API for AQI (mapped to a numeric scale)
+
+Severity rules:
+
+- rain >= 100 -> full
+- rain >= 60 -> partial
+- aqi >= 400 -> full
+- aqi >= 300 -> partial
+- else -> no trigger
+
+Returned trigger response shape from `/api/trigger/check`:
+
+```json
+{
+   "rain": 0,
+   "aqi": 0,
+   "trigger": {
+      "trigger": false,
+      "type": null,
+      "severity": null
+   }
+}
+```
+
+### 1.3 Claim Logic
+
+`/api/claim/create` performs:
+
+1. Active policy lookup
+2. Waiting period enforcement
+3. Max one claim/day enforcement
+4. Fresh trigger evaluation (backend-side)
+5. Exclusion checks (activity/location/fraud threshold)
+6. Payout computation:
+    - full -> 100% coverage amount
+    - partial -> 30% coverage amount
+7. Claim insertion with status and rule reason
+
+Important: trigger type and severity are determined by backend trigger evaluation, not trusted from frontend input.
+
+### 1.4 Underwriting Logic
+
+At policy creation, `active_days` is derived from onboarding `created_at`:
+
+- `active_days < 5` -> ineligible
+- `5 <= active_days < 7` -> worker_tier = low
+- `active_days >= 7` -> worker_tier = medium
+
+Policy row stores:
+
+- `eligibility_status`
+- `worker_tier`
+- `active_days`
+
+### 1.5 Automated Claims
+
+APScheduler runs hourly.
+
+- Scans active policies
+- Evaluates trigger conditions
+- Applies exclusions/rules
+- Creates approved claims when conditions pass
+
+## 2. API Surface (High Level)
+
+- `POST /api/auth/register`
+- `POST /api/auth/login`
+- `GET /api/onboarding/me`
+- `POST /api/onboarding`
+- `POST /api/policy/create`
+- `GET /api/policy/me`
+- `POST /api/trigger/check`
+- `POST /api/claim/create`
+- `GET /api/claims/me`
+- `POST /api/fraud/check`
+- `GET /api/health`
+
+## 3. Prerequisites
 
 - Python 3.10+
-- A Supabase project
+- Supabase project
+- OpenWeather API key
 
-## 2. Install and Run (Step by Step)
+## 4. Setup (Step by Step)
 
-1. Open terminal in backend folder:
+1. Open terminal in backend:
 
 ```bash
 cd /Users/sabharishvarshaans/Documents/GuardGig/backend
@@ -28,15 +132,13 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-**Note:** This installs all required libraries including APScheduler for automated claim processing.
-
 4. Create env file:
 
 ```bash
 cp .env.example .env
 ```
 
-5. Update the project `.env` values:
+5. Update `backend/.env`:
 
 ```env
 APP_ENV=development
@@ -49,43 +151,38 @@ SUPABASE_ANON_KEY=<your-anon-key>
 SUPABASE_SERVICE_ROLE_KEY=<your-service-role-key>
 SUPABASE_USERS_TABLE=app_users
 SUPABASE_ONBOARDING_TABLE=onboarding_profiles
+SUPABASE_POLICIES_TABLE=policies
+SUPABASE_CLAIMS_TABLE=claims
+
 OPENWEATHER_API_KEY=your_api_key_here
 
 JWT_SECRET=<use-a-long-random-secret>
 JWT_ALGORITHM=HS256
 ACCESS_TOKEN_EXP_MINUTES=60
 REFRESH_TOKEN_EXP_DAYS=7
+CLAIM_FRAUD_THRESHOLD=0.7
 ```
 
-6. Run SQL migrations in Supabase SQL Editor:
+6. Run SQL migrations in Supabase SQL Editor in this order:
 
-- First run SQL from `backend/sql/001_create_onboarding_profiles.sql`
-- Then run SQL from `backend/sql/002_create_app_users_and_link_onboarding.sql`
+- `backend/sql/001_create_onboarding_profiles.sql`
+- `backend/sql/002_create_app_users_and_link_onboarding.sql`
+- `backend/sql/003_create_policies_and_claims.sql`
+- `backend/sql/004_add_claim_rule_support.sql`
 
-Important: paste SQL content into Supabase SQL Editor. Do not paste file path names as SQL.
+Important: paste SQL file contents into Supabase SQL Editor, not file path strings.
 
-7. Start backend server:
+7. Start backend:
 
 ```bash
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-API base: `http://localhost:8000`
+Base URL: `http://localhost:8000`
 
-## 4. Automated Claim Processing
+## 5. Quick Verification
 
-The system includes automated claim processing that runs in the background:
-
-- **APScheduler Integration:** Automatically checks weather conditions every hour for all active policies
-- **Trigger Detection:** Creates claims when rain or AQI triggers are met (rain ≥60mm partial, rain ≥100mm full, AQI ≥300 partial, AQI ≥400 full)
-- **Fraud Prevention:** Automatically runs fraud checks on new claims
-- **Status Updates:** Claims are approved or rejected based on fraud scores
-
-The automation starts automatically when the server runs. No additional setup required.
-
-## 5. Verify Backend Quickly
-
-Health check:
+Health:
 
 ```bash
 curl http://localhost:8000/api/health
@@ -114,7 +211,26 @@ curl -X POST http://localhost:8000/api/auth/login \
    }'
 ```
 
-## 4. Notes
+Trigger check by coordinates:
 
-- Auth is custom and free (no Twilio required).
-- If frontend cannot call backend, check `CORS_ORIGINS` and restart server.
+```bash
+curl -X POST http://localhost:8000/api/trigger/check \
+   -H "Content-Type: application/json" \
+   -d '{
+      "lat": 13.0827,
+      "lon": 80.2707
+   }'
+```
+
+## 6. Failure Handling Behavior
+
+- External API failure -> safe fallback values (`rain=0`, `aqi=0`, no trigger)
+- Missing/invalid location -> no trigger result, server stays stable
+- Rule failures (waiting period, exclusions) -> structured 4xx messages
+- Auth failures -> 401/403 with explicit detail
+
+## 7. Notes
+
+- Auth is custom backend JWT auth, no Twilio.
+- Keep frontend `EXPO_PUBLIC_API_BASE_URL` aligned with this backend host.
+- Restart server after changing env variables.
