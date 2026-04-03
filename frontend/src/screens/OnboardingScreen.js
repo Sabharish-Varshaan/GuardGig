@@ -47,14 +47,14 @@ function OnboardingScreen({ navigation, route }) {
   const [showCityDropdown, setShowCityDropdown] = useState(false);
   const [errors, setErrors] = useState({});
   const [form, setForm] = useState({
-    fullName: route.params?.fullName || pendingOnboardingUser?.fullName || "Ramesh",
-    age: "26",
-    city: "Chennai",
-    platform: "Blinkit",
-    vehicleType: "Bike",
-    workHours: "10",
-    dailyIncome: "1000",
-    weeklyIncome: "7000",
+    fullName: route.params?.fullName || pendingOnboardingUser?.fullName || "",
+    age: "",
+    city: "",
+    platform: "",
+    vehicleType: "",
+    workHours: "",
+    dailyIncome: "",
+    weeklyIncome: "",
     riskPreference: "Medium"
   });
 

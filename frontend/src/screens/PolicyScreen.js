@@ -1,5 +1,6 @@
 import React from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { useFocusEffect } from "@react-navigation/native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import Card from "../components/Card";
@@ -22,37 +23,41 @@ function Row({ label, value }) {
 }
 
 export default function PolicyScreen() {
-  const { policy } = useAppContext();
+  const { policy, policyLoading, dataError, refreshPolicy } = useAppContext();
+
+  useFocusEffect(
+    React.useCallback(() => {
+      refreshPolicy().catch(() => {});
+      return undefined;
+    }, [refreshPolicy])
+  );
+
+  const policyStatus = policy?.status === "active" ? "Active" : "Inactive";
 
   return (
     <SafeAreaView style={styles.screen}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <Header
-          subtitle="Your weekly premium and payout thresholds are generated from risk behavior"
+          subtitle="Your policy is synced from backend"
           title="Policy"
-          rightElement={<StatusBadge label={policy.planName} variant="success" />}
+          rightElement={<StatusBadge label={policyStatus} variant={policyStatus === "Active" ? "success" : "warning"} />}
         />
 
         <Card style={styles.cardGap}>
-          <Text style={styles.cardTitle}>Premium Breakdown</Text>
-          <Row label="Base" value={formatRupee(policy.base)} />
-          <Row label="Risk" value={formatRupee(policy.riskAdjustment)} />
-          <Row label="Event Factor" value={formatRupee(policy.eventFactor)} />
-          <View style={styles.separator} />
-          <Row label="Total Premium" value={`${formatRupee(policy.premium)}/week`} />
+          <Text style={styles.cardTitle}>Policy Details</Text>
+          <Row label="Weekly Income" value={formatRupee(policy?.weeklyIncome || 0)} />
+          <Row label="Premium" value={`${formatRupee(policy?.premium || 0)}/week`} />
+          <Row label="Coverage" value="₹700/day" />
+          <Row label="Status" value={policyStatus} />
         </Card>
 
         <Card gradient style={styles.coverageCard}>
-          <Text style={styles.coverageLabel}>Weekly Coverage</Text>
-          <Text style={styles.coverageValue}>{formatRupee(policy.weeklyCoverage)}</Text>
-          <Text style={styles.coverageSub}>{`Daily Payout: ${formatRupee(policy.dailyPayout)}`}</Text>
+          <Text style={styles.coverageLabel}>Policy Start</Text>
+          <Text style={styles.coverageValue}>{policy?.policyStartDate || "--"}</Text>
+          <Text style={styles.coverageSub}>{policyLoading ? "Refreshing policy..." : "Live backend policy"}</Text>
         </Card>
 
-        <Card>
-          <Text style={styles.cardTitle}>Renewal Information</Text>
-          <Row label="Next Renewal" value={policy.renewalIn} />
-          <Row label="Coverage Left" value={formatRupee(policy.coverageLeft)} />
-        </Card>
+        {!!dataError && <Text style={styles.errorText}>{dataError}</Text>}
       </ScrollView>
     </SafeAreaView>
   );
@@ -93,11 +98,6 @@ const styles = StyleSheet.create({
     fontFamily: "Rajdhani_700Bold",
     fontSize: 17
   },
-  separator: {
-    backgroundColor: appTheme.colors.border,
-    height: 1,
-    marginVertical: appTheme.spacing.xs
-  },
   coverageCard: {
     marginBottom: appTheme.spacing.md
   },
@@ -110,12 +110,17 @@ const styles = StyleSheet.create({
   coverageValue: {
     color: appTheme.colors.accentPrimary,
     fontFamily: "Orbitron_700Bold",
-    fontSize: 40,
+    fontSize: 24,
     marginTop: appTheme.spacing.xs
   },
   coverageSub: {
     color: appTheme.colors.textPrimary,
     fontFamily: "Rajdhani_600SemiBold",
     fontSize: 15
+  },
+  errorText: {
+    color: appTheme.colors.danger,
+    fontFamily: "Rajdhani_600SemiBold",
+    fontSize: 14
   }
 });

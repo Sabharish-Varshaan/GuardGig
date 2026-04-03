@@ -64,13 +64,14 @@ export default function NeonButton({
 const styles = StyleSheet.create({
   button: {
     borderRadius: appTheme.radius.input,
+    width: "100%",
     minHeight: 54,
     overflow: "hidden"
   },
   gradientButton: {
     alignItems: "center",
     justifyContent: "center",
-    minHeight: 54,
+    minHeight: 56,
     paddingHorizontal: appTheme.spacing.sm
   },
   secondaryButton: {
@@ -79,7 +80,7 @@ const styles = StyleSheet.create({
     borderColor: appTheme.colors.borderStrong,
     borderWidth: 1,
     justifyContent: "center",
-    minHeight: 54,
+    minHeight: 48,
     paddingHorizontal: appTheme.spacing.sm
   },
   ghostButton: {
@@ -94,7 +95,7 @@ const styles = StyleSheet.create({
   label: {
     color: appTheme.colors.bgPrimary,
     fontFamily: "Rajdhani_700Bold",
-    fontSize: 17,
+    fontSize: 18,
     letterSpacing: 0.4
   },
   secondaryLabel: {
@@ -102,7 +103,7 @@ const styles = StyleSheet.create({
   },
   ghostLabel: {
     color: appTheme.colors.accentPrimary,
-    fontSize: 15
+    fontSize: 14
   },
   pressed: {
     opacity: 0.92,

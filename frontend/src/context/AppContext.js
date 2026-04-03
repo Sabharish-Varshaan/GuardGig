@@ -1,21 +1,19 @@
-import React, {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useRef,
-  useState
-} from "react";
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import * as SecureStore from "expo-secure-store";
 
-import { mockData } from "../styles/mockData";
 import {
   getOnboardingProfile,
   loginUser,
   registerUser,
   submitOnboardingProfile
 } from "../services/authApi";
+import {
+  checkTrigger,
+  createClaim,
+  createPolicy,
+  getMyClaims,
+  getMyPolicy
+} from "../services/insuranceApi";
 
 const AppContext = createContext(null);
 
@@ -28,113 +26,32 @@ const WORKFLOW_STATES = {
   flagged: "flagged"
 };
 
-const PAYOUT_AMOUNT = 500;
-const STEP_DELAY_MS = 1500;
-const TRIGGER_RAIN_MM = 60;
-const TRIGGER_AQI = 300;
-const SAFE_MOVEMENT_SCORE = 0.7;
-let logSequence = 0;
 const STORAGE_KEYS = {
   accessToken: "guardgig.accessToken",
   userId: "guardgig.userId"
 };
 
-const evaluateRisk = (rain, aqi) => {
-  if (rain >= TRIGGER_RAIN_MM || aqi >= TRIGGER_AQI) {
-    return {
-      isHighRisk: true,
-      level: "High",
-      severity: "high",
-      status: "High Risk Detected in Your Area"
-    };
-  }
-
-  if (rain >= 45 || aqi >= 200) {
-    return {
-      isHighRisk: false,
-      level: "Medium",
-      severity: "moderate",
-      status: "Moderate Risk in Your Area"
-    };
-  }
-
-  return {
-    isHighRisk: false,
-    level: "Low",
-    severity: "normal",
-    status: "Normal Conditions"
-  };
-};
-
-const formatClockTime = () => {
-  return new Date().toLocaleTimeString("en-IN", {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false
-  });
-};
-
-const createLogEntry = (message, level = "info") => {
-  return {
-    id: `log-${Date.now()}-${++logSequence}`,
-    level,
-    message,
-    time: formatClockTime()
-  };
-};
-
-const baseRiskMeta = evaluateRisk(mockData.risk.rain, mockData.risk.aqi);
-
-const defaultUser = {
-  fullName: mockData.user.name,
-  phone: "9876543210",
-  age: "26",
-  city: "Chennai",
-  platform: "Blinkit",
-  vehicleType: "Bike",
-  workHours: "10",
-  dailyIncome: "1000",
-  weeklyIncome: String(mockData.finance.weeklyIncome),
+const initialUser = {
+  fullName: "",
+  phone: "",
+  age: "",
+  city: "",
+  platform: "",
+  vehicleType: "",
+  workHours: "",
+  dailyIncome: "",
+  weeklyIncome: "",
   riskPreference: "Medium"
 };
 
-const defaultPolicy = {
-  planName: "Standard Shield",
-  premium: mockData.finance.premium,
-  base: mockData.premiumBreakdown.base,
-  riskAdjustment: mockData.premiumBreakdown.riskAdjustment,
-  eventFactor: mockData.premiumBreakdown.eventFactor,
-  coverageLeft: mockData.coverage.coverageLeft,
-  weeklyCoverage: mockData.coverage.maxCoverage,
-  dailyPayout: mockData.coverage.dailyCoverage,
-  renewalIn: "3 days"
-};
-
-const defaultRisk = {
-  aqi: mockData.risk.aqi,
-  isHighRisk: baseRiskMeta.isHighRisk,
-  level: baseRiskMeta.level,
-  rain: mockData.risk.rain,
-  severity: baseRiskMeta.severity,
-  status: baseRiskMeta.status,
-  temp: mockData.risk.temp
-};
-
-const buildInitialLogs = () => {
-  return [
-    createLogEntry("High rainfall detected", "warning"),
-    createLogEntry("High AQI detected", "warning"),
-    createLogEntry("Monitoring live conditions", "info")
-  ];
-};
-
-const buildTimestamp = () => {
-  return new Date().toLocaleString("en-IN", {
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    month: "short"
-  });
+const initialRisk = {
+  aqi: null,
+  isHighRisk: false,
+  level: "LOW",
+  rain: null,
+  status: "Awaiting live check",
+  temp: null,
+  trigger: "none"
 };
 
 const toStringValue = (value, fallback = "") => {
@@ -165,6 +82,65 @@ const mapProfileToUser = (profile, previousUser) => {
   };
 };
 
+const normalizePolicy = (policy) => {
+  if (!policy) {
+    return null;
+  }
+
+  return {
+    id: policy.id,
+    weeklyIncome: Number(policy.weekly_income || 0),
+    premium: Number(policy.premium || 0),
+    coverageAmount: Number(policy.coverage_amount || 0),
+    policyStartDate: policy.policy_start_date || "",
+    status: policy.status || "inactive",
+    updatedAt: policy.updated_at || ""
+  };
+};
+
+const normalizeClaim = (claim) => {
+  const createdAt = claim?.created_at || "";
+
+  return {
+    id: claim?.id || String(Date.now()),
+    type: claim?.trigger_type || "rain",
+    status: claim?.status ? claim.status[0].toUpperCase() + claim.status.slice(1) : "Pending",
+    amount: Number(claim?.payout_amount || 0),
+    triggerValue: Number(claim?.trigger_value || 0),
+    createdAt,
+    timestamp: createdAt
+      ? new Date(createdAt).toLocaleString("en-IN", {
+          day: "2-digit",
+          hour: "2-digit",
+          minute: "2-digit",
+          month: "short"
+        })
+      : ""
+  };
+};
+
+const sleep = (delayMs) => new Promise((resolve) => setTimeout(resolve, delayMs));
+
+const computeRiskLevel = (rain) => {
+  if (rain >= 100) {
+    return "HIGH";
+  }
+
+  if (rain >= 60) {
+    return "MEDIUM";
+  }
+
+  return "LOW";
+};
+
+const toErrorMessage = (error, fallback) => {
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  return fallback;
+};
+
 export function AppProvider({ children }) {
   const [authInitializing, setAuthInitializing] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -172,54 +148,23 @@ export function AppProvider({ children }) {
   const [authUserId, setAuthUserId] = useState("");
   const [authLoading, setAuthLoading] = useState(false);
   const [authError, setAuthError] = useState("");
+  const [dataError, setDataError] = useState("");
   const [pendingOnboardingUser, setPendingOnboardingUser] = useState(null);
-  const [user, setUser] = useState(defaultUser);
-  const [policy, setPolicy] = useState(defaultPolicy);
-  const [risk, setRisk] = useState(defaultRisk);
+  const [user, setUser] = useState(initialUser);
+  const [policy, setPolicy] = useState(null);
+  const [policyLoading, setPolicyLoading] = useState(false);
+  const [claimsHistory, setClaimsHistory] = useState([]);
+  const [claimsLoading, setClaimsLoading] = useState(false);
+  const [risk, setRisk] = useState(initialRisk);
+  const [riskLoading, setRiskLoading] = useState(false);
+  const [riskMessage, setRiskMessage] = useState("Awaiting live check");
   const [workflowState, setWorkflowState] = useState(WORKFLOW_STATES.idle);
+  const [workflowMessage, setWorkflowMessage] = useState("No active claim check");
+  const [coverageLoading, setCoverageLoading] = useState(false);
   const [payoutAmount, setPayoutAmount] = useState(0);
-  const [movementScore, setMovementScore] = useState(SAFE_MOVEMENT_SCORE);
-  const [eventLogs, setEventLogs] = useState(buildInitialLogs());
+  const [movementScore] = useState(null);
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [themeEnabled, setThemeEnabled] = useState(false);
-  const [claimsHistory, setClaimsHistory] = useState([]);
-
-  const workflowRef = useRef(WORKFLOW_STATES.idle);
-  const timeoutIdsRef = useRef([]);
-
-  const clearQueuedTimeouts = useCallback(() => {
-    timeoutIdsRef.current.forEach((timeoutId) => {
-      clearTimeout(timeoutId);
-    });
-    timeoutIdsRef.current = [];
-  }, []);
-
-  const queueTimeout = useCallback((callback, delay) => {
-    const timeoutId = setTimeout(() => {
-      timeoutIdsRef.current = timeoutIdsRef.current.filter((item) => item !== timeoutId);
-      callback();
-    }, delay);
-
-    timeoutIdsRef.current.push(timeoutId);
-  }, []);
-
-  const appendLog = useCallback((message, level = "info") => {
-    setEventLogs((prev) => {
-      return [createLogEntry(message, level), ...prev].slice(0, 30);
-    });
-  }, []);
-
-  const resetRuntimeState = useCallback(() => {
-    clearQueuedTimeouts();
-    workflowRef.current = WORKFLOW_STATES.idle;
-
-    setRisk(defaultRisk);
-    setWorkflowState(WORKFLOW_STATES.idle);
-    setPayoutAmount(0);
-    setMovementScore(SAFE_MOVEMENT_SCORE);
-    setEventLogs(buildInitialLogs());
-    setClaimsHistory([]);
-  }, [clearQueuedTimeouts]);
 
   const applyAuthSession = useCallback((session) => {
     setAuthToken(session.access_token || "");
@@ -230,6 +175,7 @@ export function AppProvider({ children }) {
     setAuthToken("");
     setAuthUserId("");
     setAuthError("");
+    setDataError("");
     setPendingOnboardingUser(null);
     setAuthLoading(false);
   }, []);
@@ -257,15 +203,159 @@ export function AppProvider({ children }) {
     setUser((prev) => mapProfileToUser(profile, prev));
   }, []);
 
-  useEffect(() => {
-    workflowRef.current = workflowState;
-  }, [workflowState]);
+  const refreshPolicy = useCallback(
+    async (tokenOverride) => {
+      const token = tokenOverride || authToken;
 
-  useEffect(() => {
-    return () => {
-      clearQueuedTimeouts();
-    };
-  }, [clearQueuedTimeouts]);
+      if (!token) {
+        return null;
+      }
+
+      setPolicyLoading(true);
+      setDataError("");
+
+      try {
+        const response = await getMyPolicy(token);
+        const normalized = normalizePolicy(response);
+        setPolicy(normalized);
+        return normalized;
+      } catch (error) {
+        const message = toErrorMessage(error, "Unable to fetch policy");
+
+        if (message.toLowerCase().includes("no policy found")) {
+          setPolicy(null);
+          return null;
+        }
+
+        setDataError(message);
+        throw error;
+      } finally {
+        setPolicyLoading(false);
+      }
+    },
+    [authToken]
+  );
+
+  const createPolicyForCurrentUser = useCallback(
+    async (tokenOverride) => {
+      const token = tokenOverride || authToken;
+
+      if (!token) {
+        throw new Error("Session expired. Please login again.");
+      }
+
+      setPolicyLoading(true);
+      setDataError("");
+
+      try {
+        const response = await createPolicy(token);
+        const normalized = normalizePolicy(response?.policy);
+        setPolicy(normalized);
+        return normalized;
+      } catch (error) {
+        const message = toErrorMessage(error, "Policy creation failed");
+
+        if (message.toLowerCase().includes("policy already exists")) {
+          return refreshPolicy(token);
+        }
+
+        setDataError(message);
+        throw error;
+      } finally {
+        setPolicyLoading(false);
+      }
+    },
+    [authToken, refreshPolicy]
+  );
+
+  const refreshClaims = useCallback(
+    async (tokenOverride) => {
+      const token = tokenOverride || authToken;
+
+      if (!token) {
+        return [];
+      }
+
+      setClaimsLoading(true);
+      setDataError("");
+
+      try {
+        const response = await getMyClaims(token);
+        const claims = Array.isArray(response?.claims) ? response.claims.map(normalizeClaim) : [];
+        setClaimsHistory(claims);
+
+        if (claims.length > 0) {
+          setPayoutAmount(claims[0].amount || 0);
+        }
+
+        return claims;
+      } catch (error) {
+        setDataError(toErrorMessage(error, "Unable to fetch claims"));
+        throw error;
+      } finally {
+        setClaimsLoading(false);
+      }
+    },
+    [authToken]
+  );
+
+  const refreshRisk = useCallback(async () => {
+    if (!user.city) {
+      setRiskMessage("Location not available");
+      return null;
+    }
+
+    setRiskLoading(true);
+    setDataError("");
+
+    try {
+      setRiskMessage("Checking conditions...");
+      await sleep(300);
+      setRiskMessage("Analyzing environmental data...");
+      await sleep(300);
+      setRiskMessage("Evaluating risk...");
+
+      const triggerResponse = await checkTrigger(user.city);
+      const rain = Number(triggerResponse?.rain_mm || 0);
+      const aqi = triggerResponse?.aqi === null || triggerResponse?.aqi === undefined
+        ? null
+        : Number(triggerResponse.aqi);
+      const level = computeRiskLevel(rain);
+      const isHighRisk = rain >= 60;
+
+      setRisk({
+        rain,
+        aqi,
+        temp: null,
+        level,
+        status: isHighRisk ? "Heavy rain detected" : "No disruption detected",
+        isHighRisk,
+        trigger: triggerResponse?.trigger || "none"
+      });
+
+      if (rain >= 60) {
+        setRiskMessage("Heavy rain detected. Trigger condition met");
+      } else {
+        setRiskMessage("No disruption detected");
+      }
+
+      return {
+        exists: (triggerResponse?.trigger || "none") !== "none",
+        trigger: triggerResponse?.trigger || "none",
+        rain,
+        aqi
+      };
+    } catch (error) {
+      const message = toErrorMessage(error, "Failed to check trigger");
+      setRiskMessage("Retrying...");
+      await sleep(250);
+      setRiskMessage(message);
+      setDataError(message);
+      throw error;
+    } finally {
+      setRiskLoading(false);
+    }
+  }, [user.city]);
 
   useEffect(() => {
     let mounted = true;
@@ -302,10 +392,14 @@ export function AppProvider({ children }) {
           hydrateFromProfile(onboardingData.profile || {});
           setPendingOnboardingUser(null);
           setIsAuthenticated(true);
+          await Promise.allSettled([
+            refreshPolicy(accessToken),
+            refreshClaims(accessToken)
+          ]);
         } else {
           setPendingOnboardingUser({
-            phone: defaultUser.phone,
-            fullName: defaultUser.fullName
+            phone: initialUser.phone,
+            fullName: initialUser.fullName
           });
           setIsAuthenticated(false);
         }
@@ -329,7 +423,7 @@ export function AppProvider({ children }) {
     return () => {
       mounted = false;
     };
-  }, [clearAuthState, clearPersistedSession, hydrateFromProfile]);
+  }, [clearAuthState, clearPersistedSession, hydrateFromProfile, refreshClaims, refreshPolicy]);
 
   const register = async (payload) => {
     setAuthLoading(true);
@@ -353,7 +447,7 @@ export function AppProvider({ children }) {
 
       return { success: true };
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Registration failed";
+      const message = toErrorMessage(error, "Registration failed");
       setAuthError(message);
       return { success: false, error: message };
     } finally {
@@ -370,7 +464,6 @@ export function AppProvider({ children }) {
 
       applyAuthSession(session);
       await persistSession(session);
-      resetRuntimeState();
 
       setUser((prev) => ({ ...prev, phone }));
 
@@ -379,6 +472,12 @@ export function AppProvider({ children }) {
         if (onboardingData?.profile) {
           hydrateFromProfile(onboardingData.profile);
         }
+
+        await Promise.allSettled([
+          refreshPolicy(session.access_token),
+          refreshClaims(session.access_token)
+        ]);
+
         setIsAuthenticated(true);
         setPendingOnboardingUser(null);
       } else {
@@ -391,7 +490,7 @@ export function AppProvider({ children }) {
         onboardingCompleted: !!session.onboarding_completed
       };
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Login failed";
+      const message = toErrorMessage(error, "Login failed");
       setAuthError(message);
       return { success: false, error: message };
     } finally {
@@ -411,43 +510,17 @@ export function AppProvider({ children }) {
 
     try {
       const onboardingData = await submitOnboardingProfile(payload, authToken);
-      resetRuntimeState();
+      const profile = onboardingData?.profile || payload;
 
-      const dailyIncome = Number(payload.dailyIncome || user.dailyIncome || 0);
-      const weeklyIncome = payload.weeklyIncome
-        ? Number(payload.weeklyIncome)
-        : dailyIncome > 0
-          ? dailyIncome * 7
-          : Number(user.weeklyIncome);
-
-      setUser((prev) => {
-        const mergedFromPayload = {
-          ...prev,
-          fullName: payload.fullName || prev.fullName,
-          age: payload.age || prev.age,
-          city: payload.city || prev.city,
-          platform: payload.platform || prev.platform,
-          vehicleType: payload.vehicleType || prev.vehicleType,
-          workHours: payload.workHours || prev.workHours,
-          dailyIncome: String(dailyIncome || prev.dailyIncome),
-          weeklyIncome: String(weeklyIncome || prev.weeklyIncome),
-          riskPreference: payload.riskPreference || prev.riskPreference
-        };
-
-        return mapProfileToUser(onboardingData?.profile, mergedFromPayload);
-      });
-
-      setPolicy((prev) => ({
-        ...prev,
-        premium: mockData.finance.premium,
-        planName: payload.riskPreference === "High" ? "Elite Shield" : "Standard Shield"
-      }));
+      setUser((prev) => mapProfileToUser(profile, prev));
+      await createPolicyForCurrentUser(authToken);
+      await refreshClaims(authToken);
 
       setPendingOnboardingUser(null);
       setIsAuthenticated(true);
       return { success: true };
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Onboarding submit failed";
+      const message = toErrorMessage(error, "Onboarding submit failed");
       setAuthError(message);
       return { success: false, error: message };
     } finally {
@@ -460,93 +533,128 @@ export function AppProvider({ children }) {
   };
 
   const logout = () => {
-    resetRuntimeState();
     clearAuthState();
     clearPersistedSession().catch(() => {});
+    setUser(initialUser);
+    setPolicy(null);
+    setRisk(initialRisk);
+    setRiskMessage("Awaiting live check");
+    setClaimsHistory([]);
+    setPayoutAmount(0);
+    setWorkflowState(WORKFLOW_STATES.idle);
+    setWorkflowMessage("No active claim check");
     setIsAuthenticated(false);
   };
 
-  const startCoverageCheck = useCallback(() => {
-    if (
-      workflowRef.current === WORKFLOW_STATES.checking_conditions ||
-      workflowRef.current === WORKFLOW_STATES.validating ||
-      workflowRef.current === WORKFLOW_STATES.fraud_check
-    ) {
-      return;
+  const startCoverageCheck = useCallback(async () => {
+    if (coverageLoading) {
+      return { success: false, approved: false };
     }
 
-    appendLog("User requested coverage check", "info");
-    setPayoutAmount(0);
-    setWorkflowState(WORKFLOW_STATES.checking_conditions);
-    appendLog("Checking conditions...", "warning");
+    if (!authToken) {
+      const message = "Session expired. Please login again.";
+      setWorkflowState(WORKFLOW_STATES.flagged);
+      setWorkflowMessage(message);
+      setDataError(message);
+      return { success: false, approved: false, error: message };
+    }
 
-    queueTimeout(() => {
-      const disruptionDetected = risk.rain >= TRIGGER_RAIN_MM || risk.aqi >= TRIGGER_AQI;
+    if (!user.city) {
+      const message = "Location unavailable. Update your profile city.";
+      setWorkflowState(WORKFLOW_STATES.flagged);
+      setWorkflowMessage(message);
+      return { success: false, approved: false, error: message };
+    }
 
-      if (!disruptionDetected) {
+    setCoverageLoading(true);
+    setDataError("");
+
+    try {
+      setWorkflowState(WORKFLOW_STATES.checking_conditions);
+      setWorkflowMessage("Checking conditions...");
+
+      const triggerResponse = await checkTrigger(user.city);
+      const rain = Number(triggerResponse?.rain_mm || 0);
+      const aqi = triggerResponse?.aqi === null || triggerResponse?.aqi === undefined
+        ? null
+        : Number(triggerResponse.aqi);
+
+      setRisk((prev) => ({
+        ...prev,
+        rain,
+        aqi,
+        level: computeRiskLevel(rain),
+        isHighRisk: rain >= 60,
+        status: rain >= 60 ? "Heavy rain detected" : "No disruption detected",
+        trigger: triggerResponse?.trigger || "none"
+      }));
+
+      if ((triggerResponse?.trigger || "none") === "none") {
         setWorkflowState(WORKFLOW_STATES.idle);
-        appendLog("No disruption. Coverage check closed", "info");
-        return;
+        setWorkflowMessage("No disruption detected");
+        return { success: true, approved: false, reason: "no_trigger" };
       }
 
       setWorkflowState(WORKFLOW_STATES.validating);
-      appendLog("Validating eligibility...", "warning");
+      setWorkflowMessage("Trigger detected");
+      await sleep(250);
+      setWorkflowMessage("Validating eligibility...");
 
-      queueTimeout(() => {
-        appendLog("Eligibility validated", "success");
-        setWorkflowState(WORKFLOW_STATES.fraud_check);
-        appendLog("Running fraud detection...", "warning");
+      const claimResponse = await createClaim(authToken, {
+        location: user.city,
+        activityStatus: "active",
+        locationValid: true
+      });
 
-        queueTimeout(() => {
-          const timestamp = buildTimestamp();
+      setWorkflowState(WORKFLOW_STATES.fraud_check);
+      setWorkflowMessage("Processing claim...");
+      await sleep(250);
 
-          if (movementScore < 0.3) {
-            setWorkflowState(WORKFLOW_STATES.flagged);
-            setPayoutAmount(0);
-            appendLog("Verification required", "danger");
+      const createdClaim = normalizeClaim(claimResponse?.claim);
+      setClaimsHistory((prev) => [createdClaim, ...prev.filter((item) => item.id !== createdClaim.id)]);
 
-            setClaimsHistory((prev) => {
-              return [
-                {
-                  amount: 0,
-                  event: "Parametric disruption",
-                  id: `claim-${Date.now()}`,
-                  status: "Flagged",
-                  timestamp
-                },
-                ...prev
-              ].slice(0, 20);
-            });
+      if ((claimResponse?.claim?.status || "").toLowerCase() === "approved") {
+        setWorkflowState(WORKFLOW_STATES.approved);
+        setWorkflowMessage("Claim Approved");
+        setPayoutAmount(createdClaim.amount || 0);
+        await Promise.allSettled([refreshClaims(authToken), refreshPolicy(authToken)]);
+        return { success: true, approved: true, claim: createdClaim };
+      }
 
-            return;
-          }
+      setWorkflowState(WORKFLOW_STATES.flagged);
+      setWorkflowMessage("Conditions not met");
+      return { success: true, approved: false, reason: "not_met", claim: createdClaim };
+    } catch (error) {
+      const message = toErrorMessage(error, "Claim processing failed");
+      const normalized = message.toLowerCase();
 
-          setWorkflowState(WORKFLOW_STATES.approved);
-          setPayoutAmount(PAYOUT_AMOUNT);
-          appendLog("Fraud check passed", "success");
-          appendLog(`₹${PAYOUT_AMOUNT} credited`, "success");
+      if (normalized.includes("no claim trigger")) {
+        setWorkflowState(WORKFLOW_STATES.idle);
+        setWorkflowMessage("No disruption detected");
+        return { success: true, approved: false, reason: "no_trigger" };
+      }
 
-          setClaimsHistory((prev) => {
-            return [
-              {
-                amount: PAYOUT_AMOUNT,
-                event: "Parametric disruption",
-                id: `claim-${Date.now()}`,
-                status: "Approved",
-                timestamp
-              },
-              ...prev
-            ].slice(0, 20);
-          });
+      if (
+        normalized.includes("waiting") ||
+        normalized.includes("max one claim") ||
+        normalized.includes("verification") ||
+        normalized.includes("excluded")
+      ) {
+        setWorkflowState(WORKFLOW_STATES.flagged);
+        setWorkflowMessage("Conditions not met");
+        return { success: true, approved: false, reason: "not_met" };
+      }
 
-          setPolicy((prev) => ({
-            ...prev,
-            coverageLeft: Math.max(0, prev.coverageLeft - PAYOUT_AMOUNT)
-          }));
-        }, STEP_DELAY_MS);
-      }, STEP_DELAY_MS);
-    }, STEP_DELAY_MS);
-  }, [appendLog, movementScore, queueTimeout, risk.aqi, risk.rain]);
+      setWorkflowState(WORKFLOW_STATES.flagged);
+      setWorkflowMessage("Retrying...");
+      await sleep(250);
+      setWorkflowMessage(message);
+      setDataError(message);
+      return { success: false, approved: false, error: message };
+    } finally {
+      setCoverageLoading(false);
+    }
+  }, [authToken, coverageLoading, refreshClaims, refreshPolicy, user.city]);
 
   const value = useMemo(
     () => ({
@@ -554,25 +662,34 @@ export function AppProvider({ children }) {
       authInitializing,
       authLoading,
       authError,
+      dataError,
       pendingOnboardingUser,
       authToken,
       authUserId,
       user,
       policy,
+      policyLoading,
       risk,
+      riskLoading,
+      riskMessage,
       workflowState,
+      workflowMessage,
+      coverageLoading,
       payoutAmount,
       movementScore,
-      eventLogs,
+      claimsHistory,
+      claimsLoading,
       notificationsEnabled,
       themeEnabled,
-      claimsHistory,
       login,
       register,
       completeOnboarding,
       updateProfile,
       logout,
       startCoverageCheck,
+      refreshRisk,
+      refreshPolicy,
+      refreshClaims,
       setNotificationsEnabled,
       setThemeEnabled,
       setAuthError
@@ -582,22 +699,29 @@ export function AppProvider({ children }) {
       authInitializing,
       authLoading,
       authError,
+      dataError,
       pendingOnboardingUser,
       authToken,
       authUserId,
       user,
       policy,
+      policyLoading,
       risk,
+      riskLoading,
+      riskMessage,
       workflowState,
+      workflowMessage,
+      coverageLoading,
       payoutAmount,
       movementScore,
-      eventLogs,
+      claimsHistory,
+      claimsLoading,
       notificationsEnabled,
       themeEnabled,
-      claimsHistory,
       startCoverageCheck,
-      clearAuthState,
-      clearPersistedSession
+      refreshRisk,
+      refreshPolicy,
+      refreshClaims
     ]
   );
 

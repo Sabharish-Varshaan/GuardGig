@@ -1,15 +1,12 @@
-import React, { useMemo } from "react";
+import React, { memo, useMemo } from "react";
 import { ScrollView, StyleSheet, Text, View, useWindowDimensions } from "react-native";
+import { useFocusEffect } from "@react-navigation/native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import Button from "../components/Button";
 import Card from "../components/Card";
 import Header from "../components/Header";
-import LogPanel from "../components/LogPanel";
-import MetricBox from "../components/MetricBox";
-import RiskBanner from "../components/RiskBanner";
 import StatusBadge from "../components/StatusBadge";
-import StatusCard from "../components/StatusCard";
 import { useAppContext } from "../context/AppContext";
 import { appTheme } from "../styles/theme";
 
@@ -18,6 +15,15 @@ function InfoRow({ icon, label, value }) {
     <View style={styles.infoRow}>
       <Text style={styles.infoLabel}>{`${icon} ${label}`}</Text>
       <Text style={styles.infoValue}>{value}</Text>
+    </View>
+  );
+}
+
+function SummaryStat({ label, value }) {
+  return (
+    <View style={styles.summaryStat}>
+      <Text style={styles.summaryStatLabel}>{label}</Text>
+      <Text style={styles.summaryStatValue}>{value}</Text>
     </View>
   );
 }
@@ -40,149 +46,126 @@ function getVariantFromRiskLevel(level) {
   return "success";
 }
 
-function getVariantFromSeverity(severity) {
-  const normalized = (severity || "normal").toLowerCase();
-
-  if (normalized === "high") {
-    return "danger";
+function getWorkflowStatusMeta(workflowState) {
+  if (workflowState === "checking_conditions") {
+    return { label: "Checking conditions...", variant: "info" };
   }
 
-  if (normalized === "moderate") {
-    return "warning";
-  }
-
-  return "success";
-}
-
-function getFraudStatus(workflowState) {
-  if (workflowState === "checking_conditions" || workflowState === "validating") {
-    return { label: "Fraud Check: Pending", variant: "info" };
+  if (workflowState === "validating") {
+    return { label: "Validating eligibility...", variant: "info" };
   }
 
   if (workflowState === "fraud_check") {
-    return { label: "Fraud Check: Verifying", variant: "warning" };
-  }
-
-  if (workflowState === "flagged") {
-    return { label: "Fraud Check: Verification Required", variant: "danger" };
+    return { label: "Running fraud checks...", variant: "warning" };
   }
 
   if (workflowState === "approved") {
-    return { label: "Fraud Check: Passed", variant: "success" };
+    return { label: "Claim Approved", variant: "success" };
   }
 
-  return { label: "Fraud Check: Awaiting Request", variant: "info" };
+  if (workflowState === "flagged") {
+    return { label: "Manual review required", variant: "danger" };
+  }
+
+  return { label: "No active claim check", variant: "info" };
 }
 
-export default function DashboardScreen({ navigation }) {
+function DashboardScreen({ navigation }) {
   const {
     user,
     policy,
     risk,
+    riskLoading,
+    riskMessage,
     workflowState,
-    payoutAmount,
-    movementScore,
-    eventLogs,
+    workflowMessage,
+    coverageLoading,
+    refreshRisk,
     startCoverageCheck
   } = useAppContext();
   const { width } = useWindowDimensions();
   const isCompactScreen = width < 390;
 
-  const isWorkflowRunning =
-    workflowState === "checking_conditions" ||
-    workflowState === "validating" ||
-    workflowState === "fraud_check";
+  useFocusEffect(
+    React.useCallback(() => {
+      refreshRisk().catch(() => {});
+      return undefined;
+    }, [refreshRisk])
+  );
 
   const riskVariant = useMemo(() => getVariantFromRiskLevel(risk.level), [risk.level]);
-  const conditionVariant = useMemo(() => getVariantFromSeverity(risk.severity), [risk.severity]);
-  const fraudMeta = useMemo(() => getFraudStatus(workflowState), [workflowState]);
+  const compactRiskLabel = useMemo(() => (risk.level || "LOW").toUpperCase(), [risk.level]);
+  const workflowMeta = useMemo(() => getWorkflowStatusMeta(workflowState), [workflowState]);
+  const liveRiskLabel = riskLoading ? "CHECKING" : compactRiskLabel;
+
+  const handleCheckCoverage = React.useCallback(async () => {
+    const result = await startCoverageCheck();
+    if (result?.approved) {
+      navigation.navigate("Payout");
+    }
+  }, [navigation, startCoverageCheck]);
 
   return (
     <SafeAreaView style={styles.screen}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <Header
           subtitle="Your income is protected"
-          title={`Hello, ${user.fullName || "Ramesh"} 👋`}
-          rightElement={<StatusBadge label={risk.level || "Medium"} variant={riskVariant} />}
+          title={`Hello, ${user.fullName || "Worker"} 👋`}
+          rightElement={<StatusBadge label={liveRiskLabel} variant={riskVariant} />}
         />
 
-        <Card gradient style={styles.heroCard}>
+        <Card gradient style={styles.summaryCard}>
           <Text style={styles.heroCaption}>Policy Snapshot</Text>
-          <View style={styles.heroRow}>
-            <View>
-              <Text style={styles.heroLabel}>Weekly Income</Text>
-              <Text style={styles.heroValue}>{formatRupee(Number(user.weeklyIncome) || 7000)}</Text>
-            </View>
-            <View>
+          <View style={[styles.summaryTopRow, isCompactScreen ? styles.summaryTopRowCompact : null]}>
+            <View style={styles.summaryPrimaryBlock}>
               <Text style={styles.heroLabel}>Premium</Text>
-              <Text style={styles.heroValue}>{`${formatRupee(policy.premium)}/week`}</Text>
+              <Text style={styles.heroValue}>{`${formatRupee(policy?.premium || 0)}/week`}</Text>
             </View>
+            <StatusBadge label={liveRiskLabel} variant={riskVariant} />
           </View>
-          <View style={styles.heroRiskRow}>
-            <Text style={styles.heroRiskText}>Risk Level</Text>
-            <StatusBadge label={risk.level || "Medium"} variant={riskVariant} />
+          <View style={[styles.summaryStatsRow, isCompactScreen ? styles.summaryStatsRowCompact : null]}>
+            <SummaryStat label="Weekly Income" value={formatRupee(policy?.weeklyIncome || Number(user.weeklyIncome) || 0)} />
+            <SummaryStat label="Daily Coverage" value="₹700/day" />
           </View>
         </Card>
 
-        <View style={[styles.metricGrid, isCompactScreen ? styles.metricGridCompact : null]}>
-          <MetricBox
-            helper="live rainfall"
-            label="Rain"
-            tone={risk.rain >= 60 ? "danger" : risk.rain >= 45 ? "warning" : "safe"}
-            value={`${risk.rain} mm`}
-            style={isCompactScreen ? styles.metricBoxCompact : null}
-          />
-          <MetricBox
-            helper="air quality"
-            label="AQI"
-            tone={risk.aqi >= 300 ? "danger" : risk.aqi >= 200 ? "warning" : "safe"}
-            value={`${risk.aqi}`}
-            style={isCompactScreen ? styles.metricBoxCompact : null}
-          />
+        <Card style={styles.liveRiskCard}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Live Risk Panel</Text>
+            <StatusBadge label={liveRiskLabel} variant={riskVariant} />
+          </View>
+          <View style={[styles.liveRiskGrid, isCompactScreen ? styles.liveRiskGridCompact : null]}>
+            <InfoRow icon="🌧️" label="Rain" value={risk.rain === null ? "--" : `${risk.rain} mm`} />
+            <InfoRow icon="🌫️" label="AQI" value={risk.aqi === null ? "--" : `${risk.aqi}`} />
+            <InfoRow icon="🌡️" label="Temp" value={risk.temp === null ? "--" : `${risk.temp}°C`} />
+            <InfoRow icon="⚡" label="Risk" value={liveRiskLabel} />
+          </View>
+        </Card>
+
+        <View style={styles.inlineStatusRow}>
+          <Text style={styles.inlineStatusLabel}>Live</Text>
+          <StatusBadge label={riskMessage} variant={riskLoading ? "warning" : riskVariant} />
         </View>
 
-        <Card style={styles.sectionCard}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Live Conditions</Text>
-            <StatusBadge label={risk.status || "Normal"} variant={conditionVariant} />
-          </View>
-          <InfoRow icon="🌧️" label="Rain" value={`${risk.rain} mm`} />
-          <InfoRow icon="🌫️" label="AQI" value={`${risk.aqi}`} />
-          <InfoRow icon="🌡️" label="Temp" value={`${risk.temp}°C`} />
-        </Card>
-
-        <RiskBanner severity={risk.severity} text={risk.status} />
-
-        {risk.isHighRisk && (
-          <Button
-            disabled={isWorkflowRunning}
-            loading={isWorkflowRunning}
-            onPress={startCoverageCheck}
-            style={styles.checkCoverageButton}
-            title="Check Coverage"
-          />
-        )}
-
-        <StatusCard
-          movementScore={movementScore}
-          payoutAmount={payoutAmount}
-          workflowState={workflowState}
+        <Button
+          disabled={coverageLoading}
+          loading={coverageLoading}
+          onPress={handleCheckCoverage}
+          style={styles.primaryAction}
+          title="Check Coverage"
         />
 
-        <Card style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>Coverage</Text>
-          <InfoRow icon="🛡️" label="Plan" value={policy.planName} />
-          <InfoRow icon="💰" label="Coverage Left" value={formatRupee(policy.coverageLeft)} />
-          <InfoRow icon="🔁" label="Renewal" value={policy.renewalIn} />
-          <View style={styles.fraudBadgeWrap}>
-            <StatusBadge label={fraudMeta.label} variant={fraudMeta.variant} />
-          </View>
-        </Card>
-
-        <LogPanel logs={eventLogs} />
+        <View style={styles.inlineStatusRow}>
+          <Text style={styles.inlineStatusLabel}>Workflow</Text>
+          <StatusBadge label={workflowMessage || workflowMeta.label} variant={workflowMeta.variant} />
+        </View>
 
         <View style={styles.actionGroup}>
-          <Button onPress={() => navigation.navigate("Policy")} title="View Policy" />
+          <Button
+            onPress={() => navigation.navigate("Policy")}
+            title="View Policy"
+            variant="secondary"
+          />
           <Button
             onPress={() => navigation.navigate("Claims")}
             style={styles.secondaryAction}
@@ -201,19 +184,20 @@ export default function DashboardScreen({ navigation }) {
   );
 }
 
+export default memo(DashboardScreen);
+
 const styles = StyleSheet.create({
   screen: {
     backgroundColor: appTheme.colors.background,
     flex: 1
   },
   content: {
-    paddingBottom: appTheme.spacing.xxl + 200,
-    paddingHorizontal: appTheme.spacing.sm,
-    paddingTop: appTheme.spacing.sm
+    paddingBottom: 100,
+    paddingHorizontal: 20,
+    paddingTop: 20
   },
-  heroCard: {
-    marginBottom: appTheme.spacing.lg,
-    paddingBottom: appTheme.spacing.md
+  summaryCard: {
+    marginBottom: appTheme.spacing.md
   },
   heroCaption: {
     color: appTheme.colors.textSecondary,
@@ -222,22 +206,41 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
     textTransform: "uppercase"
   },
-  metricGrid: {
-    flexDirection: "row",
-    gap: appTheme.spacing.sm,
-    marginBottom: appTheme.spacing.md
-  },
-  metricGridCompact: {
-    flexDirection: "column"
-  },
-  metricBoxCompact: {
-    flex: 0,
-    width: "100%"
-  },
-  heroRow: {
+  summaryTopRow: {
+    alignItems: "flex-start",
     flexDirection: "row",
     justifyContent: "space-between",
     marginTop: appTheme.spacing.sm
+  },
+  summaryTopRowCompact: {
+    flexDirection: "column"
+  },
+  summaryPrimaryBlock: {
+    flex: 1,
+    paddingRight: appTheme.spacing.md
+  },
+  summaryStatsRow: {
+    flexDirection: "row",
+    gap: appTheme.spacing.sm,
+    marginTop: appTheme.spacing.md
+  },
+  summaryStatsRowCompact: {
+    flexDirection: "column"
+  },
+  summaryStat: {
+    flex: 1
+  },
+  summaryStatLabel: {
+    color: appTheme.colors.textSecondary,
+    fontFamily: "Rajdhani_700Bold",
+    fontSize: 12,
+    textTransform: "uppercase"
+  },
+  summaryStatValue: {
+    color: appTheme.colors.textPrimary,
+    fontFamily: "Rajdhani_700Bold",
+    fontSize: 18,
+    marginTop: appTheme.spacing.xs
   },
   heroLabel: {
     color: appTheme.colors.textSecondary,
@@ -247,21 +250,10 @@ const styles = StyleSheet.create({
   heroValue: {
     color: appTheme.colors.textPrimary,
     fontFamily: "Orbitron_700Bold",
-    fontSize: 26,
+    fontSize: 30,
     marginTop: appTheme.spacing.xs
   },
-  heroRiskRow: {
-    alignItems: "center",
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginTop: appTheme.spacing.md
-  },
-  heroRiskText: {
-    color: appTheme.colors.textPrimary,
-    fontFamily: "Rajdhani_700Bold",
-    fontSize: 16
-  },
-  sectionCard: {
+  liveRiskCard: {
     marginBottom: appTheme.spacing.lg
   },
   sectionHeader: {
@@ -276,32 +268,53 @@ const styles = StyleSheet.create({
     fontSize: 18,
     letterSpacing: 0.2
   },
+  liveRiskGrid: {
+    gap: appTheme.spacing.sm
+  },
+  liveRiskGridCompact: {
+    gap: appTheme.spacing.xs
+  },
   infoRow: {
     alignItems: "center",
+    borderBottomColor: appTheme.colors.borderSubtle,
+    borderBottomWidth: 1,
     flexDirection: "row",
     justifyContent: "space-between",
-    marginBottom: appTheme.spacing.sm,
-    paddingVertical: 2
+    paddingBottom: appTheme.spacing.xs,
+    paddingTop: appTheme.spacing.xs
   },
   infoLabel: {
-    color: appTheme.colors.textPrimary,
+    color: appTheme.colors.textSecondary,
     fontFamily: "Rajdhani_600SemiBold",
-    fontSize: 16
+    fontSize: 14
   },
   infoValue: {
     color: appTheme.colors.accentPrimary,
     fontFamily: "Rajdhani_700Bold",
-    fontSize: 16
+    fontSize: 15
   },
-  fraudBadgeWrap: {
-    marginTop: appTheme.spacing.sm
+  primaryAction: {
+    marginBottom: appTheme.spacing.sm,
+    marginTop: appTheme.spacing.sm,
+    width: "100%"
   },
-  checkCoverageButton: {
-    marginBottom: appTheme.spacing.lg
+  inlineStatusRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: appTheme.spacing.md,
+    marginTop: appTheme.spacing.xs
+  },
+  inlineStatusLabel: {
+    color: appTheme.colors.textSecondary,
+    fontFamily: "Rajdhani_700Bold",
+    fontSize: 12,
+    letterSpacing: 0.8,
+    textTransform: "uppercase"
   },
   actionGroup: {
     marginBottom: appTheme.spacing.xxl,
-    marginTop: appTheme.spacing.md
+    marginTop: appTheme.spacing.sm
   },
   secondaryAction: {
     marginTop: appTheme.spacing.md

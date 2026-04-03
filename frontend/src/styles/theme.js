@@ -135,30 +135,30 @@ export const shadows = {
   soft: {
     shadowColor: "#00D4FF",
     shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.15,
-    shadowRadius: 16,
-    elevation: 4
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    elevation: 3
   },
   card: {
     shadowColor: "#00D4FF",
     shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.2,
-    shadowRadius: 18,
-    elevation: 6
+    shadowOpacity: 0.14,
+    shadowRadius: 14,
+    elevation: 4
   },
   floating: {
     shadowColor: "#00D4FF",
     shadowOffset: { width: 0, height: 16 },
-    shadowOpacity: 0.24,
-    shadowRadius: 26,
-    elevation: 10
+    shadowOpacity: 0.18,
+    shadowRadius: 18,
+    elevation: 6
   },
   glow: {
     shadowColor: "#00D4FF",
     shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.35,
-    shadowRadius: 14,
-    elevation: 8
+    shadowOpacity: 0.22,
+    shadowRadius: 10,
+    elevation: 5
   }
 };
 

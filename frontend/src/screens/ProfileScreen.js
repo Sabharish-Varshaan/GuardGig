@@ -51,12 +51,13 @@ function ProfileScreen({ navigation }) {
     <SafeAreaView style={styles.screen}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <Header
-          subtitle="Manage your worker profile and account preferences"
+          subtitle="Your account details and quick actions"
           title="Profile"
           rightElement={<StatusBadge label={user.riskPreference || "Medium"} variant="info" />}
         />
 
         <Card style={styles.cardGap}>
+          <Text style={styles.cardTitle}>Profile Summary</Text>
           {savedBanner && (
             <View style={styles.savedBanner}>
               <Text style={styles.savedBannerText}>Profile updated successfully</Text>
@@ -65,15 +66,9 @@ function ProfileScreen({ navigation }) {
           {!editing ? (
             <View>
               <ProfileRow label="Name" value={user.fullName} />
-              <ProfileRow label="Phone" value={user.phone} />
-              <ProfileRow label="Age" value={user.age} />
-              <ProfileRow label="City" value={user.city} />
-              <ProfileRow label="Platform" value={user.platform} />
               <ProfileRow label="Vehicle" value={user.vehicleType} />
               <ProfileRow label="Work Hours" value={user.workHours} />
-              <ProfileRow label="Daily Income" value={user.dailyIncome} />
-              <ProfileRow label="Weekly Income" value={user.weeklyIncome} />
-              <ProfileRow label="Risk Preference" value={user.riskPreference} />
+              <ProfileRow label="Income" value={`${user.dailyIncome}/day`} />
             </View>
           ) : (
             <View>
@@ -95,7 +90,10 @@ function ProfileScreen({ navigation }) {
               />
             </View>
           )}
+        </Card>
 
+        <Card style={styles.cardGap}>
+          <Text style={styles.cardTitle}>Actions</Text>
           <Button
             onPress={editing ? handleSave : () => setEditing(true)}
             style={styles.buttonSpacing}
@@ -116,9 +114,6 @@ function ProfileScreen({ navigation }) {
               variant="secondary"
             />
           )}
-        </Card>
-
-        <Card style={styles.cardGap}>
           <Button
             onPress={() => navigation.navigate("Settings")}
             style={styles.buttonSpacing}
@@ -140,12 +135,18 @@ const styles = StyleSheet.create({
     flex: 1
   },
   content: {
-    paddingHorizontal: appTheme.spacing.lg,
-    paddingTop: appTheme.spacing.lg,
-    paddingBottom: appTheme.spacing.xxl
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 80
   },
   cardGap: {
     marginBottom: appTheme.spacing.md
+  },
+  cardTitle: {
+    color: appTheme.colors.textPrimary,
+    fontFamily: "Orbitron_600SemiBold",
+    fontSize: 18,
+    marginBottom: appTheme.spacing.sm
   },
   infoRow: {
     borderBottomColor: appTheme.colors.border,

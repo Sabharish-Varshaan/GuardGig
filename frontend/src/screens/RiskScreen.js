@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { memo, useMemo } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -9,7 +9,7 @@ import StatusBadge from "../components/StatusBadge";
 import { useAppContext } from "../context/AppContext";
 import { appTheme } from "../styles/theme";
 
-export default function RiskScreen() {
+function RiskScreen() {
   const { risk } = useAppContext();
 
   const bannerMeta = useMemo(() => {
@@ -30,7 +30,7 @@ export default function RiskScreen() {
     <SafeAreaView style={styles.screen}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <Header
-          subtitle="Live weather and pollution inputs driving dynamic premium and payout decisions"
+          subtitle="Live conditions that influence your coverage"
           title="Risk"
           rightElement={<StatusBadge label="AI Live" variant="success" />}
         />
@@ -40,9 +40,7 @@ export default function RiskScreen() {
             <Text style={styles.bannerTitle}>Risk Status</Text>
             <StatusBadge label={bannerMeta.label} variant={bannerMeta.variant} />
           </View>
-          <Text style={styles.bannerBody}>
-            Current trigger signals indicate {risk.status || "Normal Conditions"}.
-          </Text>
+          <Text style={styles.bannerBody}>{risk.status || "Normal conditions"}</Text>
         </Card>
 
         <Card style={styles.graphCard}>
@@ -68,21 +66,6 @@ export default function RiskScreen() {
           />
         </Card>
 
-        <Card>
-          <Text style={styles.legendTitle}>Status Legend</Text>
-          <View style={styles.legendRow}>
-            <View style={[styles.dot, { backgroundColor: appTheme.colors.accent }]} />
-            <Text style={styles.legendText}>Normal</Text>
-          </View>
-          <View style={styles.legendRow}>
-            <View style={[styles.dot, { backgroundColor: appTheme.colors.warning }]} />
-            <Text style={styles.legendText}>Moderate</Text>
-          </View>
-          <View style={styles.legendRow}>
-            <View style={[styles.dot, { backgroundColor: appTheme.colors.danger }]} />
-            <Text style={styles.legendText}>High Risk</Text>
-          </View>
-        </Card>
       </ScrollView>
     </SafeAreaView>
   );
@@ -94,9 +77,9 @@ const styles = StyleSheet.create({
     flex: 1
   },
   content: {
-    paddingHorizontal: appTheme.spacing.lg,
-    paddingTop: appTheme.spacing.lg,
-    paddingBottom: appTheme.spacing.xxl
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 80
   },
   bannerCard: {
     marginBottom: appTheme.spacing.md
@@ -110,37 +93,17 @@ const styles = StyleSheet.create({
   bannerTitle: {
     color: appTheme.colors.textPrimary,
     fontFamily: "Orbitron_600SemiBold",
-    fontSize: 20
+    fontSize: 18
   },
   bannerBody: {
     color: appTheme.colors.textSecondary,
     fontFamily: "Rajdhani_600SemiBold",
-    fontSize: 15,
-    lineHeight: 20
+    fontSize: 14,
+    lineHeight: 18
   },
   graphCard: {
     marginBottom: appTheme.spacing.md
-  },
-  legendTitle: {
-    color: appTheme.colors.textPrimary,
-    fontFamily: "Orbitron_600SemiBold",
-    fontSize: 17,
-    marginBottom: appTheme.spacing.sm
-  },
-  legendRow: {
-    alignItems: "center",
-    flexDirection: "row",
-    marginBottom: appTheme.spacing.xs
-  },
-  dot: {
-    borderRadius: appTheme.radius.pill,
-    height: 10,
-    marginRight: appTheme.spacing.xs,
-    width: 10
-  },
-  legendText: {
-    color: appTheme.colors.textPrimary,
-    fontFamily: "Rajdhani_600SemiBold",
-    fontSize: 15
   }
 });
+
+export default memo(RiskScreen);

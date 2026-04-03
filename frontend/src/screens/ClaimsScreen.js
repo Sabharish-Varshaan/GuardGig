@@ -1,11 +1,11 @@
-import React, { useEffect, useMemo, useRef } from "react";
+import React, { memo, useEffect, useMemo, useRef } from "react";
 import { Animated, FlatList, StyleSheet, Text, View } from "react-native";
+import { useFocusEffect } from "@react-navigation/native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import Card from "../components/Card";
 import ClaimItemCard from "../components/ClaimItemCard";
 import Header from "../components/Header";
-import LogPanel from "../components/LogPanel";
 import NeonButton from "../components/NeonButton";
 import StatusCard from "../components/StatusCard";
 import StatusBadge from "../components/StatusBadge";
@@ -16,14 +16,23 @@ function formatRupee(value) {
   return `₹${value}`;
 }
 
-export default function ClaimsScreen({ navigation }) {
+function ClaimsScreen({ navigation }) {
   const {
     claimsHistory,
     workflowState,
     payoutAmount,
     movementScore,
-    eventLogs
+    claimsLoading,
+    refreshClaims,
+    dataError
   } = useAppContext();
+
+  useFocusEffect(
+    React.useCallback(() => {
+      refreshClaims().catch(() => {});
+      return undefined;
+    }, [refreshClaims])
+  );
 
   const fade = useRef(new Animated.Value(0)).current;
   const rise = useRef(new Animated.Value(18)).current;
@@ -63,7 +72,7 @@ export default function ClaimsScreen({ navigation }) {
           ListHeaderComponent={
             <View>
               <Header
-                subtitle="User-initiated claim checks processed step-by-step with eligibility and fraud validation"
+                subtitle="Claims run automatically with fraud checks"
                 title="Claims"
                 rightElement={<StatusBadge label="Realtime" variant="success" />}
               />
@@ -73,13 +82,6 @@ export default function ClaimsScreen({ navigation }) {
                 movementScore={movementScore}
                 payoutAmount={payoutAmount}
               />
-
-              <Card style={styles.infoCard}>
-                <Text style={styles.infoTitle}>Claim Processing Engine</Text>
-                <Text style={styles.infoSubtext}>
-                  Start a coverage check from Dashboard when high risk is detected. The system then validates conditions, eligibility, and fraud signals before finalizing payout.
-                </Text>
-              </Card>
 
               {!!latestClaim && (
                 <Animated.View style={{ opacity: fade, transform: [{ translateY: rise }] }}>
@@ -99,9 +101,9 @@ export default function ClaimsScreen({ navigation }) {
                 </Animated.View>
               )}
 
-              <LogPanel logs={eventLogs} />
-
               <Text style={styles.historyTitle}>Claim History</Text>
+              {claimsLoading && <Text style={styles.loadingText}>Refreshing claims...</Text>}
+              {!!dataError && <Text style={styles.errorText}>{dataError}</Text>}
             </View>
           }
           contentContainerStyle={styles.listContent}
@@ -111,7 +113,7 @@ export default function ClaimsScreen({ navigation }) {
             <Card>
               <Text style={styles.emptyTitle}>No claims yet</Text>
               <Text style={styles.emptySubtitle}>
-                Use Check Coverage from Dashboard to start the real workflow.
+                Claims appear automatically after trigger checks.
               </Text>
             </Card>
           }
@@ -131,6 +133,8 @@ export default function ClaimsScreen({ navigation }) {
   );
 }
 
+export default memo(ClaimsScreen);
+
 const styles = StyleSheet.create({
   screen: {
     backgroundColor: appTheme.colors.background,
@@ -142,22 +146,7 @@ const styles = StyleSheet.create({
   listContent: {
     paddingHorizontal: appTheme.spacing.sm,
     paddingTop: appTheme.spacing.sm,
-    paddingBottom: appTheme.spacing.xxl + 200
-  },
-  infoCard: {
-    marginBottom: appTheme.spacing.lg
-  },
-  infoTitle: {
-    color: appTheme.colors.textPrimary,
-    fontFamily: "Orbitron_600SemiBold",
-    fontSize: 16
-  },
-  infoSubtext: {
-    color: appTheme.colors.textSecondary,
-    fontFamily: "Rajdhani_600SemiBold",
-    fontSize: 15,
-    lineHeight: 22,
-    marginTop: appTheme.spacing.sm
+    paddingBottom: 120
   },
   resultCard: {
     backgroundColor: appTheme.colors.successSoft,
@@ -205,6 +194,19 @@ const styles = StyleSheet.create({
     marginTop: appTheme.spacing.xs
   },
   payoutButton: {
+    marginBottom: appTheme.spacing.sm,
     marginTop: appTheme.spacing.sm
+  },
+  loadingText: {
+    color: appTheme.colors.textSecondary,
+    fontFamily: "Rajdhani_600SemiBold",
+    fontSize: 14,
+    marginBottom: appTheme.spacing.sm
+  },
+  errorText: {
+    color: appTheme.colors.danger,
+    fontFamily: "Rajdhani_600SemiBold",
+    fontSize: 14,
+    marginBottom: appTheme.spacing.sm
   }
 });

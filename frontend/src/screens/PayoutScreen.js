@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { memo, useMemo } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -12,16 +12,49 @@ function formatRupee(value) {
   return `₹${value}`;
 }
 
-export default function PayoutScreen() {
-  const { workflowState, payoutAmount, movementScore, claimsHistory } = useAppContext();
+function formatRelativeTime(timestamp) {
+  if (!timestamp) {
+    return "Just now";
+  }
+
+  const date = new Date(timestamp);
+  const deltaMs = Date.now() - date.getTime();
+
+  if (Number.isNaN(deltaMs) || deltaMs < 0) {
+    return "Just now";
+  }
+
+  const minutes = Math.floor(deltaMs / 60000);
+
+  if (minutes < 1) {
+    return "Just now";
+  }
+
+  if (minutes < 60) {
+    return `${minutes} minute${minutes === 1 ? "" : "s"} ago`;
+  }
+
+  const hours = Math.floor(minutes / 60);
+
+  if (hours < 24) {
+    return `${hours} hour${hours === 1 ? "" : "s"} ago`;
+  }
+
+  const days = Math.floor(hours / 24);
+  return `${days} day${days === 1 ? "" : "s"} ago`;
+}
+
+function PayoutScreen() {
+  const { workflowState, payoutAmount, claimsHistory } = useAppContext();
 
   const latestClaim = claimsHistory[0] || null;
+  const latestAmount = payoutAmount || latestClaim?.amount || 0;
 
   const payoutMeta = useMemo(() => {
     if (workflowState === "approved") {
       return {
         badge: "Payout Successful",
-        description: "Funds are credited instantly after fraud-safe validation.",
+        description: "Funds credited from automated claim approval.",
         tone: "success"
       };
     }
@@ -36,10 +69,13 @@ export default function PayoutScreen() {
 
     return {
       badge: "Awaiting Trigger",
-      description: "Payout opens when disruption conditions cross policy thresholds.",
+      description: "Payout appears after a trigger-based approved claim.",
       tone: "info"
     };
   }, [workflowState]);
+
+  const payoutReason = latestClaim ? "Due to rainfall trigger" : "Awaiting rainfall trigger";
+  const payoutTime = latestClaim ? formatRelativeTime(latestClaim.createdAt) : "--";
 
   return (
     <SafeAreaView style={styles.screen}>
@@ -51,24 +87,29 @@ export default function PayoutScreen() {
         />
 
         <NeonCard glow variant="gradient">
-          <Text style={styles.highlightLabel}>Current Eligible Amount</Text>
-          <Text style={styles.highlightValue}>{formatRupee(payoutAmount || latestClaim?.amount || 0)}</Text>
-          <Text style={styles.highlightSub}>{payoutMeta.description}</Text>
+          <Text style={styles.highlightLabel}>Current Payout</Text>
+          <Text style={styles.highlightValue}>{`${formatRupee(latestAmount)} credited`}</Text>
+          <Text style={styles.highlightSub}>{payoutReason}</Text>
+          <Text style={styles.highlightSubMuted}>{payoutTime}</Text>
         </NeonCard>
 
         <NeonCard style={styles.sectionGap} variant="elevated">
-          <Text style={styles.sectionTitle}>Settlement Readiness</Text>
+          <Text style={styles.sectionTitle}>Settlement Details</Text>
           <View style={styles.row}>
             <Text style={styles.rowLabel}>Workflow State</Text>
             <Text style={styles.rowValue}>{workflowState.replaceAll("_", " ")}</Text>
           </View>
           <View style={styles.row}>
-            <Text style={styles.rowLabel}>Movement Score</Text>
-            <Text style={styles.rowValue}>{movementScore}</Text>
+            <Text style={styles.rowLabel}>Reason</Text>
+            <Text style={styles.rowValue}>{payoutReason}</Text>
           </View>
           <View style={styles.row}>
             <Text style={styles.rowLabel}>Latest Claim</Text>
             <Text style={styles.rowValue}>{latestClaim?.status || "No claim yet"}</Text>
+          </View>
+          <View style={styles.row}>
+            <Text style={styles.rowLabel}>Timestamp</Text>
+            <Text style={styles.rowValue}>{payoutTime}</Text>
           </View>
         </NeonCard>
       </ScrollView>
@@ -82,7 +123,7 @@ const styles = StyleSheet.create({
     flex: 1
   },
   content: {
-    paddingBottom: appTheme.spacing.xxl + 200,
+    paddingBottom: 80,
     paddingHorizontal: appTheme.spacing.sm,
     paddingTop: appTheme.spacing.md
   },
@@ -96,7 +137,7 @@ const styles = StyleSheet.create({
   highlightValue: {
     color: appTheme.colors.accentSuccess,
     fontFamily: "Orbitron_700Bold",
-    fontSize: 38,
+    fontSize: 42,
     marginTop: appTheme.spacing.xs
   },
   highlightSub: {
@@ -105,6 +146,12 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 22,
     marginTop: appTheme.spacing.sm
+  },
+  highlightSubMuted: {
+    color: appTheme.colors.textSecondary,
+    fontFamily: "Rajdhani_600SemiBold",
+    fontSize: 14,
+    marginTop: appTheme.spacing.xs
   },
   sectionGap: {
     marginTop: appTheme.spacing.md
@@ -135,3 +182,5 @@ const styles = StyleSheet.create({
     textTransform: "capitalize"
   }
 });
+
+export default memo(PayoutScreen);

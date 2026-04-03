@@ -8,32 +8,26 @@ import { appTheme } from "../styles/theme";
 
 const STATE_META = {
   idle: {
-    emoji: "🛰️",
     message: "Idle",
     tone: "info"
   },
   checking_conditions: {
-    emoji: "⚙️",
-    message: "Checking conditions",
+    message: "Checking",
     tone: "warning"
   },
   validating: {
-    emoji: "🧾",
-    message: "Validating eligibility",
+    message: "Validating",
     tone: "warning"
   },
   fraud_check: {
-    emoji: "🔍",
-    message: "Fraud check",
+    message: "Fraud Check",
     tone: "warning"
   },
   approved: {
-    emoji: "✅",
     message: "Approved",
     tone: "success"
   },
   flagged: {
-    emoji: "⚠️",
     message: "Flagged",
     tone: "danger"
   }
@@ -68,7 +62,7 @@ export default function StatusCard({ workflowState, payoutAmount, movementScore 
 
   const resolvedMessage = useMemo(() => {
     if (workflowState === "approved") {
-      return `Payout released: ₹${payoutAmount || 500} credited instantly.`;
+      return `Payout released: ₹${payoutAmount || 0} credited.`;
     }
 
     if (workflowState === "flagged") {
@@ -119,7 +113,7 @@ export default function StatusCard({ workflowState, payoutAmount, movementScore 
         <View style={styles.headerRow}>
           <Text style={styles.title}>Coverage Workflow</Text>
           <StatusBadge
-            label={`${statusMeta.emoji} ${statusMeta.message}`}
+            label={statusMeta.message}
             variant={statusMeta.tone === "info" ? "info" : statusMeta.tone}
             style={styles.badge}
           />
@@ -137,7 +131,7 @@ export default function StatusCard({ workflowState, payoutAmount, movementScore 
             tone="warning"
           />
         )}
-        {workflowState === "fraud_check" && (
+        {workflowState === "fraud_check" && movementScore !== null && movementScore !== undefined && (
           <Text style={styles.helperText}>{`Movement score: ${movementScore}`}</Text>
         )}
       </Card>
@@ -149,28 +143,28 @@ const styles = StyleSheet.create({
   card: {
     marginBottom: appTheme.spacing.lg,
     borderWidth: 0.8,
-    paddingVertical: 12
+    overflow: "hidden",
+    paddingHorizontal: 12,
+    paddingVertical: 10
   },
   headerRow: {
     alignItems: "flex-start",
-    flexDirection: "row",
-    flexWrap: "wrap",
-    justifyContent: "space-between",
-    marginBottom: appTheme.spacing.xs
+    flexDirection: "column",
+    marginBottom: 6
   },
   title: {
     color: appTheme.colors.textPrimary,
     fontFamily: "Orbitron_600SemiBold",
     fontSize: 15,
     letterSpacing: 0.2,
-    marginBottom: appTheme.spacing.xs,
-    paddingRight: appTheme.spacing.sm
+    marginBottom: 6
   },
   message: {
     color: appTheme.colors.textPrimary,
     fontFamily: "Rajdhani_600SemiBold",
-    fontSize: 15,
-    lineHeight: 20
+    fontSize: 14,
+    lineHeight: 20,
+    marginTop: 0
   },
   helperText: {
     color: appTheme.colors.textSecondary,
@@ -179,7 +173,7 @@ const styles = StyleSheet.create({
     marginTop: appTheme.spacing.xs
   },
   badge: {
-    flexBasis: "100%",
-    marginBottom: appTheme.spacing.xs
+    marginLeft: 0,
+    marginTop: 0
   }
 });

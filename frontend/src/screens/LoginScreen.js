@@ -109,8 +109,8 @@ function LoginScreen({ navigation }) {
           >
             <View style={styles.centeredContent}>
               <Card style={styles.authCard}>
-                <Text style={styles.title}>GigShield AI</Text>
-                <Text style={styles.subtitle}>Income Protection for Delivery Workers</Text>
+                <Text style={styles.title}>guardgig</Text>
+                <Text style={styles.subtitle}>AI Insurance for Delivery Workers</Text>
                 <Text style={styles.helperText}>Welcome back. Sign in to view your policy and risk dashboard.</Text>
 
                 <InputField

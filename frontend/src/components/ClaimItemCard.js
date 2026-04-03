@@ -11,11 +11,12 @@ function formatRupee(value) {
 
 export default function ClaimItemCard({ item, style }) {
   const isApproved = item.status === "Approved";
+  const claimType = item.type ? `${String(item.type).toUpperCase()} EVENT` : "RAIN EVENT";
 
   return (
     <NeonCard style={style} variant="elevated">
       <View style={styles.topRow}>
-        <Text numberOfLines={2} style={styles.trigger}>{item.event}</Text>
+        <Text numberOfLines={2} style={styles.trigger}>{claimType}</Text>
         <StatusBadge label={item.status} variant={isApproved ? "success" : "warning"} />
       </View>
       <Text style={[styles.payout, { color: isApproved ? appTheme.colors.semanticSafe : appTheme.colors.semanticWarning }]}>

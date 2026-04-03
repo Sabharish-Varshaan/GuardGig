@@ -1,46 +1,7 @@
-import { API_BASE_URL } from "../config/api";
-
-async function request(path, { method = "GET", body, token } = {}) {
-  const headers = {
-    "Content-Type": "application/json"
-  };
-
-  if (token) {
-    headers.Authorization = `Bearer ${token}`;
-  }
-
-  let response;
-
-  try {
-    response = await fetch(`${API_BASE_URL}${path}`, {
-      method,
-      headers,
-      body: body ? JSON.stringify(body) : undefined
-    });
-  } catch (_) {
-    throw new Error(
-      `Network request failed. Ensure backend is running and EXPO_PUBLIC_API_BASE_URL points to a reachable host (current: ${API_BASE_URL}).`
-    );
-  }
-
-  let payload = null;
-
-  try {
-    payload = await response.json();
-  } catch (_) {
-    payload = null;
-  }
-
-  if (!response.ok) {
-    const error = payload?.detail || payload?.message || "Request failed";
-    throw new Error(error);
-  }
-
-  return payload;
-}
+import { apiRequest } from "./apiClient";
 
 export async function registerUser({ fullName, phone, password }) {
-  return request("/api/auth/register", {
+  return apiRequest("/api/auth/register", {
     method: "POST",
     body: {
       full_name: fullName,
@@ -51,7 +12,7 @@ export async function registerUser({ fullName, phone, password }) {
 }
 
 export async function loginUser({ phone, password }) {
-  return request("/api/auth/login", {
+  return apiRequest("/api/auth/login", {
     method: "POST",
     body: {
       phone,
@@ -61,7 +22,7 @@ export async function loginUser({ phone, password }) {
 }
 
 export async function submitOnboardingProfile(payload, token) {
-  return request("/api/onboarding", {
+  return apiRequest("/api/onboarding", {
     method: "POST",
     token,
     body: {
@@ -79,7 +40,7 @@ export async function submitOnboardingProfile(payload, token) {
 }
 
 export async function getOnboardingProfile(token) {
-  return request("/api/onboarding/me", {
+  return apiRequest("/api/onboarding/me", {
     method: "GET",
     token
   });
