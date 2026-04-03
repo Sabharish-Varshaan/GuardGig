@@ -41,15 +41,11 @@ function InputField({
           autoCorrect={false}
           blurOnSubmit={blurOnSubmit}
           enablesReturnKeyAutomatically={enablesReturnKeyAutomatically}
-          onBlur={() => {
-            onBlur?.();
-          }}
+          onBlur={onBlur}
           keyboardType={keyboardType}
           multiline={multiline}
           onChangeText={onChangeText}
-          onFocus={() => {
-            onFocus?.();
-          }}
+          onFocus={onFocus}
           onSubmitEditing={onSubmitEditing}
           placeholder={placeholder}
           placeholderTextColor={appTheme.colors.textSecondary}

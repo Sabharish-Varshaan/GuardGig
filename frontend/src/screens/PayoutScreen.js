@@ -1,5 +1,5 @@
 import React, { memo, useMemo } from "react";
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { ScrollView, StyleSheet, Text } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import Header from "../components/Header";
@@ -90,31 +90,12 @@ function PayoutScreen() {
           rightElement={<StatusBadge label={payoutMeta.badge} variant={payoutMeta.tone} />}
         />
 
-        <NeonCard glow variant="gradient">
+        <NeonCard glow style={styles.payoutCard} variant="gradient">
           <Text style={styles.highlightLabel}>Current Payout</Text>
           <Text style={styles.highlightValue}>{formatRupee(latestAmount)}</Text>
           <Text style={styles.highlightSub}>{payoutReason}</Text>
           <Text style={styles.highlightSubMuted}>{payoutTime}</Text>
-        </NeonCard>
-
-        <NeonCard style={styles.sectionGap} variant="elevated">
-          <Text style={styles.sectionTitle}>Settlement Details</Text>
-          <View style={styles.row}>
-            <Text style={styles.rowLabel}>Workflow State</Text>
-            <Text style={styles.rowValue}>{workflowState.replaceAll("_", " ")}</Text>
-          </View>
-          <View style={styles.row}>
-            <Text style={styles.rowLabel}>Reason</Text>
-            <Text style={styles.rowValue}>{payoutReason}</Text>
-          </View>
-          <View style={styles.row}>
-            <Text style={styles.rowLabel}>Latest Claim</Text>
-            <Text style={styles.rowValue}>{latestClaim?.status || "no claim yet"}</Text>
-          </View>
-          <View style={styles.row}>
-            <Text style={styles.rowLabel}>Timestamp</Text>
-            <Text style={styles.rowValue}>{payoutTime}</Text>
-          </View>
+          <Text style={styles.stateMeta}>{payoutMeta.description}</Text>
         </NeonCard>
       </ScrollView>
     </SafeAreaView>
@@ -127,9 +108,15 @@ const styles = StyleSheet.create({
     flex: 1
   },
   content: {
+    justifyContent: "center",
+    minHeight: "100%",
     paddingBottom: 80,
     paddingHorizontal: appTheme.spacing.sm,
     paddingTop: appTheme.spacing.md
+  },
+  payoutCard: {
+    alignItems: "center",
+    paddingVertical: appTheme.spacing.xl
   },
   highlightLabel: {
     color: appTheme.colors.textSecondary,
@@ -141,13 +128,14 @@ const styles = StyleSheet.create({
   highlightValue: {
     color: appTheme.colors.accentSuccess,
     fontFamily: "Orbitron_700Bold",
-    fontSize: 42,
+    fontSize: 48,
     marginTop: appTheme.spacing.xs
   },
   highlightSub: {
     color: appTheme.colors.textPrimary,
     fontFamily: "Rajdhani_500Medium",
     fontSize: 15,
+    textAlign: "center",
     lineHeight: 22,
     marginTop: appTheme.spacing.sm
   },
@@ -155,35 +143,15 @@ const styles = StyleSheet.create({
     color: appTheme.colors.textSecondary,
     fontFamily: "Rajdhani_600SemiBold",
     fontSize: 14,
+    textAlign: "center",
     marginTop: appTheme.spacing.xs
   },
-  sectionGap: {
-    marginTop: appTheme.spacing.md
-  },
-  sectionTitle: {
-    color: appTheme.colors.textPrimary,
-    fontFamily: "Orbitron_600SemiBold",
-    fontSize: 18,
-    marginBottom: appTheme.spacing.md
-  },
-  row: {
-    alignItems: "center",
-    borderTopColor: appTheme.colors.borderSubtle,
-    borderTopWidth: 1,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    paddingVertical: appTheme.spacing.sm
-  },
-  rowLabel: {
+  stateMeta: {
     color: appTheme.colors.textSecondary,
     fontFamily: "Rajdhani_600SemiBold",
-    fontSize: 16
-  },
-  rowValue: {
-    color: appTheme.colors.textPrimary,
-    fontFamily: "Rajdhani_700Bold",
-    fontSize: 16,
-    textTransform: "capitalize"
+    fontSize: 14,
+    marginTop: appTheme.spacing.md,
+    textAlign: "center"
   }
 });
 

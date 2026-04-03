@@ -54,24 +54,13 @@ function OnboardingScreen({ navigation, route }) {
     vehicleType: "",
     workHours: "",
     dailyIncome: "",
-    weeklyIncome: "",
     riskPreference: "Medium"
   });
 
   const stepProgress = useMemo(() => ((step + 1) / 4) * 100, [step]);
 
   const updateField = useCallback((key, value) => {
-    setForm((prev) => {
-      const nextForm = { ...prev, [key]: value };
-
-      if (key === "dailyIncome") {
-        const parsedDaily = Number(value);
-        const weekly = parsedDaily > 0 ? parsedDaily * 7 : 0;
-        nextForm.weeklyIncome = weekly ? String(weekly) : "";
-      }
-
-      return nextForm;
-    });
+    setForm((prev) => ({ ...prev, [key]: value }));
   }, []);
 
   const handleFullNameChange = useCallback((value) => updateField("fullName", value), [updateField]);
@@ -268,12 +257,6 @@ function OnboardingScreen({ navigation, route }) {
                   onChangeText={handleDailyIncomeChange}
                   placeholder="Daily income in INR"
                   value={form.dailyIncome}
-                />
-                <InputField
-                  editable={false}
-                  keyboardType="number-pad"
-                  label="Weekly Income (Auto)"
-                  value={form.weeklyIncome}
                 />
               </View>
             )}

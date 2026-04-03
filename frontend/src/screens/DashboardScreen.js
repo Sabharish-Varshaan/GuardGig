@@ -86,6 +86,7 @@ function DashboardScreen({ navigation }) {
   const {
     user,
     policy,
+    policyLoading,
     risk,
     location,
     riskLoading,
@@ -125,6 +126,10 @@ function DashboardScreen({ navigation }) {
   const compactRiskLabel = useMemo(() => resolveRiskHeadline(risk.severity), [risk.severity]);
   const workflowMeta = useMemo(() => getWorkflowStatusMeta(workflowState), [workflowState]);
   const liveRiskLabel = riskLoading ? "CHECKING" : compactRiskLabel;
+  const policyReady = !policyLoading && !!policy;
+  const premiumValue = policyReady ? `${formatRupee(policy.premium)}/week` : "Loading...";
+  const weeklyIncomeValue = policyReady ? formatRupee(policy.weeklyIncome) : "Loading...";
+  const coverageValue = policyReady ? `${formatRupee(policy.coverageAmount)}/day` : "Loading...";
 
   const handleCheckCoverage = React.useCallback(async () => {
     const result = await startCoverageCheck();
@@ -147,13 +152,13 @@ function DashboardScreen({ navigation }) {
           <View style={[styles.summaryTopRow, isCompactScreen ? styles.summaryTopRowCompact : null]}>
             <View style={styles.summaryPrimaryBlock}>
               <Text style={styles.heroLabel}>Premium</Text>
-              <Text style={styles.heroValue}>{`${formatRupee(policy?.premium || 0)}/week`}</Text>
+              <Text style={styles.heroValue}>{premiumValue}</Text>
             </View>
             <StatusBadge label={liveRiskLabel} variant={riskVariant} />
           </View>
           <View style={[styles.summaryStatsRow, isCompactScreen ? styles.summaryStatsRowCompact : null]}>
-            <SummaryStat label="Weekly Income" value={formatRupee(policy?.weeklyIncome || Number(user.weeklyIncome) || 0)} />
-            <SummaryStat label="Daily Coverage" value="₹700/day" />
+            <SummaryStat label="Weekly Income" value={weeklyIncomeValue} />
+            <SummaryStat label="Daily Coverage" value={coverageValue} />
           </View>
         </Card>
 
@@ -197,19 +202,6 @@ function DashboardScreen({ navigation }) {
           <StatusBadge label={workflowMessage || workflowMeta.label} variant={workflowMeta.variant} />
         </View>
 
-        <View style={styles.actionGroup}>
-          <Button
-            onPress={() => navigation.navigate("Policy")}
-            title="View Policy"
-            variant="secondary"
-          />
-          <Button
-            onPress={() => navigation.navigate("Claims")}
-            style={styles.secondaryAction}
-            title="Open Claims"
-            variant="secondary"
-          />
-        </View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -358,11 +350,4 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 22
   },
-  actionGroup: {
-    marginBottom: appTheme.spacing.xxl,
-    marginTop: appTheme.spacing.sm
-  },
-  secondaryAction: {
-    marginTop: appTheme.spacing.md
-  }
 });

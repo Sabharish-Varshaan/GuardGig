@@ -30,11 +30,7 @@ export async function createClaim(token, payload) {
     token,
     body: {
       trigger_type: payload.triggerType,
-      severity: payload.severity,
-      lat: payload.lat,
-      lon: payload.lon,
-      activity_status: payload.activityStatus || "active",
-      location_valid: payload.locationValid !== false
+      severity: payload.severity
     }
   });
 }

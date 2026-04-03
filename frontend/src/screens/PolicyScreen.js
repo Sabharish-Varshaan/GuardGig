@@ -32,7 +32,8 @@ export default function PolicyScreen() {
     }, [refreshPolicy])
   );
 
-  const policyStatus = policy?.status === "active" ? "Active" : "Inactive";
+  const policyReady = !policyLoading && !!policy;
+  const policyStatus = policyReady ? (policy.status === "active" ? "Active" : "Inactive") : "Loading...";
 
   return (
     <SafeAreaView style={styles.screen}>
@@ -40,22 +41,22 @@ export default function PolicyScreen() {
         <Header
           subtitle="Your policy is synced from backend"
           title="Policy"
-          rightElement={<StatusBadge label={policyStatus} variant={policyStatus === "Active" ? "success" : "warning"} />}
+          rightElement={<StatusBadge label={policyStatus} variant={policyReady ? (policyStatus === "Active" ? "success" : "warning") : "info"} />}
         />
 
         <Card style={styles.cardGap}>
           <Text style={styles.cardTitle}>Policy Details</Text>
-          <Row label="Weekly Income" value={formatRupee(policy?.weeklyIncome || 0)} />
-          <Row label="Premium" value={`${formatRupee(policy?.premium || 0)}/week`} />
-          <Row label="Coverage" value="₹700/day" />
+          <Row label="Weekly Income" value={policyReady ? formatRupee(policy.weeklyIncome) : "Loading..."} />
+          <Row label="Premium" value={policyReady ? `${formatRupee(policy.premium)}/week` : "Loading..."} />
+          <Row label="Coverage" value={policyReady ? `${formatRupee(policy.coverageAmount)}/day` : "Loading..."} />
           <Row label="Status" value={policyStatus} />
-          <Row label="Eligibility" value={policy?.eligibilityStatus || "eligible"} />
-          <Row label="Worker Tier" value={policy?.workerTier || "medium"} />
+          <Row label="Eligibility" value={policyReady ? policy.eligibilityStatus : "Loading..."} />
+          <Row label="Worker Tier" value={policyReady ? policy.workerTier : "Loading..."} />
         </Card>
 
         <Card gradient style={styles.coverageCard}>
           <Text style={styles.coverageLabel}>Policy Start</Text>
-          <Text style={styles.coverageValue}>{policy?.policyStartDate || "--"}</Text>
+          <Text style={styles.coverageValue}>{policyReady ? policy.policyStartDate || "Unavailable" : "Loading..."}</Text>
           <Text style={styles.coverageSub}>{policyLoading ? "Refreshing policy..." : "Live backend policy"}</Text>
         </Card>
 
