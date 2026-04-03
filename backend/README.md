@@ -28,7 +28,8 @@ This service handles:
 Trigger checks use two external APIs:
 
 - Open-Meteo for rain (`hourly=rain`)
-- OpenWeather Air Pollution API for AQI (mapped to a numeric scale)
+- aqi.in city dashboard pages for live AQI when an India location can be resolved
+- OpenWeather Air Pollution API as a fallback when aqi.in is unavailable or cannot be parsed
 
 Severity rules:
 
@@ -109,7 +110,9 @@ APScheduler runs hourly.
 
 - Python 3.10+
 - Supabase project
-- OpenWeather API key
+- OpenWeather API key for AQI fallback
+
+The backend also needs network access to the public aqi.in city pages for the primary AQI lookup.
 
 Optional for demo validation:
 
@@ -240,11 +243,12 @@ Demo flow check:
 1. Set `APP_DEMO_MODE=true` before starting the backend.
 2. Create or log in with a test user.
 3. Verify `/api/policy/create` returns `status: "created"`.
-4. Verify `/api/trigger/check` returns `rain: 75` and `aqi: 320`.
+4. Verify `/api/trigger/check` returns `rain: 75` and an AQI value that matches the live aqi.in city page for the resolved location.
 5. Verify `/api/claim/create` succeeds with an approved claim.
 
 ## 6. Failure Handling Behavior
 
+- aqi.in lookup failure -> fallback to OpenWeather AQI, then safe values if both fail
 - External API failure -> safe fallback values (`rain=0`, `aqi=0`, no trigger)
 - Missing/invalid location -> no trigger result, server stays stable
 - Rule failures (waiting period, exclusions) -> structured 4xx messages

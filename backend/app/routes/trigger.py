@@ -1,7 +1,7 @@
 from fastapi import APIRouter
 from pydantic import BaseModel, ConfigDict
 
-from ..trigger_utils import check_trigger as evaluate_trigger, fetch_aqi, fetch_rain_mm
+from ..trigger_utils import check_trigger as evaluate_trigger, fetch_trigger_snapshot
 
 router = APIRouter(prefix="/api/trigger", tags=["trigger"])
 
@@ -26,8 +26,7 @@ class TriggerCheckResponse(BaseModel):
 @router.post("/check", response_model=TriggerCheckResponse)
 async def check_trigger(request: TriggerCheckRequest):
     try:
-        rain = await fetch_rain_mm(request.location, request.lat, request.lon)
-        aqi = await fetch_aqi(request.location, request.lat, request.lon)
+        rain, aqi = await fetch_trigger_snapshot(request.location, request.lat, request.lon)
         trigger = evaluate_trigger(rain, aqi)
         return TriggerCheckResponse(rain=rain, aqi=aqi, trigger=TriggerDecision(**trigger))
     except Exception:

@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import * as Location from "expo-location";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as SecureStore from "expo-secure-store";
@@ -222,6 +222,7 @@ export function AppProvider({ children }) {
   const [claimsLoading, setClaimsLoading] = useState(false);
   const [risk, setRisk] = useState(initialRisk);
   const [location, setLocation] = useState(initialLocation);
+  const locationRef = useRef(initialLocation);
   const [riskLoading, setRiskLoading] = useState(false);
   const [riskMessage, setRiskMessage] = useState("Awaiting live check");
   const [workflowState, setWorkflowState] = useState(WORKFLOW_STATES.idle);
@@ -231,6 +232,11 @@ export function AppProvider({ children }) {
   const [movementScore] = useState(null);
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [themeEnabled, setThemeEnabled] = useState(false);
+
+  // Keep location ref in sync with location state to avoid circular dependencies
+  useEffect(() => {
+    locationRef.current = location;
+  }, [location]);
 
   const applyAuthSession = useCallback((session) => {
     setAuthToken(session.access_token || "");
@@ -416,11 +422,10 @@ export function AppProvider({ children }) {
     setDataError("");
 
     try {
-      setRiskMessage("Checking live conditions...");
-      const resolvedLocation = locationOverride || (location.lat !== null && location.lon !== null ? location : await requestLocation());
+      const resolvedLocation = locationOverride || (locationRef.current.lat !== null && locationRef.current.lon !== null ? locationRef.current : await requestLocation());
 
       if (!resolvedLocation || resolvedLocation.lat === null || resolvedLocation.lon === null) {
-        setRiskMessage(location.error || "Location permission required");
+        setRiskMessage(locationRef.current.error || "Location permission required");
         return null;
       }
 
@@ -435,9 +440,15 @@ export function AppProvider({ children }) {
       const triggerType = trigger?.type || null;
       const detected = !!trigger?.trigger;
 
-      await sleep(180);
-      setRiskMessage("System evaluating eligibility...");
+      // Determine final status message based on trigger type
+      let finalStatusMessage = "No disruption detected";
+      if (triggerType === "rain") {
+        finalStatusMessage = "Heavy rain detected";
+      } else if (triggerType === "aqi") {
+        finalStatusMessage = "Air quality unsafe";
+      }
 
+      // Batch all state updates together to avoid multiple re-renders
       setRisk({
         rain,
         aqi,
@@ -453,13 +464,8 @@ export function AppProvider({ children }) {
         triggerType
       });
 
-      if (triggerType === "rain") {
-        setRiskMessage("Heavy rain detected");
-      } else if (triggerType === "aqi") {
-        setRiskMessage("Air quality unsafe");
-      } else {
-        setRiskMessage("No disruption detected");
-      }
+      // Single state update for message after risk data is set
+      setRiskMessage(finalStatusMessage);
 
       return {
         trigger,
@@ -471,15 +477,13 @@ export function AppProvider({ children }) {
       };
     } catch (error) {
       const message = toErrorMessage(error, "Failed to check trigger");
-      setRiskMessage("Retrying...");
-      await sleep(250);
       setRiskMessage(message);
       setDataError(message);
       throw error;
     } finally {
       setRiskLoading(false);
     }
-  }, [location, requestLocation]);
+  }, [requestLocation]);
 
   useEffect(() => {
     let mounted = true;
@@ -555,7 +559,7 @@ export function AppProvider({ children }) {
     return () => {
       mounted = false;
     };
-  }, [clearAuthState, clearPersistedSession, hydrateFromProfile, refreshClaims, refreshPolicy]);
+  }, []);
 
   const register = async (payload) => {
     setAuthLoading(true);

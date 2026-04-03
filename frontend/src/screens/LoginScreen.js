@@ -108,19 +108,6 @@ function LoginScreen({ navigation }) {
       });
       return;
     }
-
-    navigation.getParent()?.reset({
-      index: 0,
-      routes: [
-        {
-          name: "MainTabs",
-          state: {
-            index: 0,
-            routes: [{ name: "Home" }]
-          }
-        }
-      ]
-    });
   };
 
   return (
