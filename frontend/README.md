@@ -53,7 +53,7 @@ When `Check Coverage` is tapped:
 
 ## 2. Prerequisites
 
-- Node.js 18+
+- Node.js 20.19.4+
 - npm
 - Backend running at a reachable URL
 
