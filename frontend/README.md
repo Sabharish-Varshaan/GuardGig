@@ -2,6 +2,12 @@
 
 Expo React Native app for the GuardGig parametric insurance experience.
 
+## Hackathon Scope Note
+
+- Policy creation and payout behavior is currently mock/demo for hackathon delivery.
+- The payout shown in app screens is a simulated value from backend decision logic, not a live transfer.
+- Future production plan: integrate Stripe payouts and webhook-based payout status updates.
+
 This frontend is backend-driven: risk, trigger, claim, policy, and payout values are sourced from API responses, not calculated in UI.
 
 ## 1. Product Logic (What the App Is Doing)

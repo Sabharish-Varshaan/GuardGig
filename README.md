@@ -2,6 +2,12 @@
 # AI-Powered Parametric Insurance for Quick-Commerce Gig Workers
 [Jump to Phase 2](#phase-2-system-intelligence--automation)
 
+## Hackathon Scope Note
+
+- Policy creation and payout flows are currently implemented as mock/demo logic for hackathon purposes.
+- Current payout status and amounts are simulated from internal app/backend rules and are not connected to a real money movement provider.
+- Planned production integration: Stripe-based payout rails (for managed transfers and payout lifecycle tracking), with webhook-driven status synchronization.
+
 ## Local Setup (Backend + Frontend)
 
 This root section contains complete setup instructions for both backend and frontend, including local source implementation flow, dependencies, environment variables, verification, and troubleshooting.
