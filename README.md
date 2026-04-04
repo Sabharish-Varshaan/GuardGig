@@ -3,8 +3,7 @@
 
 ---
 [Jump to Phase 2]
-(## Phase 2: System Intelligence & Automation)
-
+(#Phase2)
 
 
 # Overview and Problem Statement
@@ -336,7 +335,7 @@ System response:
 * Operates as a production-ready, scalable system
 
 ---
-
+<a id="Phase 2"><\a>
 ## Phase 2: System Intelligence & Automation
 
 ## 1. Policy Integration
