@@ -1,5 +1,6 @@
 import React, { memo, useMemo } from "react";
 import { ScrollView, StyleSheet, Text } from "react-native";
+import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import Header from "../components/Header";
@@ -45,7 +46,18 @@ function formatRelativeTime(timestamp) {
 }
 
 function PayoutScreen() {
+  const tabBarHeight = useBottomTabBarHeight();
   const { workflowState, payoutAmount, claimsHistory, policy, eligibilityMessage } = useAppContext();
+  const contentStyle = useMemo(
+    () => ({
+      justifyContent: "center",
+      minHeight: "100%",
+      paddingBottom: tabBarHeight + 14,
+      paddingHorizontal: appTheme.spacing.sm,
+      paddingTop: appTheme.spacing.md
+    }),
+    [tabBarHeight]
+  );
 
   const latestClaim = claimsHistory[0] || null;
   const isCoverageEligible = !!policy && policy.status === "active" && policy.eligibilityStatus === "eligible";
@@ -94,7 +106,7 @@ function PayoutScreen() {
 
   return (
     <SafeAreaView style={styles.screen}>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={contentStyle} showsVerticalScrollIndicator={false}>
         <Header
           subtitle="Transparent payout visibility from trigger to settlement"
           title="Payout"

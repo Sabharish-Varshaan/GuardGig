@@ -1,5 +1,6 @@
 import React, { memo, useMemo } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import Card from "../components/Card";
@@ -9,7 +10,16 @@ import { useAppContext } from "../context/AppContext";
 import { appTheme } from "../styles/theme";
 
 function RiskScreen() {
+  const tabBarHeight = useBottomTabBarHeight();
   const { risk } = useAppContext();
+  const contentStyle = useMemo(
+    () => ({
+      paddingHorizontal: 20,
+      paddingTop: 20,
+      paddingBottom: tabBarHeight + 14
+    }),
+    [tabBarHeight]
+  );
 
   const bannerMeta = useMemo(() => {
     const severity = (risk.severity || "none").toLowerCase();
@@ -27,7 +37,7 @@ function RiskScreen() {
 
   return (
     <SafeAreaView style={styles.screen}>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={contentStyle} showsVerticalScrollIndicator={false}>
         <Header
           subtitle="Live conditions that influence your coverage"
           title="Risk"

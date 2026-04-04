@@ -1,6 +1,7 @@
 import React, { memo, useEffect, useMemo, useRef } from "react";
 import { ScrollView, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
+import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import Card from "../components/Card";
@@ -131,14 +132,24 @@ function DashboardScreen({ navigation }) {
     startCoverageCheck
   } = useAppContext();
   const { width } = useWindowDimensions();
+  const tabBarHeight = useBottomTabBarHeight();
+  const isMobileLayout = width < 768;
   const isCompactScreen = width < 390;
   const contentWidthStyle = useMemo(
     () => ({
       alignSelf: "center",
-      maxWidth: width >= 1200 ? 980 : 760,
+      maxWidth: width >= 1200 ? 980 : width >= 768 ? 760 : undefined,
       width: "100%"
     }),
     [width]
+  );
+  const contentSpacingStyle = useMemo(
+    () => ({
+      paddingBottom: tabBarHeight + 18,
+      paddingHorizontal: isMobileLayout ? 14 : 20,
+      paddingTop: isMobileLayout ? 14 : 20
+    }),
+    [isMobileLayout, tabBarHeight]
   );
   const autoCheckStartedRef = useRef(false);
   const policyReady = !policyLoading && !!policy;
@@ -208,7 +219,7 @@ function DashboardScreen({ navigation }) {
 
   return (
     <SafeAreaView style={styles.screen}>
-      <ScrollView contentContainerStyle={[styles.content, contentWidthStyle]} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={[styles.content, contentSpacingStyle, contentWidthStyle]} showsVerticalScrollIndicator={false}>
         <Header
           subtitle="Your income is protected"
           title={`Hello, ${user.fullName || "Worker"} 👋`}
@@ -282,9 +293,7 @@ const styles = StyleSheet.create({
     flex: 1
   },
   content: {
-    paddingBottom: 100,
-    paddingHorizontal: 20,
-    paddingTop: 20
+    flexGrow: 1
   },
   summaryCard: {
     marginBottom: appTheme.spacing.md

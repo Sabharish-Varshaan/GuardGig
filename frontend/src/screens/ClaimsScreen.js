@@ -1,6 +1,7 @@
 import React, { memo, useEffect, useMemo, useRef } from "react";
 import { Animated, FlatList, StyleSheet, Text, View } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
+import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
 import Card from "../components/Card";
@@ -23,6 +24,7 @@ function capitalizeStatus(value) {
 
 function ClaimsScreen({ navigation }) {
   const insets = useSafeAreaInsets();
+  const tabBarHeight = useBottomTabBarHeight();
   const {
     claimsHistory,
     workflowState,
@@ -55,9 +57,9 @@ function ClaimsScreen({ navigation }) {
     () => ({
       paddingHorizontal: appTheme.spacing.sm,
       paddingTop: appTheme.spacing.sm,
-      paddingBottom: 120 + insets.bottom
+      paddingBottom: tabBarHeight + insets.bottom + 20
     }),
-    [insets.bottom]
+    [insets.bottom, tabBarHeight]
   );
 
   const animateStateTransition = () => {

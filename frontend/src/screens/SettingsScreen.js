@@ -1,5 +1,6 @@
 import React from "react";
 import { ScrollView, StyleSheet, Switch, Text, View } from "react-native";
+import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import Card from "../components/Card";
@@ -25,16 +26,25 @@ function ToggleRow({ label, value, onValueChange, description }) {
 }
 
 export default function SettingsScreen() {
+  const tabBarHeight = useBottomTabBarHeight();
   const {
     notificationsEnabled,
     setNotificationsEnabled,
     themeEnabled,
     setThemeEnabled
   } = useAppContext();
+  const contentStyle = React.useMemo(
+    () => ({
+      paddingHorizontal: appTheme.spacing.lg,
+      paddingTop: appTheme.spacing.lg,
+      paddingBottom: tabBarHeight + 18
+    }),
+    [tabBarHeight]
+  );
 
   return (
     <SafeAreaView style={styles.screen}>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={contentStyle} showsVerticalScrollIndicator={false}>
         <Header
           subtitle="Control alerts and app preferences for your insurance experience"
           title="Settings"

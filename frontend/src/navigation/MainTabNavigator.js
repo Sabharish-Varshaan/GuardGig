@@ -1,6 +1,8 @@
 import React, { memo } from "react";
 import { Ionicons } from "@expo/vector-icons";
+import { useWindowDimensions } from "react-native";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import ClaimsScreen from "../screens/ClaimsScreen";
 import DashboardScreen from "../screens/DashboardScreen";
@@ -34,6 +36,11 @@ function TabIcon({ routeName, focused }) {
 }
 
 function MainTabNavigator() {
+  const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
+  const isMobileLayout = width < 768;
+  const computedTabBarHeight = isMobileLayout ? 62 + Math.max(insets.bottom, 6) : 84;
+
   return (
     <Tab.Navigator
       initialRouteName="Home"
@@ -48,20 +55,25 @@ function MainTabNavigator() {
           backgroundColor: appTheme.colors.tabGlass,
           borderColor: appTheme.colors.borderSubtle,
           borderTopWidth: 1,
-          borderRadius: appTheme.radius.card,
+          borderRadius: isMobileLayout ? 0 : appTheme.radius.card,
           elevation: 0,
-          height: 84,
-          marginBottom: 10,
-          marginHorizontal: 16,
-          paddingBottom: 12,
-          paddingTop: 10,
+          height: computedTabBarHeight,
+          marginBottom: isMobileLayout ? 0 : 10,
+          marginHorizontal: isMobileLayout ? 0 : 16,
+          paddingBottom: isMobileLayout ? Math.max(insets.bottom, 6) : 12,
+          paddingTop: isMobileLayout ? 8 : 10,
+          left: 0,
+          right: 0,
           ...appTheme.shadows.floating
         },
         tabBarLabelStyle: {
           ...appTheme.typography.caption,
           color: appTheme.colors.textSecondary,
-          fontSize: 12,
-          lineHeight: 14
+          fontSize: isMobileLayout ? 11 : 12,
+          lineHeight: isMobileLayout ? 13 : 14
+        },
+        tabBarItemStyle: {
+          paddingHorizontal: isMobileLayout ? 2 : 0
         },
         tabBarIcon: ({ focused }) => <TabIcon focused={focused} routeName={route.name} />
       })}

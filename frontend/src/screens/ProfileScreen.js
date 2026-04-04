@@ -1,5 +1,6 @@
 import React, { memo, useCallback, useState } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import Button from "../components/Button";
@@ -20,6 +21,7 @@ function ProfileRow({ label, value }) {
 }
 
 function ProfileScreen({ navigation }) {
+  const tabBarHeight = useBottomTabBarHeight();
   const { user, updateProfile, logout } = useAppContext();
   const [editing, setEditing] = useState(false);
   const [savedBanner, setSavedBanner] = useState(false);
@@ -47,9 +49,15 @@ function ProfileScreen({ navigation }) {
     }, appTheme.motion.duration.slow + 900);
   };
 
+  const contentStyle = {
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: tabBarHeight + 14
+  };
+
   return (
     <SafeAreaView style={styles.screen}>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={contentStyle} showsVerticalScrollIndicator={false}>
         <Header
           subtitle="Your account details and quick actions"
           title="Profile"

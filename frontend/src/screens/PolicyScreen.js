@@ -1,6 +1,7 @@
 import React from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
+import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import Card from "../components/Card";
@@ -23,7 +24,16 @@ function Row({ label, value }) {
 }
 
 export default function PolicyScreen() {
+  const tabBarHeight = useBottomTabBarHeight();
   const { policy, policyLoading, dataError, refreshPolicy, eligibilityMessage } = useAppContext();
+  const contentStyle = React.useMemo(
+    () => ({
+      paddingHorizontal: appTheme.spacing.lg,
+      paddingTop: appTheme.spacing.lg,
+      paddingBottom: tabBarHeight + 18
+    }),
+    [tabBarHeight]
+  );
 
   useFocusEffect(
     React.useCallback(() => {
@@ -37,7 +47,7 @@ export default function PolicyScreen() {
 
   return (
     <SafeAreaView style={styles.screen}>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={contentStyle} showsVerticalScrollIndicator={false}>
         <Header
           subtitle="Your policy is synced from backend"
           title="Policy"
