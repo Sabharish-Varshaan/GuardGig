@@ -433,12 +433,12 @@ export function AppProvider({ children }) {
         lat: resolvedLocation.lat,
         lon: resolvedLocation.lon
       });
+      console.log("[Coverage] trigger/check response", triggerResponse);
       const rain = Number(triggerResponse?.rain ?? 0);
       const aqi = Number(triggerResponse?.aqi ?? 0);
-      const trigger = triggerResponse?.trigger || { trigger: false };
-      const severity = trigger?.severity || null;
-      const triggerType = trigger?.type || null;
-      const detected = !!trigger?.trigger;
+      const severity = triggerResponse?.severity || null;
+      const triggerType = triggerResponse?.trigger_type || null;
+      const detected = !!triggerType;
 
       // Determine final status message based on trigger type
       let finalStatusMessage = "No disruption detected";
@@ -468,7 +468,11 @@ export function AppProvider({ children }) {
       setRiskMessage(finalStatusMessage);
 
       return {
-        trigger,
+        trigger: {
+          trigger: detected,
+          type: triggerType,
+          severity
+        },
         detected,
         rain,
         aqi,
@@ -716,7 +720,8 @@ export function AppProvider({ children }) {
 
     try {
       setWorkflowState(WORKFLOW_STATES.checking_conditions);
-      setWorkflowMessage("Checking conditions...");
+      setWorkflowMessage("System evaluating...");
+      console.log("[Coverage] startCoverageCheck invoked");
 
       const snapshot = await refreshRisk();
 
@@ -733,17 +738,17 @@ export function AppProvider({ children }) {
       }
 
       setWorkflowState(WORKFLOW_STATES.validating);
-      setWorkflowMessage("Trigger detected...");
+      setWorkflowMessage("Claim triggered automatically");
       await sleep(250);
-      setWorkflowMessage("Validating eligibility...");
 
       const claimResponse = await createClaim(authToken, {
         lat: snapshot.lat,
         lon: snapshot.lon
       });
+      console.log("[Coverage] claim/create response", claimResponse);
 
       setWorkflowState(WORKFLOW_STATES.fraud_check);
-      setWorkflowMessage("Processing claim...");
+      setWorkflowMessage("Processing...");
       await sleep(250);
 
       const createdClaim = normalizeClaim(claimResponse?.claim);
@@ -751,7 +756,7 @@ export function AppProvider({ children }) {
 
       if ((claimResponse?.claim?.status || "").toLowerCase() === "approved") {
         setWorkflowState(WORKFLOW_STATES.approved);
-        setWorkflowMessage("Claim Approved ✅");
+        setWorkflowMessage("Approved");
         setPayoutAmount(createdClaim.amount || 0);
         await Promise.allSettled([refreshClaims(authToken), refreshPolicy(authToken)]);
         return { success: true, approved: true, claim: createdClaim };

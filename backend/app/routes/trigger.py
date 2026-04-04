@@ -13,21 +13,22 @@ class TriggerCheckRequest(BaseModel):
     lon: float | None = None
 
 
-class TriggerDecision(BaseModel):
-    trigger: bool
-    type: str | None = None
-    severity: str | None = None
-
 class TriggerCheckResponse(BaseModel):
     rain: float
     aqi: float
-    trigger: TriggerDecision
+    trigger_type: str | None = None
+    severity: str | None = None
 
 @router.post("/check", response_model=TriggerCheckResponse)
 async def check_trigger(request: TriggerCheckRequest):
     try:
         rain, aqi = await fetch_trigger_snapshot(request.location, request.lat, request.lon)
         trigger = evaluate_trigger(rain, aqi)
-        return TriggerCheckResponse(rain=rain, aqi=aqi, trigger=TriggerDecision(**trigger))
+        return TriggerCheckResponse(
+            rain=rain,
+            aqi=aqi,
+            trigger_type=trigger.get("type"),
+            severity=trigger.get("severity")
+        )
     except Exception:
-        return TriggerCheckResponse(rain=0.0, aqi=0.0, trigger=TriggerDecision(trigger=False))
+        return TriggerCheckResponse(rain=0.0, aqi=0.0, trigger_type=None, severity=None)

@@ -1,9 +1,8 @@
-import React, { memo, useMemo } from "react";
+import React, { memo, useEffect, useMemo, useRef } from "react";
 import { ScrollView, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import Button from "../components/Button";
 import Card from "../components/Card";
 import Header from "../components/Header";
 import StatusBadge from "../components/StatusBadge";
@@ -89,19 +88,19 @@ function resolveRiskHeadline(severity) {
 
 function getWorkflowStatusMeta(workflowState) {
   if (workflowState === "checking_conditions") {
-    return { label: "Checking conditions...", variant: "info" };
+    return { label: "System evaluating...", variant: "info" };
   }
 
   if (workflowState === "validating") {
-    return { label: "Validating eligibility...", variant: "info" };
+    return { label: "Claim triggered automatically", variant: "info" };
   }
 
   if (workflowState === "fraud_check") {
-    return { label: "Processing claim...", variant: "warning" };
+    return { label: "Processing...", variant: "warning" };
   }
 
   if (workflowState === "approved") {
-    return { label: "Claim Approved ✅", variant: "success" };
+    return { label: "Approved", variant: "success" };
   }
 
   if (workflowState === "flagged") {
@@ -122,7 +121,6 @@ function DashboardScreen({ navigation }) {
     riskMessage,
     workflowState,
     workflowMessage,
-    coverageLoading,
     claimsHistory,
     eligibilityMessage,
     requestLocation,
@@ -131,6 +129,10 @@ function DashboardScreen({ navigation }) {
   } = useAppContext();
   const { width } = useWindowDimensions();
   const isCompactScreen = width < 390;
+  const autoCheckStartedRef = useRef(false);
+  const policyReady = !policyLoading && !!policy;
+  const isCoverageEligible =
+    policyReady && policy.status === "active" && policy.eligibilityStatus === "eligible";
 
   useFocusEffect(
     React.useCallback(() => {
@@ -153,13 +155,31 @@ function DashboardScreen({ navigation }) {
     }, [refreshRisk, requestLocation])
   );
 
+  useEffect(() => {
+    if (autoCheckStartedRef.current) {
+      return;
+    }
+
+    if (!isCoverageEligible) {
+      return;
+    }
+
+    autoCheckStartedRef.current = true;
+
+    const runAutoFlow = async () => {
+      const result = await startCoverageCheck();
+      if (result?.approved) {
+        navigation.navigate("Payout");
+      }
+    };
+
+    runAutoFlow().catch(() => {});
+  }, [isCoverageEligible, navigation, startCoverageCheck]);
+
   const riskVariant = useMemo(() => getVariantFromRiskLevel(risk.level), [risk.level]);
   const compactRiskLabel = useMemo(() => resolveRiskHeadline(risk.severity), [risk.severity]);
   const workflowMeta = useMemo(() => getWorkflowStatusMeta(workflowState), [workflowState]);
   const liveRiskLabel = riskLoading ? "CHECKING" : compactRiskLabel;
-  const policyReady = !policyLoading && !!policy;
-  const isCoverageEligible =
-    policyReady && policy.status === "active" && policy.eligibilityStatus === "eligible";
   const premiumValue = policyReady ? `${formatRupee(policy.premium)}/week` : "Loading...";
   const meanIncomeValue = policyReady ? `${formatRupee(policy.meanIncome)}/day` : "Loading...";
   const coverageValue = policyReady ? `${formatRupee(policy.coverageAmount)}/day` : "Loading...";
@@ -174,17 +194,6 @@ function DashboardScreen({ navigation }) {
 
     return [workflowEvent, riskEvent, ...claimEvents].filter(Boolean);
   }, [claimsHistory, riskMessage, workflowMessage]);
-
-  const handleCheckCoverage = React.useCallback(async () => {
-    if (!isCoverageEligible) {
-      return;
-    }
-
-    const result = await startCoverageCheck();
-    if (result?.approved) {
-      navigation.navigate("Payout");
-    }
-  }, [isCoverageEligible, navigation, startCoverageCheck]);
 
   return (
     <SafeAreaView style={styles.screen}>
@@ -243,14 +252,6 @@ function DashboardScreen({ navigation }) {
             ))
           )}
         </Card>
-
-        <Button
-          disabled={coverageLoading || !isCoverageEligible}
-          loading={coverageLoading}
-          onPress={handleCheckCoverage}
-          style={styles.primaryAction}
-          title={isCoverageEligible ? "Check Coverage" : "Coverage Locked"}
-        />
 
         <View style={styles.inlineStatusRow}>
           <Text style={styles.inlineStatusLabel}>Workflow</Text>
@@ -370,11 +371,6 @@ const styles = StyleSheet.create({
     color: appTheme.colors.accentPrimary,
     fontFamily: "Rajdhani_700Bold",
     fontSize: 15
-  },
-  primaryAction: {
-    marginBottom: appTheme.spacing.sm,
-    marginTop: appTheme.spacing.sm,
-    width: "100%"
   },
   inlineStatusRow: {
     alignItems: "center",
