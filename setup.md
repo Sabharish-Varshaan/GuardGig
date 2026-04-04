@@ -1,3 +1,30 @@
+
+## Railway Deployment
+
+Deploy backend and frontend as two separate Railway services from the same repository.
+
+### Backend service
+
+1. In Railway, create a new service from this repo.
+2. Set Root Directory to `backend`.
+3. Railway will use `backend/railway.json` automatically.
+4. Add required backend environment variables (`SUPABASE_*`, `JWT_SECRET`, `OPENWEATHER_API_KEY`, etc.).
+5. Deploy and verify health endpoint at `/api/health`.
+
+### Frontend PWA service
+
+1. Create another Railway service from the same repo.
+2. Set Root Directory to `frontend`.
+3. Railway will use `frontend/railway.json` and run:
+	- Build: `npm ci && npm run build:web`
+	- Start: `npm run start:railway`
+4. Set `EXPO_PUBLIC_API_BASE_URL` to the deployed backend URL.
+5. Redeploy frontend and test install/offline behavior in browser.
+
+### Notes
+
+- Frontend is served as a static SPA using `serve` with Railway-provided `$PORT`.
+- Keep frontend and backend on separate Railway domains/services for easier scaling and logs.
 # GuardGig Setup
 
 This file is the single quick-start guide for running both services.
