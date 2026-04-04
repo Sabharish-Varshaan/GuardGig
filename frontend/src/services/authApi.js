@@ -36,17 +36,10 @@ export async function submitOnboardingProfile(payload, token) {
     risk_preference: payload.riskPreference
   };
 
-  console.log("[Onboarding] Request payload", requestBody);
-
   const response = await apiRequest("/api/onboarding", {
     method: "POST",
     token,
     body: requestBody
-  });
-
-  console.log("[Onboarding] Response profile fields", {
-    mean_income: response?.profile?.mean_income,
-    income_variance: response?.profile?.income_variance
   });
 
   return response;

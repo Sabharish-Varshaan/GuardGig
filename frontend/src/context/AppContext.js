@@ -206,6 +206,42 @@ const toBooleanFlag = (value) => {
   return Boolean(value);
 };
 
+const getSecureItem = async (key) => {
+  if (typeof SecureStore?.getItemAsync !== "function") {
+    return null;
+  }
+
+  try {
+    return await SecureStore.getItemAsync(key);
+  } catch (_error) {
+    return null;
+  }
+};
+
+const setSecureItem = async (key, value) => {
+  if (typeof SecureStore?.setItemAsync !== "function") {
+    return;
+  }
+
+  try {
+    await SecureStore.setItemAsync(key, value);
+  } catch (_error) {
+    // SecureStore can be unavailable on some web runtimes.
+  }
+};
+
+const deleteSecureItem = async (key) => {
+  if (typeof SecureStore?.deleteItemAsync !== "function") {
+    return;
+  }
+
+  try {
+    await SecureStore.deleteItemAsync(key);
+  } catch (_error) {
+    // SecureStore can be unavailable on some web runtimes.
+  }
+};
+
 export function AppProvider({ children }) {
   const [authInitializing, setAuthInitializing] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -258,20 +294,20 @@ export function AppProvider({ children }) {
 
     if (!accessToken || !userId) {
       await AsyncStorage.removeItem(STORAGE_KEYS.token);
-      await SecureStore.deleteItemAsync(STORAGE_KEYS.accessToken);
-      await SecureStore.deleteItemAsync(STORAGE_KEYS.userId);
+      await deleteSecureItem(STORAGE_KEYS.accessToken);
+      await deleteSecureItem(STORAGE_KEYS.userId);
       return;
     }
 
     await AsyncStorage.setItem(STORAGE_KEYS.token, accessToken);
-    await SecureStore.setItemAsync(STORAGE_KEYS.accessToken, accessToken);
-    await SecureStore.setItemAsync(STORAGE_KEYS.userId, userId);
+    await setSecureItem(STORAGE_KEYS.accessToken, accessToken);
+    await setSecureItem(STORAGE_KEYS.userId, userId);
   }, []);
 
   const clearPersistedSession = useCallback(async () => {
     await AsyncStorage.removeItem(STORAGE_KEYS.token);
-    await SecureStore.deleteItemAsync(STORAGE_KEYS.accessToken);
-    await SecureStore.deleteItemAsync(STORAGE_KEYS.userId);
+    await deleteSecureItem(STORAGE_KEYS.accessToken);
+    await deleteSecureItem(STORAGE_KEYS.userId);
   }, []);
 
   const hydrateFromProfile = useCallback((profile) => {
@@ -433,7 +469,6 @@ export function AppProvider({ children }) {
         lat: resolvedLocation.lat,
         lon: resolvedLocation.lon
       });
-      console.log("[Coverage] trigger/check response", triggerResponse);
       const rain = Number(triggerResponse?.rain ?? 0);
       const aqi = Number(triggerResponse?.aqi ?? 0);
       const severity = triggerResponse?.severity || null;
@@ -497,8 +532,8 @@ export function AppProvider({ children }) {
 
       try {
         const [secureAccessToken, secureUserId, asyncToken] = await Promise.all([
-          SecureStore.getItemAsync(STORAGE_KEYS.accessToken),
-          SecureStore.getItemAsync(STORAGE_KEYS.userId),
+          getSecureItem(STORAGE_KEYS.accessToken),
+          getSecureItem(STORAGE_KEYS.userId),
           AsyncStorage.getItem(STORAGE_KEYS.token)
         ]);
         const accessToken = secureAccessToken || asyncToken || "";
@@ -506,7 +541,6 @@ export function AppProvider({ children }) {
 
         if (!accessToken) {
           if (mounted) {
-            console.log("Current user:", null);
             setAuthInitializing(false);
           }
           return;
@@ -529,7 +563,6 @@ export function AppProvider({ children }) {
           hydrateFromProfile(onboardingData.profile || {});
           setPendingOnboardingUser(null);
           setIsAuthenticated(true);
-          console.log("Current user:", { token: "present", onboardingCompleted: true });
           await Promise.allSettled([
             refreshPolicy(accessToken),
             refreshClaims(accessToken)
@@ -540,7 +573,6 @@ export function AppProvider({ children }) {
             fullName: initialUser.fullName
           });
           setIsAuthenticated(false);
-          console.log("Current user:", { token: "present", onboardingCompleted: false });
         }
       } catch (_error) {
         if (!mounted) {
@@ -550,7 +582,6 @@ export function AppProvider({ children }) {
         clearAuthState();
         setIsAuthenticated(false);
         await clearPersistedSession();
-        console.log("Current user:", null);
       } finally {
         if (mounted) {
           setAuthInitializing(false);
@@ -607,7 +638,6 @@ export function AppProvider({ children }) {
       await persistSession(session);
 
       setUser((prev) => ({ ...prev, phone, token: session.access_token || "" }));
-      console.log("Current user:", { token: session.access_token ? "present" : "missing", phone });
 
       if (hasCompletedOnboarding) {
         const onboardingData = await getOnboardingProfile(session.access_token);
@@ -664,7 +694,6 @@ export function AppProvider({ children }) {
 
       setPendingOnboardingUser(null);
       setIsAuthenticated(true);
-      console.log("Current user:", { token: authToken ? "present" : "missing", onboardingCompleted: true });
       return { success: true };
     } catch (error) {
       const message = toErrorMessage(error, "Onboarding submit failed");
@@ -692,7 +721,6 @@ export function AppProvider({ children }) {
     setWorkflowState(WORKFLOW_STATES.idle);
     setWorkflowMessage("No active claim check");
     setIsAuthenticated(false);
-    console.log("Current user:", null);
   };
 
   const startCoverageCheck = useCallback(async () => {
@@ -721,7 +749,6 @@ export function AppProvider({ children }) {
     try {
       setWorkflowState(WORKFLOW_STATES.checking_conditions);
       setWorkflowMessage("System evaluating...");
-      console.log("[Coverage] startCoverageCheck invoked");
 
       const snapshot = await refreshRisk();
 
@@ -745,7 +772,6 @@ export function AppProvider({ children }) {
         lat: snapshot.lat,
         lon: snapshot.lon
       });
-      console.log("[Coverage] claim/create response", claimResponse);
 
       if ((claimResponse?.status || "").toLowerCase() === "rejected") {
         const rejectionReason = (claimResponse?.reason || "").toLowerCase();

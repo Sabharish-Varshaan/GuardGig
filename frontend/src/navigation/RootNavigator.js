@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useRef, useState } from "react";
 import {
   NavigationContainer,
   DefaultTheme,
@@ -35,10 +35,6 @@ export default function RootNavigator() {
   const routeNameRef = useRef("");
 
   useEffect(() => {
-    console.log("Current user:", isAuthenticated ? "authenticated" : "unauthenticated");
-  }, [isAuthenticated]);
-
-  useEffect(() => {
     if (authInitializing) {
       return undefined;
     }
@@ -62,13 +58,11 @@ export default function RootNavigator() {
       theme={navigationTheme}
       onReady={() => {
         routeNameRef.current = navigationRef.getCurrentRoute()?.name || "unknown";
-        console.log("Navigation state:", routeNameRef.current);
       }}
       onStateChange={() => {
         const routeName = navigationRef.getCurrentRoute()?.name || "unknown";
         if (routeNameRef.current !== routeName) {
           routeNameRef.current = routeName;
-          console.log("Navigation state:", routeName);
         }
       }}
     >

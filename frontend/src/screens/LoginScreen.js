@@ -91,7 +91,6 @@ function LoginScreen({ navigation }) {
 
     await AsyncStorage.setItem("token", result.accessToken);
     updateProfile({ token: result.accessToken });
-    console.log("LOGIN SUCCESS, TOKEN SET");
 
     if (!result.onboardingCompleted) {
       navigation.reset({
