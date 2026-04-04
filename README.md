@@ -2,8 +2,7 @@
 # AI-Powered Parametric Insurance for Quick-Commerce Gig Workers
 
 ---
-[Jump to Phase 2]
-(#Phase2)
+[Jump to Phase 2](#phase-2-system-intelligence--automation)
 
 
 # Overview and Problem Statement
