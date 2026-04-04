@@ -19,6 +19,7 @@ from .routes.premium import router as premium_router
 from .routes.trigger import router as trigger_router
 from .routes.claim import router as claim_router
 from .routes.fraud import router as fraud_router
+from .routes.ml_demo import router as ml_demo_router
 from .supabase_client import get_admin_client
 from .trigger_utils import check_trigger, fetch_aqi, fetch_rain_mm
 
@@ -193,3 +194,4 @@ app.include_router(premium_router)
 app.include_router(trigger_router)
 app.include_router(claim_router)
 app.include_router(fraud_router)
+app.include_router(ml_demo_router)

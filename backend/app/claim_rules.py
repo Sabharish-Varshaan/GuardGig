@@ -63,16 +63,37 @@ def fetch_recent_claim_count(admin, claims_table: str, user_id: str, lookback_da
 
 
 def calculate_fraud_score(activity_status: str, location_valid: bool, claim_frequency: int) -> float:
+    """Calculate fraud score.
+
+    This function will attempt to use a trained fraud model (if present) via
+    `backend.ml.predict.get_fraud_score`. If not available or prediction fails,
+    the previous heuristic is used.
+    """
     claim_frequency = max(0, claim_frequency)
-    score = min(0.5, claim_frequency / 20.0)
 
-    if activity_status.lower() in {"none", "inactive", "no_activity", "suspicious"}:
-        score += 0.4
+    try:
+        # lazy import to avoid hard dependency when models are not present
+        from ml.predict import get_fraud_score
 
-    if not location_valid:
-        score += 0.3
+        features = {
+            "number_of_claims_today": float(claim_frequency),
+            "time_since_last_claim": 0.0,  # unknown in this call site; keep 0 as conservative estimate
+            "location_change": 0.0 if location_valid else 1.0,
+            "activity_status": activity_status,
+        }
+        score = float(get_fraud_score(features))
+        return min(1.0, max(0.0, round(score, 2)))
+    except Exception:
+        # Fallback to previous heuristic
+        score = min(0.5, claim_frequency / 20.0)
 
-    return min(1.0, round(score, 2))
+        if activity_status.lower() in {"none", "inactive", "no_activity", "suspicious"}:
+            score += 0.4
+
+        if not location_valid:
+            score += 0.3
+
+        return min(1.0, round(score, 2))
 
 
 def enforce_exclusions(activity_status: str, location_valid: bool, fraud_score: float, fraud_threshold: float) -> None:
