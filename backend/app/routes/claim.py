@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
+from ml.predict import get_fraud_score
 
 from ..claim_rules import (
-    calculate_fraud_score,
     enforce_exclusions,
     enforce_max_one_claim_per_day,
     enforce_waiting_period,
@@ -101,11 +101,18 @@ async def create_claim(request: ClaimCreateRequest, current_user: dict = Depends
 
     recent_claim_count = 0 if settings.demo_mode else fetch_recent_claim_count(admin, settings.supabase_claims_table, current_user["id"])
     effective_location_valid = _coordinates_are_valid(request.lat, request.lon)
-    fraud_score = calculate_fraud_score(
-        activity_status=request.activity_status,
-        location_valid=effective_location_valid,
-        claim_frequency=recent_claim_count,
-    )
+    features = {
+        "number_of_claims_today": float(recent_claim_count),
+        "time_since_last_claim": 0.0,
+        "location_change": 0.0 if effective_location_valid else 1.0,
+        "activity_status": request.activity_status,
+    }
+    fraud_score = float(get_fraud_score(features))
+    fraud_score = min(1.0, max(0.0, round(fraud_score, 2)))
+    print("ML fraud_score:", fraud_score)
+
+    if fraud_score > 0.7:
+        return ClaimRejectedResponse(status="rejected", reason="High fraud risk")
 
     if not settings.demo_mode:
         try:
