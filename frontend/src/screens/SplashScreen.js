@@ -37,7 +37,7 @@ export default function SplashScreen() {
         <Animated.View style={[styles.logoCircle, { transform: [{ scale: pulseAnim }] }]}>
           <Text style={styles.logoEmoji}>🛡️</Text>
         </Animated.View>
-        <Text style={styles.title}>GigShield AI</Text>
+        <Text style={styles.title}>GuardGig</Text>
         <Text style={styles.subtitle}>Parametric Insurance for Gig Workers</Text>
         <View style={styles.loadingTrack}>
           <Animated.View style={[styles.loadingBar, { transform: [{ scaleX: pulseAnim }] }]} />
