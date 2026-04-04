@@ -26,6 +26,7 @@ function ClaimsScreen({ navigation }) {
   const {
     claimsHistory,
     workflowState,
+    workflowMessage,
     payoutAmount,
     movementScore,
     policy,
@@ -34,6 +35,7 @@ function ClaimsScreen({ navigation }) {
     refreshClaims,
     dataError
   } = useAppContext();
+  const alreadyDoneMessage = (workflowMessage || "").toLowerCase().includes("already");
 
   useFocusEffect(
     React.useCallback(() => {
@@ -101,6 +103,7 @@ function ClaimsScreen({ navigation }) {
 
               <StatusCard
                 workflowState={workflowState}
+                workflowMessage={workflowMessage}
                 movementScore={movementScore}
                 payoutAmount={payoutAmount}
               />
@@ -114,7 +117,9 @@ function ClaimsScreen({ navigation }) {
                       {latestClaim.amount > 0
                         ? `${formatRupee(latestClaim.amount)} Credited 🎉`
                         : latestClaim.status === "rejected"
-                          ? "Conditions not met"
+                          ? alreadyDoneMessage
+                            ? "Claim is already done"
+                            : "Conditions not met"
                           : "Verification Pending"}
                     </Text>
                     <StatusBadge

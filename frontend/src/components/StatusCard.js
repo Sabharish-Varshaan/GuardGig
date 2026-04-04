@@ -52,13 +52,20 @@ const toneStyleMap = {
   }
 };
 
-export default function StatusCard({ workflowState, payoutAmount, movementScore }) {
+export default function StatusCard({ workflowState, workflowMessage, payoutAmount, movementScore }) {
   const fade = useRef(new Animated.Value(0)).current;
   const slide = useRef(new Animated.Value(8)).current;
 
   const statusMeta = useMemo(() => {
+    if (workflowState === "flagged" && workflowMessage) {
+      return {
+        message: workflowMessage,
+        tone: "danger"
+      };
+    }
+
     return STATE_META[workflowState] || STATE_META.idle;
-  }, [workflowState]);
+  }, [workflowMessage, workflowState]);
 
   const resolvedMessage = useMemo(() => {
     if (workflowState === "approved") {
@@ -66,6 +73,9 @@ export default function StatusCard({ workflowState, payoutAmount, movementScore 
     }
 
     if (workflowState === "flagged") {
+      if (workflowMessage) {
+        return workflowMessage;
+      }
       return "Conditions not met for automated claim approval.";
     }
 
@@ -82,7 +92,7 @@ export default function StatusCard({ workflowState, payoutAmount, movementScore 
     }
 
     return "System idle. Tap Check Coverage to run automated verification.";
-  }, [workflowState, payoutAmount]);
+  }, [workflowMessage, workflowState, payoutAmount]);
 
   const isInProgress =
     workflowState === "checking_conditions" ||

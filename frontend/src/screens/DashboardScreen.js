@@ -86,7 +86,7 @@ function resolveRiskHeadline(severity) {
   return "SAFE CONDITIONS";
 }
 
-function getWorkflowStatusMeta(workflowState) {
+function getWorkflowStatusMeta(workflowState, workflowMessage) {
   if (workflowState === "checking_conditions") {
     return { label: "System evaluating...", variant: "info" };
   }
@@ -104,6 +104,9 @@ function getWorkflowStatusMeta(workflowState) {
   }
 
   if (workflowState === "flagged") {
+    if ((workflowMessage || "").toLowerCase().includes("already")) {
+      return { label: "Claim is already done", variant: "danger" };
+    }
     return { label: "Conditions not met", variant: "danger" };
   }
 
@@ -178,7 +181,7 @@ function DashboardScreen({ navigation }) {
 
   const riskVariant = useMemo(() => getVariantFromRiskLevel(risk.level), [risk.level]);
   const compactRiskLabel = useMemo(() => resolveRiskHeadline(risk.severity), [risk.severity]);
-  const workflowMeta = useMemo(() => getWorkflowStatusMeta(workflowState), [workflowState]);
+  const workflowMeta = useMemo(() => getWorkflowStatusMeta(workflowState, workflowMessage), [workflowMessage, workflowState]);
   const liveRiskLabel = riskLoading ? "CHECKING" : compactRiskLabel;
   const premiumValue = policyReady ? `${formatRupee(policy.premium)}/week` : "Loading...";
   const meanIncomeValue = policyReady ? `${formatRupee(policy.meanIncome)}/day` : "Loading...";
@@ -255,7 +258,7 @@ function DashboardScreen({ navigation }) {
 
         <View style={styles.inlineStatusRow}>
           <Text style={styles.inlineStatusLabel}>Workflow</Text>
-          <StatusBadge label={workflowMessage || workflowMeta.label} variant={workflowMeta.variant} />
+            <StatusBadge label={workflowMessage} variant={workflowMeta.variant} />
         </View>
 
       </ScrollView>

@@ -747,6 +747,20 @@ export function AppProvider({ children }) {
       });
       console.log("[Coverage] claim/create response", claimResponse);
 
+      if ((claimResponse?.status || "").toLowerCase() === "rejected") {
+        const rejectionReason = (claimResponse?.reason || "").toLowerCase();
+
+        if (rejectionReason.includes("daily claim limit reached") || rejectionReason.includes("already")) {
+          setWorkflowState(WORKFLOW_STATES.flagged);
+          setWorkflowMessage("Claim is already done");
+          return { success: true, approved: false, reason: "already_done" };
+        }
+
+        setWorkflowState(WORKFLOW_STATES.flagged);
+        setWorkflowMessage(claimResponse?.reason || "Conditions not met");
+        return { success: true, approved: false, reason: "not_met" };
+      }
+
       setWorkflowState(WORKFLOW_STATES.fraud_check);
       setWorkflowMessage("Processing...");
       await sleep(250);
@@ -777,11 +791,18 @@ export function AppProvider({ children }) {
 
       if (
         normalized.includes("waiting") ||
+        normalized.includes("daily claim limit reached") ||
         normalized.includes("max one claim") ||
+        normalized.includes("already") ||
         normalized.includes("verification") ||
         normalized.includes("excluded")
       ) {
         setWorkflowState(WORKFLOW_STATES.flagged);
+        if (normalized.includes("daily claim limit reached") || normalized.includes("already")) {
+          setWorkflowMessage("Claim is already done");
+          return { success: true, approved: false, reason: "already_done" };
+        }
+
         setWorkflowMessage("Conditions not met");
         return { success: true, approved: false, reason: "not_met" };
       }
