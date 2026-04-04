@@ -132,6 +132,14 @@ function DashboardScreen({ navigation }) {
   } = useAppContext();
   const { width } = useWindowDimensions();
   const isCompactScreen = width < 390;
+  const contentWidthStyle = useMemo(
+    () => ({
+      alignSelf: "center",
+      maxWidth: width >= 1200 ? 980 : 760,
+      width: "100%"
+    }),
+    [width]
+  );
   const autoCheckStartedRef = useRef(false);
   const policyReady = !policyLoading && !!policy;
   const isCoverageEligible =
@@ -200,7 +208,7 @@ function DashboardScreen({ navigation }) {
 
   return (
     <SafeAreaView style={styles.screen}>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={[styles.content, contentWidthStyle]} showsVerticalScrollIndicator={false}>
         <Header
           subtitle="Your income is protected"
           title={`Hello, ${user.fullName || "Worker"} 👋`}

@@ -6,7 +6,8 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  View
+  View,
+  useWindowDimensions
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -46,6 +47,8 @@ function OnboardingScreen({ navigation, route }) {
   const [step, setStep] = useState(0);
   const [showCityDropdown, setShowCityDropdown] = useState(false);
   const [errors, setErrors] = useState({});
+  const { width } = useWindowDimensions();
+  const contentWidth = width >= 1200 ? 900 : width >= 768 ? 760 : undefined;
   const [form, setForm] = useState({
     fullName: route.params?.fullName || pendingOnboardingUser?.fullName || "",
     age: "",
@@ -142,7 +145,7 @@ function OnboardingScreen({ navigation, route }) {
     <SafeAreaView style={styles.screen}>
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.flex}>
         <ScrollView
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={[styles.scrollContent, contentWidth ? { maxWidth: contentWidth } : null]}
           keyboardDismissMode="none"
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
@@ -338,9 +341,11 @@ const styles = StyleSheet.create({
     flex: 1
   },
   scrollContent: {
+    alignSelf: "center",
     paddingHorizontal: appTheme.spacing.lg,
     paddingTop: appTheme.spacing.lg,
-    paddingBottom: 150
+    paddingBottom: 150,
+    width: "100%"
   },
   progressCard: {
     marginBottom: appTheme.spacing.md,

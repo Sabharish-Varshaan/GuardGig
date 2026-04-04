@@ -1,5 +1,5 @@
 import React, { memo, useCallback, useState } from "react";
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from "react-native";
+import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import Button from "../components/Button";
@@ -19,6 +19,8 @@ function RegistrationScreen({ navigation }) {
     password: ""
   });
   const [errors, setErrors] = useState({});
+  const { width } = useWindowDimensions();
+  const contentWidth = width >= 1200 ? 720 : width >= 768 ? 640 : undefined;
 
   const updateField = useCallback((key, value) => {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -67,7 +69,7 @@ function RegistrationScreen({ navigation }) {
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
           >
-            <View style={styles.content}>
+            <View style={[styles.content, contentWidth ? { maxWidth: contentWidth } : null]}>
               <Header
                 subtitle="Create your secure worker account to generate a personalized plan"
                 title="Register"
@@ -130,9 +132,11 @@ const styles = StyleSheet.create({
     flexGrow: 1
   },
   content: {
+    alignSelf: "center",
     paddingHorizontal: appTheme.spacing.lg,
     paddingBottom: appTheme.spacing.xxl,
-    paddingTop: appTheme.spacing.xxl
+    paddingTop: appTheme.spacing.xxl,
+    width: "100%"
   },
   primaryCta: {
     marginTop: appTheme.spacing.sm

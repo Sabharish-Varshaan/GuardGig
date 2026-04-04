@@ -6,7 +6,8 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  View
+  View,
+  useWindowDimensions
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -47,6 +48,8 @@ function LoginScreen({ navigation }) {
   const [password, setPassword] = useState("");
   const [errors, setErrors] = useState({});
   const errorOpacity = useRef(new Animated.Value(0)).current;
+  const { width } = useWindowDimensions();
+  const contentWidth = width >= 1200 ? 520 : width >= 768 ? 480 : undefined;
 
   const handlePhoneChange = useCallback((value) => {
     setPhone(value);
@@ -126,7 +129,7 @@ function LoginScreen({ navigation }) {
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
           >
-            <View style={styles.centeredContent}>
+            <View style={[styles.centeredContent, contentWidth ? { maxWidth: contentWidth } : null]}>
               <Card style={styles.authCard}>
                 <Text style={styles.title}>guardgig</Text>
                 <Text style={styles.subtitle}>AI Insurance for Delivery Workers</Text>
@@ -200,9 +203,11 @@ const styles = StyleSheet.create({
     flexGrow: 1
   },
   centeredContent: {
+    alignSelf: "center",
     paddingBottom: appTheme.spacing.xxl,
     paddingTop: appTheme.spacing.xxl,
-    paddingHorizontal: appTheme.spacing.lg
+    paddingHorizontal: appTheme.spacing.lg,
+    width: "100%"
   },
   authCard: {
     backgroundColor: appTheme.colors.cardGlass,
