@@ -1,6 +1,7 @@
 import React from "react";
 import { ActivityIndicator, StyleSheet, View } from "react-native";
 import { useFonts } from "expo-font";
+import { SafeAreaProvider } from "react-native-safe-area-context";
 import { Orbitron_600SemiBold, Orbitron_700Bold } from "@expo-google-fonts/orbitron";
 import { Rajdhani_500Medium, Rajdhani_600SemiBold, Rajdhani_700Bold } from "@expo-google-fonts/rajdhani";
 
@@ -26,9 +27,11 @@ export default function App() {
   }
 
   return (
-    <AppProvider>
-      <RootNavigator />
-    </AppProvider>
+    <SafeAreaProvider>
+      <AppProvider>
+        <RootNavigator />
+      </AppProvider>
+    </SafeAreaProvider>
   );
 }
 

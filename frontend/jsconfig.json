@@ -1,0 +1,19 @@
+{
+  "compilerOptions": {
+    "checkJs": false,
+    "jsx": "react-jsx",
+    "moduleResolution": "bundler",
+    "target": "ES2021"
+  },
+  "exclude": [
+    "node_modules",
+    "dist",
+    ".expo"
+  ],
+  "include": [
+    "App.js",
+    "index.js",
+    "src/**/*",
+    "expo-env.d.ts"
+  ]
+}
