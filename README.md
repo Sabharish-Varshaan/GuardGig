@@ -1,8 +1,373 @@
 # GuardGig
 # AI-Powered Parametric Insurance for Quick-Commerce Gig Workers
+[Jump to Phase 2](#phase-2-system-intelligence--automation)
+
+## Local Setup (Backend + Frontend)
+
+This root section contains complete setup instructions for both backend and frontend, including local source implementation flow, dependencies, environment variables, verification, and troubleshooting.
+
+### 1. Local Source Code Implementation
+
+- `backend/`: FastAPI backend, business rules, trigger/fraud/premium logic, SQL migrations, ML inference helpers.
+- `backend/app/`: API routes and core service logic.
+- `backend/sql/`: Supabase SQL migrations that must be applied before full app flow testing.
+- `backend/ml/`: model training and prediction artifacts/utilities.
+- `frontend/`: Expo React Native app.
+- `frontend/src/`: UI screens, navigation, context state, components, API client.
+
+### 2. Prerequisites and Dependencies
+
+Backend prerequisites:
+
+- Python 3.10+
+- Supabase project
+- OpenWeather API key (AQI fallback)
+- Network access to public aqi.in dashboard pages
+
+Frontend prerequisites:
+
+- Node.js 18+
+- npm
+- Backend running at a reachable URL
+
+Optional demo mode:
+
+- `APP_DEMO_MODE=true` enables demo behavior in policy/trigger/claim flow.
+
+### 3. Backend Architecture and Logic
+
+Core business flow:
+
+1. User registers and logs in via custom auth routes.
+2. User submits onboarding profile.
+3. Policy is created only if underwriting conditions pass.
+4. Trigger engine evaluates live rain + AQI at coordinates.
+5. Claim creation happens when trigger conditions are met.
+6. Fraud/exclusion rules gate claim approval.
+7. Payout amount is produced from trigger severity.
+
+Trigger engine:
+
+- Rain source: Open-Meteo (`hourly=rain`)
+- AQI source: aqi.in city dashboard (primary)
+- AQI fallback: OpenWeather Air Pollution API
+
+Severity rules:
+
+- `rain >= 100` -> `full`
+- `rain >= 60` -> `partial`
+- `aqi >= 400` -> `full`
+- `aqi >= 300` -> `partial`
+- otherwise -> no trigger
+
+Claim creation flow (`/api/claim/create`):
+
+1. Active policy lookup
+2. Waiting period enforcement
+3. Max one claim/day enforcement
+4. Fresh trigger evaluation
+5. Exclusion checks
+6. Payout computation
+7. Claim insertion with status/reason
+
+Underwriting:
+
+- `active_days < 5` -> ineligible
+- `5 <= active_days < 7` -> eligible, low tier
+- `active_days >= 7` -> eligible, medium tier
+
+Automated claims:
+
+- APScheduler runs hourly
+- Scans active policies and auto-creates approved claims when trigger/rules pass
+
+### 4. Backend API Surface
+
+- `POST /api/auth/register`
+- `POST /api/auth/login`
+- `GET /api/onboarding/me`
+- `POST /api/onboarding`
+- `POST /api/policy/create`
+- `GET /api/policy/me`
+- `POST /api/trigger/check`
+- `POST /api/claim/create`
+- `GET /api/claims/me`
+- `POST /api/fraud/check`
+- `GET /api/health`
+
+### 5. Backend Setup (Step by Step)
+
+1. Go to backend:
+
+```bash
+cd /Users/sabharishvarshaans/Documents/GuardGig/backend
+```
+
+2. Create and activate virtual environment:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+```
+
+3. Install backend dependencies:
+
+```bash
+pip install -r requirements.txt
+```
+
+4. Create backend env file:
+
+```bash
+cp .env.example .env
+```
+
+5. Update `backend/.env`:
+
+```env
+APP_ENV=development
+APP_HOST=0.0.0.0
+APP_PORT=8000
+APP_DEMO_MODE=false
+CORS_ORIGINS=http://localhost:8081,http://127.0.0.1:8081
+
+SUPABASE_URL=https://<your-project-ref>.supabase.co
+SUPABASE_ANON_KEY=<your-anon-key>
+SUPABASE_SERVICE_ROLE_KEY=<your-service-role-key>
+SUPABASE_USERS_TABLE=app_users
+SUPABASE_ONBOARDING_TABLE=onboarding_profiles
+SUPABASE_POLICIES_TABLE=policies
+SUPABASE_CLAIMS_TABLE=claims
+
+OPENWEATHER_API_KEY=your_api_key_here
+
+JWT_SECRET=<use-a-long-random-secret>
+JWT_ALGORITHM=HS256
+ACCESS_TOKEN_EXP_MINUTES=60
+REFRESH_TOKEN_EXP_DAYS=7
+CLAIM_FRAUD_THRESHOLD=0.7
+```
+
+6. Run SQL migrations in Supabase SQL Editor in this order:
+
+- `backend/sql/001_create_onboarding_profiles.sql`
+- `backend/sql/002_create_app_users_and_link_onboarding.sql`
+- `backend/sql/003_create_policies_and_claims.sql`
+- `backend/sql/004_add_claim_rule_support.sql`
+- `backend/sql/005_income_range_model.sql`
+- `backend/sql/006_add_user_fks.sql`
+- `backend/sql/007_relax_legacy_income_not_null.sql`
+- `backend/sql/008_add_policy_onboarding_fk.sql`
+- `backend/sql/009_normalize_fraud_score_scale.sql`
+- `backend/sql/010_enforce_daily_claim_limit.sql`
+
+Important: paste SQL file contents into Supabase SQL Editor, not file path strings.
+
+7. Start backend:
+
+```bash
+cd /Users/sabharishvarshaans/Documents/GuardGig/backend
+APP_DEMO_MODE=true .venv/bin/uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+Base URL: `http://localhost:8000`
+
+If you want normal production-like behavior instead of demo behavior, omit `APP_DEMO_MODE=true`.
+
+### 6. Backend Quick Verification
+
+Health:
+
+```bash
+curl http://localhost:8000/api/health
+```
+
+Register:
+
+```bash
+curl -X POST http://localhost:8000/api/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "full_name": "Ramesh Kumar",
+    "phone": "9876543210",
+    "password": "pass1234"
+  }'
+```
+
+Login:
+
+```bash
+curl -X POST http://localhost:8000/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "phone": "9876543210",
+    "password": "pass1234"
+  }'
+```
+
+Trigger check by coordinates:
+
+```bash
+curl -X POST http://localhost:8000/api/trigger/check \
+  -H "Content-Type: application/json" \
+  -d '{
+    "lat": 13.0827,
+    "lon": 80.2707
+  }'
+```
+
+Demo flow check:
+
+1. Set `APP_DEMO_MODE=true` before starting backend.
+2. Create or log in with a test user.
+3. Verify `/api/policy/create` returns `status: "created"`.
+4. Verify `/api/trigger/check` returns `rain: 75` and expected AQI for resolved location.
+5. Verify `/api/claim/create` succeeds with an approved claim.
+
+### 7. Backend Failure Handling Behavior
+
+- aqi.in lookup failure -> fallback to OpenWeather AQI, then safe values
+- External API failure -> safe fallback values (`rain=0`, `aqi=0`, no trigger)
+- Missing/invalid location -> no trigger result, service remains stable
+- Rule failures (waiting period, exclusions) -> structured 4xx responses
+- Auth failures -> 401/403 with explicit detail
+
+### 8. Frontend Product Logic
+
+High-level user flow:
+
+1. Login/Register
+2. Onboarding profile submission
+3. Policy creation and sync
+4. Dashboard requests location and checks live trigger conditions
+5. User taps `Check Coverage`
+6. Frontend calls trigger API and auto-starts claim creation if trigger exists
+7. Claim status appears in Claims and Payout screens
+
+Backend-driven data model in UI:
+
+- `policy`: weekly income, premium, coverage, status, tier, eligibility
+- `risk`: rain, AQI, severity, trigger type, status text
+- `claimsHistory`: trigger type, status, payout amount, timestamps
+- `workflowState`: automation step progress
+
+No premium or payout computation is performed in frontend.
+
+Real-time trigger + auto-claim flow:
+
+1. Request location permission with `expo-location`
+2. Fetch `lat/lon`
+3. `POST /api/trigger/check`
+4. Display risk data from backend
+5. On `Check Coverage`, trigger check runs again and may call `/api/claim/create`
+
+### 9. Frontend Setup (Step by Step)
+
+1. Go to frontend:
+
+```bash
+cd /Users/sabharishvarshaans/Documents/GuardGig/frontend
+```
+
+2. Install dependencies:
+
+```bash
+npm install
+```
+
+3. Ensure location dependency exists (already in this project):
+
+```bash
+CI=1 npx expo install expo-location
+```
+
+4. Create/update `frontend/.env`:
+
+```env
+EXPO_PUBLIC_API_BASE_URL=http://127.0.0.1:8000
+```
+
+5. Start Expo:
+
+```bash
+npm run start
+```
+
+If needed:
+
+```bash
+npm run start -- --tunnel --clear
+```
+
+### 10. Frontend API URL Configuration
+
+Use environment value based on target:
+
+- iOS simulator: `http://127.0.0.1:8000`
+- Android emulator: `http://10.0.2.2:8000`
+- Physical phone (same Wi-Fi): `http://<your-lan-ip>:8000`
+
+Example:
+
+```env
+EXPO_PUBLIC_API_BASE_URL=http://192.168.1.42:8000
+```
+
+Fallback if env is missing:
+
+- Android fallback: `http://10.0.2.2:8000`
+- iOS/Web fallback: `http://127.0.0.1:8000`
+
+### 11. Frontend Verification Checklist
+
+1. Backend `/api/health` responds.
+2. App can register/login.
+3. Dashboard prompts for location permission.
+4. Dashboard shows rain/AQI values.
+5. `Check Coverage` progresses through workflow states.
+6. Claims screen shows claim entries.
+
+For demo mode, confirm backend returns policy created, trigger values `rain=75` and `aqi=320`, and an approved claim.
+
+### 12. Frontend Useful Commands
+
+```bash
+npm run start
+npm run android
+npm run ios
+npm run web
+```
+
+### 13. Frontend Troubleshooting
+
+- `Network request failed`
+  - Verify `EXPO_PUBLIC_API_BASE_URL`
+  - For physical phone testing, do not use `127.0.0.1`
+  - Restart Expo with cache clear
+
+- Location not available
+  - Ensure app location permission is granted
+  - Retry dashboard load
+
+- No live risk values
+  - Confirm backend trigger route is running
+  - Confirm weather API key is configured in backend
+
+- Claim not created
+  - Trigger may be false (`No disruption detected`)
+  - Backend waiting period/exclusion rules may block claim creation
+
+### 14. End-to-End Local Run Flow
+
+1. Start backend in one terminal.
+2. Start frontend Expo in another terminal.
+3. Register/login in app.
+4. Complete onboarding.
+5. Create policy.
+6. Run trigger check and claim flow.
+7. Validate claim and payout screens.
 
 ---
-[Jump to Phase 2](#phase-2-system-intelligence--automation)
 
 
 # Overview and Problem Statement
