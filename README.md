@@ -2,6 +2,10 @@
 # AI-Powered Parametric Insurance for Quick-Commerce Gig Workers
 
 ---
+[Jump to Phase 2]
+(## Phase 2: System Intelligence & Automation)
+
+
 
 # Overview and Problem Statement
 
@@ -332,3 +336,146 @@ System response:
 * Operates as a production-ready, scalable system
 
 ---
+
+## Phase 2: System Intelligence & Automation
+
+## 1. Policy Integration
+
+### Onboarding and Income Modeling
+
+The onboarding flow persists income as a range, not a single manual daily number:
+
+* `min_income`
+* `max_income`
+* derived `mean_income`
+* derived `income_variance`
+
+The backend computes:
+
+$$
+\mathrm{mean\_income} = \frac{\mathrm{min\_income} + \mathrm{max\_income}}{2}
+$$
+
+$$
+\mathrm{income\_variance} = \frac{\mathrm{max\_income} - \mathrm{min\_income}}{\mathrm{mean\_income}}
+$$
+
+Policy creation then converts to weekly income:
+
+$$
+\mathrm{weekly\_income} = \mathrm{round}(\mathrm{mean\_income} \times 7)
+$$
+
+### Policy Creation and Coverage Definition
+
+Policy creation is gated by onboarding completion and underwriting age checks (`active_days` from onboarding creation date). In normal mode:
+
+* `< 5` days -> `ineligible`
+* `5-6` days -> `eligible` (tier `low`)
+* `>= 7` days -> `eligible` (tier `medium`)
+
+In demo mode, eligibility is forced to eligible.
+
+Coverage is defined in backend policy creation as a fixed amount:
+
+* `coverage_amount = 700.00`
+
+### Premium Computation
+
+Premium is calculated server-side only.
+
+Base:
+
+$$
+\mathrm{base} = 0.006 \times \mathrm{weekly\_income}
+$$
+
+Current premium function:
+
+$$
+\mathrm{premium} = \mathrm{base} \times \left(1 + \mathrm{risk\_score} + 0.02 \times \mathrm{income\_variance}\right)
+$$
+
+`risk_score` comes from `ml/predict.py` (`get_risk_score`). In current policy creation, rain/AQI/location are not passed into this call, so premium-time ML scoring is driven by income-derived features unless other endpoints provide weather inputs.
+
+## 2. Automated Flow
+
+### Trigger Check to Claim Creation
+
+The backend flow is:
+
+1. `POST /api/trigger/check` fetches rain + AQI snapshot and returns trigger metadata.
+2. `POST /api/claim/create` re-fetches rain + AQI and re-evaluates trigger before claim creation.
+
+Triggering is deterministic (rule thresholds), not model-predicted:
+
+* rain `>= 100` -> full
+* rain `>= 60` -> partial
+* AQI `>= 400` -> full
+* AQI `>= 300` -> partial
+
+### Is Claim Auto-Triggered?
+
+Yes, from the frontend orchestration flow:
+
+* `DashboardScreen` auto-starts coverage check when policy is active + eligible.
+* `AppContext.startCoverageCheck()` runs:
+  1. location fetch
+  2. `trigger/check`
+  3. if detected, `claim/create`
+  4. workflow state updates and payout navigation
+
+There is no premium or payout math in frontend; frontend acts as orchestration + UI state.
+
+## 3. AI/ML Integration
+
+### Risk Model Usage
+
+Implemented in `ml/predict.py` via `get_risk_score`:
+
+* used in premium calculation (`premium_utils.py`)
+* returns model probability when model artifact exists
+* falls back to deterministic heuristic when model is unavailable
+
+So: `risk_score` is integrated into premium.
+
+### Fraud Model Usage
+
+Implemented in `ml/predict.py` via `get_fraud_score`:
+
+* used inside claim creation (`/api/claim/create`)
+* claim is rejected when `fraud_score > 0.7`
+* additional rule exclusions are applied in non-demo mode
+
+So: `fraud_score` is directly used in claim decision.
+
+### Trigger Engine Type
+
+Trigger detection is currently rule-based (`check_trigger` thresholds), not ML-based.
+
+## 4. Backend-Frontend Sync
+
+System behavior is API-driven and synchronized around backend decisions:
+
+* Frontend consumes `/api/policy/me`, `/api/claims/me`, `/api/trigger/check`, `/api/claim/create`.
+* Policy, claim status, payout amount, and risk severity all originate from backend responses.
+* Frontend transforms response data for display but does not compute insurance logic.
+
+## 5. Improvements (Implemented in Phase 2)
+
+* Income modeling upgraded from flat value to range-based underwriting inputs.
+* Premium pipeline connected to ML risk scoring with fallback safety.
+* Claim pipeline connected to ML fraud scoring plus deterministic exclusion guards.
+* Automated trigger-to-claim flow implemented in app lifecycle (eligible users).
+* Trigger utilities include API caching and graceful fallbacks for unstable external data.
+
+## 6. Outcome
+
+Phase 2 delivers a working intelligence + automation layer where:
+
+* policy pricing uses ML-assisted risk input,
+* claim approval includes ML fraud screening,
+* event trigger detection remains deterministic and explainable,
+* frontend stays thin and API-driven,
+* and end-to-end claim initiation can run automatically for eligible users.
+
