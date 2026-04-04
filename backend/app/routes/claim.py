@@ -9,7 +9,7 @@ from ..claim_rules import (
 )
 from ..config import get_settings
 from ..dependencies import require_current_user
-from ..schemas import ClaimCreateRequest, ClaimCreateResponse, ClaimsListResponse, ClaimResponse
+from ..schemas import ClaimCreateRequest, ClaimCreateResponse, ClaimRejectedResponse, ClaimsListResponse, ClaimResponse
 from ..supabase_client import get_admin_client
 from ..trigger_utils import check_trigger, fetch_aqi, fetch_rain_mm
 
@@ -31,8 +31,8 @@ def calculate_payout(severity: str, base_amount: float, coverage_amount: float) 
         return round(min(capped_base * 0.30, coverage_amount), 2)
     return 0.0
 
-@router.post("/claim/create", response_model=ClaimCreateResponse)
-async def create_claim(request: ClaimCreateRequest, current_user: dict = Depends(require_current_user)):
+@router.post("/claim/create", response_model=ClaimCreateResponse | ClaimRejectedResponse)
+async def create_claim(request: ClaimCreateRequest, current_user: dict = Depends(require_current_user)) -> ClaimCreateResponse | ClaimRejectedResponse:
     settings = get_settings()
     admin = get_admin_client()
 
@@ -78,10 +78,14 @@ async def create_claim(request: ClaimCreateRequest, current_user: dict = Depends
 
     payout_base = min(float(mean_income), coverage_amount)
 
+    try:
+        enforce_max_one_claim_per_day(admin, settings.supabase_claims_table, current_user["id"])
+    except ValueError:
+        return ClaimRejectedResponse(status="rejected", reason="Daily claim limit reached")
+
     if not settings.demo_mode:
         try:
             enforce_waiting_period(policy, waiting_hours=24)
-            enforce_max_one_claim_per_day(admin, settings.supabase_claims_table, current_user["id"])
         except ValueError as exc:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
@@ -132,7 +136,12 @@ async def create_claim(request: ClaimCreateRequest, current_user: dict = Depends
         "rule_decision_reason": f"approved_after_{trigger_type}_{severity}_checks",
     }
 
-    claim_response = admin.table(settings.supabase_claims_table).insert(claim_data).execute()
+    try:
+        claim_response = admin.table(settings.supabase_claims_table).insert(claim_data).execute()
+    except Exception as exc:
+        if "daily claim limit reached" in str(exc).lower():
+            return ClaimRejectedResponse(status="rejected", reason="Daily claim limit reached")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to create claim") from exc
 
     if not claim_response.data:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to create claim")

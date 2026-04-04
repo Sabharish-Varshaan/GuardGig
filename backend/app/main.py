@@ -2,7 +2,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
-from datetime import datetime, timezone
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from .claim_rules import (
     calculate_fraud_score,
@@ -24,6 +25,7 @@ from .supabase_client import get_admin_client
 from .trigger_utils import check_trigger, fetch_aqi, fetch_rain_mm
 
 settings = get_settings()
+IST = ZoneInfo("Asia/Kolkata")
 
 app = FastAPI(
     title="GuardGig API",
@@ -67,6 +69,12 @@ async def automated_claim_check():
     for policy in (policies_response.data or []):
         user_id = policy["user_id"]
 
+        # Skip all downstream work for users who already have today's claim.
+        try:
+            enforce_max_one_claim_per_day(admin, settings.supabase_claims_table, user_id)
+        except ValueError:
+            continue
+
         onboarding_response = (
             admin.table(settings.supabase_onboarding_table)
             .select("city,mean_income")
@@ -98,7 +106,6 @@ async def automated_claim_check():
 
         try:
             enforce_waiting_period(policy, waiting_hours=24)
-            enforce_max_one_claim_per_day(admin, settings.supabase_claims_table, user_id)
         except ValueError:
             continue
 
@@ -148,10 +155,15 @@ async def automated_claim_check():
             "activity_status": "active",
             "location_valid": True,
             "rule_decision_reason": f"approved_after_{trigger_type}_{severity}_checks",
-            "updated_at": datetime.now(timezone.utc).isoformat(),
+            "updated_at": datetime.now(IST).isoformat(),
         }
 
-        admin.table(settings.supabase_claims_table).insert(claim_data).execute()
+        try:
+            admin.table(settings.supabase_claims_table).insert(claim_data).execute()
+        except Exception as exc:
+            if "daily claim limit reached" in str(exc).lower():
+                continue
+            raise
 
 @app.on_event("startup")
 async def startup_event():

@@ -1,7 +1,7 @@
 import React, { memo, useEffect, useMemo, useRef } from "react";
 import { Animated, FlatList, StyleSheet, Text, View } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
 import Card from "../components/Card";
 import ClaimItemCard from "../components/ClaimItemCard";
@@ -22,6 +22,7 @@ function capitalizeStatus(value) {
 }
 
 function ClaimsScreen({ navigation }) {
+  const insets = useSafeAreaInsets();
   const {
     claimsHistory,
     workflowState,
@@ -41,13 +42,21 @@ function ClaimsScreen({ navigation }) {
     }, [refreshClaims])
   );
 
-  const fade = useRef(new Animated.Value(0)).current;
-  const rise = useRef(new Animated.Value(18)).current;
+  const fade = useRef(new Animated.Value(1)).current;
+  const rise = useRef(new Animated.Value(0)).current;
 
   const latestClaim = useMemo(() => {
     return claimsHistory.length > 0 ? claimsHistory[0] : null;
   }, [claimsHistory]);
   const isCoverageEligible = !!policy && policy.status === "active" && policy.eligibilityStatus === "eligible";
+  const listContentStyle = useMemo(
+    () => ({
+      paddingHorizontal: appTheme.spacing.sm,
+      paddingTop: appTheme.spacing.sm,
+      paddingBottom: 120 + insets.bottom
+    }),
+    [insets.bottom]
+  );
 
   const animateStateTransition = () => {
     fade.setValue(0);
@@ -68,10 +77,15 @@ function ClaimsScreen({ navigation }) {
   };
 
   useEffect(() => {
-    if (workflowState !== "idle") {
+    if (latestClaim) {
       animateStateTransition();
+      return;
     }
-  }, [workflowState]);
+
+    // Keep default state visible when there is no latest claim to animate.
+    fade.setValue(1);
+    rise.setValue(0);
+  }, [latestClaim, workflowState]);
 
   return (
     <SafeAreaView style={styles.screen}>
@@ -117,9 +131,9 @@ function ClaimsScreen({ navigation }) {
               {!!dataError && <Text style={styles.errorText}>{dataError}</Text>}
             </View>
           }
-          contentContainerStyle={styles.listContent}
+          contentContainerStyle={listContentStyle}
           data={claimsHistory}
-          keyExtractor={(item) => item.id}
+          keyExtractor={(item) => String(item.id)}
           ListEmptyComponent={
             <Card>
               <Text style={styles.emptyTitle}>No claims yet</Text>
@@ -154,11 +168,6 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1
-  },
-  listContent: {
-    paddingHorizontal: appTheme.spacing.sm,
-    paddingTop: appTheme.spacing.sm,
-    paddingBottom: 120
   },
   resultCard: {
     backgroundColor: appTheme.colors.successSoft,

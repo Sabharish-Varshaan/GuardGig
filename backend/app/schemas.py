@@ -113,6 +113,11 @@ class ClaimCreateResponse(BaseModel):
     message: str
 
 
+class ClaimRejectedResponse(BaseModel):
+    status: Literal["rejected"]
+    reason: str
+
+
 class ClaimsListResponse(BaseModel):
     claims: list[ClaimResponse]
 

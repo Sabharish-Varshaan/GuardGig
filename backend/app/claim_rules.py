@@ -1,4 +1,7 @@
-from datetime import date, datetime, time, timedelta, timezone
+from datetime import date, datetime, time, timedelta
+from zoneinfo import ZoneInfo
+
+IST = ZoneInfo("Asia/Kolkata")
 
 
 def _parse_dt(value: str | None) -> datetime | None:
@@ -6,8 +9,8 @@ def _parse_dt(value: str | None) -> datetime | None:
         return None
     parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
     if parsed.tzinfo is None:
-        return parsed.replace(tzinfo=timezone.utc)
-    return parsed
+        return parsed.replace(tzinfo=IST)
+    return parsed.astimezone(IST)
 
 
 def _parse_date(value: str | None) -> date | None:
@@ -21,37 +24,82 @@ def enforce_waiting_period(policy: dict, waiting_hours: int = 24) -> None:
     policy_date = _parse_date(policy.get("policy_start_date"))
 
     if created_at is None and policy_date is not None:
-        created_at = datetime.combine(policy_date, time.min, tzinfo=timezone.utc)
+        created_at = datetime.combine(policy_date, time.min, tzinfo=IST)
 
     if created_at is None:
         return
 
     eligible_at = created_at + timedelta(hours=int(policy.get("waiting_period_hours", waiting_hours)))
-    if datetime.now(timezone.utc) < eligible_at:
+    if datetime.now(IST) < eligible_at:
         raise ValueError("Waiting period of 24 hours is not completed")
 
 
-def enforce_max_one_claim_per_day(admin, claims_table: str, user_id: str) -> None:
-    now = datetime.now(timezone.utc)
-    day_start = datetime.combine(now.date(), time.min, tzinfo=timezone.utc)
-    next_day = day_start + timedelta(days=1)
+def _extract_claim_count(response) -> int:
+    data = response.data
 
-    response = (
-        admin.table(claims_table)
-        .select("id")
-        .eq("user_id", user_id)
-        .gte("created_at", day_start.isoformat())
-        .lt("created_at", next_day.isoformat())
-        .limit(1)
-        .execute()
-    )
+    if data is None:
+        return 0
 
-    if response.data:
-        raise ValueError("Maximum one claim per day is allowed")
+    if isinstance(data, int):
+        return int(data)
+
+    if isinstance(data, list):
+        if not data:
+            return 0
+
+        row = data[0]
+        if isinstance(row, dict):
+            value = row.get("claims_today")
+            if value is None:
+                return 0
+            return int(value)
+
+    if isinstance(data, dict):
+        value = data.get("claims_today")
+        if value is None:
+            return 0
+        return int(value)
+
+    return 0
+
+
+def get_claims_today_count_ist(admin, claims_table: str, user_id: str) -> int:
+    """Count a user's claims for the current IST day."""
+    try:
+        response = admin.rpc("guardgig_claims_today_count_ist", {"p_user_id": user_id}).execute()
+        return _extract_claim_count(response)
+    except Exception:
+        now = datetime.now(IST)
+        day_start = datetime.combine(now.date(), time.min, tzinfo=IST)
+        next_day = day_start + timedelta(days=1)
+
+        response = (
+            admin.table(claims_table)
+            .select("id", count="exact")
+            .eq("user_id", user_id)
+            .gte("created_at", day_start.isoformat())
+            .lt("created_at", next_day.isoformat())
+            .execute()
+        )
+
+        if getattr(response, "count", None) is not None:
+            return int(response.count)
+
+        return len(response.data or [])
+
+
+def enforce_max_one_claim_per_day(admin, claims_table: str, user_id: str) -> int:
+    count = get_claims_today_count_ist(admin, claims_table, user_id)
+    print("[CLAIM CHECK] claims today:", count)
+
+    if count >= 1:
+        raise ValueError("Daily claim limit reached")
+
+    return count
 
 
 def fetch_recent_claim_count(admin, claims_table: str, user_id: str, lookback_days: int = 30) -> int:
-    since = (datetime.now(timezone.utc) - timedelta(days=lookback_days)).isoformat()
+    since = (datetime.now(IST) - timedelta(days=lookback_days)).isoformat()
     response = (
         admin.table(claims_table)
         .select("id")
