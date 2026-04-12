@@ -10,9 +10,11 @@ import {
   submitOnboardingProfile
 } from "../services/authApi";
 import {
+  buildPremiumCheckoutUrl,
   checkTrigger,
   createClaim,
   createPolicy,
+  createPaymentOrder,
   getMyClaims,
   getMyPolicy
 } from "../services/insuranceApi";
@@ -79,6 +81,9 @@ const createIneligiblePolicy = () => ({
   incomeVariance: 0,
   premium: 0,
   coverageAmount: 0,
+  paymentStatus: "pending",
+  paymentId: "",
+  activatedAt: "",
   policyStartDate: "",
   status: "inactive",
   eligibilityStatus: "ineligible",
@@ -131,6 +136,9 @@ const normalizePolicy = (policy) => {
     incomeVariance: Number(policy.income_variance || 0),
     premium: Number(policy.premium || 0),
     coverageAmount: Number(policy.coverage_amount || 0),
+    paymentStatus: policy.payment_status || "pending",
+    paymentId: policy.payment_id || "",
+    activatedAt: policy.activated_at || "",
     policyStartDate: policy.policy_start_date || "",
     status: policy.status || "inactive",
     eligibilityStatus: policy.eligibility_status || "eligible",
@@ -141,6 +149,8 @@ const normalizePolicy = (policy) => {
 
 const normalizeClaim = (claim) => {
   const createdAt = claim?.created_at || "";
+  const snapshot = claim?.trigger_snapshot && typeof claim.trigger_snapshot === "object" ? claim.trigger_snapshot : {};
+  const reason = claim?.rule_decision_reason || snapshot.rule_decision_reason || "";
 
   return {
     id: claim?.id || String(Date.now()),
@@ -148,6 +158,12 @@ const normalizeClaim = (claim) => {
     status: (claim?.status || "pending").toLowerCase(),
     amount: Number(claim?.payout_amount || 0),
     triggerValue: Number(claim?.trigger_value || 0),
+    paymentStatus: (claim?.payment_status || "pending").toLowerCase(),
+    transactionId: claim?.transaction_id || "",
+    paidAt: claim?.paid_at || "",
+    payoutMethod: claim?.payout_method || "",
+    reason,
+    triggerSnapshot: snapshot,
     createdAt,
     timestamp: createdAt
       ? new Date(createdAt).toLocaleString("en-IN", {
@@ -256,6 +272,8 @@ export function AppProvider({ children }) {
   const [policyLoading, setPolicyLoading] = useState(false);
   const [claimsHistory, setClaimsHistory] = useState([]);
   const [claimsLoading, setClaimsLoading] = useState(false);
+  const [paymentLoading, setPaymentLoading] = useState(false);
+  const [paymentError, setPaymentError] = useState("");
   const [risk, setRisk] = useState(initialRisk);
   const [location, setLocation] = useState(initialLocation);
   const locationRef = useRef(initialLocation);
@@ -284,6 +302,7 @@ export function AppProvider({ children }) {
     setAuthUserId("");
     setAuthError("");
     setDataError("");
+    setPaymentError("");
     setPendingOnboardingUser(null);
     setAuthLoading(false);
   }, []);
@@ -324,6 +343,7 @@ export function AppProvider({ children }) {
 
       setPolicyLoading(true);
       setDataError("");
+      setPaymentError("");
 
       try {
         const response = await getMyPolicy(token);
@@ -456,6 +476,7 @@ export function AppProvider({ children }) {
   const refreshRisk = useCallback(async (locationOverride) => {
     setRiskLoading(true);
     setDataError("");
+    setPaymentError("");
 
     try {
       const resolvedLocation = locationOverride || (locationRef.current.lat !== null && locationRef.current.lon !== null ? locationRef.current : await requestLocation());
@@ -694,6 +715,7 @@ export function AppProvider({ children }) {
 
       setPendingOnboardingUser(null);
       setIsAuthenticated(true);
+      setPaymentError("");
       return { success: true };
     } catch (error) {
       const message = toErrorMessage(error, "Onboarding submit failed");
@@ -736,10 +758,10 @@ export function AppProvider({ children }) {
       return { success: false, approved: false, error: message };
     }
 
-    const coverageEligible = !!policy && policy.status === "active" && policy.eligibilityStatus === "eligible";
+    const coverageEligible = !!policy && policy.status === "active" && policy.eligibilityStatus === "eligible" && policy.paymentStatus === "success";
     if (!coverageEligible) {
       setWorkflowState(WORKFLOW_STATES.flagged);
-      setWorkflowMessage(INELIGIBLE_MESSAGE);
+      setWorkflowMessage(policy?.paymentStatus === "success" ? INELIGIBLE_MESSAGE : "Premium payment required");
       return { success: true, approved: false, reason: "ineligible" };
     }
 
@@ -844,6 +866,51 @@ export function AppProvider({ children }) {
     }
   }, [authToken, coverageLoading, policy, refreshClaims, refreshPolicy, refreshRisk]);
 
+  const activatePolicyPayment = useCallback(async () => {
+    if (!authToken) {
+      const message = "Session expired. Please login again.";
+      setPaymentError(message);
+      return { success: false, error: message };
+    }
+
+    if (!policy) {
+      const message = "Policy not found";
+      setPaymentError(message);
+      return { success: false, error: message };
+    }
+
+    if ((policy.paymentStatus || "pending") === "success") {
+      return { success: true, alreadyPaid: true };
+    }
+
+    setPaymentLoading(true);
+    setPaymentError("");
+
+    try {
+      const orderResponse = await createPaymentOrder(authToken);
+      const checkoutUrl = buildPremiumCheckoutUrl({
+        token: authToken,
+        orderId: orderResponse.order_id,
+        amount: orderResponse.amount,
+        currency: orderResponse.currency
+      });
+
+      return {
+        success: true,
+        orderId: orderResponse.order_id,
+        checkoutUrl,
+        amount: orderResponse.amount,
+        currency: orderResponse.currency
+      };
+    } catch (error) {
+      const message = toErrorMessage(error, "Payment failed");
+      setPaymentError(message);
+      return { success: false, error: message };
+    } finally {
+      setPaymentLoading(false);
+    }
+  }, [authToken, policy]);
+
   const value = useMemo(
     () => ({
       isAuthenticated,
@@ -868,6 +935,8 @@ export function AppProvider({ children }) {
       movementScore,
       claimsHistory,
       claimsLoading,
+      paymentLoading,
+      paymentError,
       eligibilityMessage: INELIGIBLE_MESSAGE,
       notificationsEnabled,
       themeEnabled,
@@ -881,6 +950,7 @@ export function AppProvider({ children }) {
       refreshRisk,
       refreshPolicy,
       refreshClaims,
+      activatePolicyPayment,
       setNotificationsEnabled,
       setThemeEnabled,
       setAuthError
@@ -908,6 +978,8 @@ export function AppProvider({ children }) {
       movementScore,
       claimsHistory,
       claimsLoading,
+      paymentLoading,
+      paymentError,
       INELIGIBLE_MESSAGE,
       notificationsEnabled,
       themeEnabled,

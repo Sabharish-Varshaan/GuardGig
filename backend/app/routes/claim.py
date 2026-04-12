@@ -11,6 +11,7 @@ from ..config import get_settings
 from ..dependencies import require_current_user
 from ..schemas import ClaimCreateRequest, ClaimCreateResponse, ClaimRejectedResponse, ClaimsListResponse, ClaimResponse
 from ..supabase_client import get_admin_client
+from ..services.payment_service import persist_claim_payment, simulate_razorpay_payout
 from ..trigger_utils import check_trigger, fetch_aqi, fetch_rain_mm
 
 router = APIRouter(prefix="/api", tags=["claim"])
@@ -30,6 +31,31 @@ def calculate_payout(severity: str, base_amount: float, coverage_amount: float) 
     if severity == "partial":
         return round(min(capped_base * 0.30, coverage_amount), 2)
     return 0.0
+
+
+def _build_trigger_snapshot(
+    *,
+    trigger_type: str,
+    severity: str,
+    rain: float,
+    aqi: float,
+    payout: float,
+    fraud_score: float,
+    activity_status: str,
+    location_valid: bool,
+    rule_decision_reason: str,
+) -> dict:
+    return {
+        "trigger_type": trigger_type,
+        "severity": severity,
+        "rain": rain,
+        "aqi": aqi,
+        "payout_amount": payout,
+        "fraud_score": fraud_score,
+        "activity_status": activity_status,
+        "location_valid": location_valid,
+        "rule_decision_reason": rule_decision_reason,
+    }
 
 @router.post("/claim/create", response_model=ClaimCreateResponse | ClaimRejectedResponse)
 async def create_claim(request: ClaimCreateRequest, current_user: dict = Depends(require_current_user)) -> ClaimCreateResponse | ClaimRejectedResponse:
@@ -56,6 +82,8 @@ async def create_claim(request: ClaimCreateRequest, current_user: dict = Depends
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No active policy found")
 
     policy = policy_response.data[0]
+    if str(policy.get("payment_status") or "pending").lower() != "success":
+        return ClaimRejectedResponse(status="rejected", reason="Premium payment required")
     coverage_amount = float(policy.get("coverage_amount", 700.0))
 
     onboarding_response = (
@@ -128,6 +156,18 @@ async def create_claim(request: ClaimCreateRequest, current_user: dict = Depends
     payout = calculate_payout(severity, payout_base, coverage_amount)
 
     trigger_value = rain if trigger_type == "rain" else aqi
+    rule_decision_reason = f"approved_after_{trigger_type}_{severity}_checks"
+    trigger_snapshot = _build_trigger_snapshot(
+        trigger_type=trigger_type,
+        severity=severity,
+        rain=rain,
+        aqi=aqi,
+        payout=payout,
+        fraud_score=fraud_score,
+        activity_status=request.activity_status,
+        location_valid=effective_location_valid,
+        rule_decision_reason=rule_decision_reason,
+    )
 
     # Create claim
     claim_data = {
@@ -140,7 +180,7 @@ async def create_claim(request: ClaimCreateRequest, current_user: dict = Depends
         "fraud_score": fraud_score,
         "activity_status": request.activity_status,
         "location_valid": effective_location_valid,
-        "rule_decision_reason": f"approved_after_{trigger_type}_{severity}_checks",
+        "rule_decision_reason": rule_decision_reason,
     }
 
     try:
@@ -154,6 +194,30 @@ async def create_claim(request: ClaimCreateRequest, current_user: dict = Depends
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to create claim")
 
     claim = claim_response.data[0]
+
+    try:
+        payout_result = simulate_razorpay_payout(payout, current_user["id"])
+        payment_status = payout_result["status"]
+        transaction_id = payout_result["transaction_id"]
+        paid_at = payout_result["paid_at"]
+    except Exception:
+        payment_status = "failed"
+        transaction_id = None
+        paid_at = None
+
+    updated_claim = persist_claim_payment(
+        admin,
+        settings.supabase_claims_table,
+        claim["id"],
+        payment_status,
+        transaction_id,
+        paid_at,
+        "Razorpay",
+        trigger_snapshot,
+    )
+
+    if updated_claim:
+        claim = updated_claim
 
     return ClaimCreateResponse(
         claim=ClaimResponse(**claim),

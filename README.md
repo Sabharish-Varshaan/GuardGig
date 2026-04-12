@@ -6,7 +6,7 @@
 
 - Policy creation and payout flows are currently implemented as mock/demo logic for hackathon purposes.
 - Current payout status and amounts are simulated from internal app/backend rules and are not connected to a real money movement provider.
-- Planned production integration: Stripe-based payout rails (for managed transfers and payout lifecycle tracking), with webhook-driven status synchronization.
+- Current premium payment integration: Razorpay test-mode order creation and verification for policy activation.
 
 ## Live App
 

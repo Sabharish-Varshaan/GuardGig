@@ -5,6 +5,7 @@ import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import Card from "../components/Card";
+import Button from "../components/Button";
 import Header from "../components/Header";
 import StatusBadge from "../components/StatusBadge";
 import { useAppContext } from "../context/AppContext";
@@ -129,7 +130,10 @@ function DashboardScreen({ navigation }) {
     eligibilityMessage,
     requestLocation,
     refreshRisk,
-    startCoverageCheck
+    startCoverageCheck,
+    activatePolicyPayment,
+    paymentLoading,
+    paymentError
   } = useAppContext();
   const { width } = useWindowDimensions();
   const tabBarHeight = useBottomTabBarHeight();
@@ -154,7 +158,8 @@ function DashboardScreen({ navigation }) {
   const autoCheckStartedRef = useRef(false);
   const policyReady = !policyLoading && !!policy;
   const isCoverageEligible =
-    policyReady && policy.status === "active" && policy.eligibilityStatus === "eligible";
+    policyReady && policy.status === "active" && policy.eligibilityStatus === "eligible" && policy.paymentStatus === "success";
+  const paymentPending = policyReady && policy.paymentStatus !== "success";
 
   useFocusEffect(
     React.useCallback(() => {
@@ -233,12 +238,35 @@ function DashboardScreen({ navigation }) {
               <Text style={styles.heroLabel}>Premium</Text>
               <Text style={styles.heroValue}>{premiumValue}</Text>
             </View>
-            <StatusBadge label={liveRiskLabel} variant={riskVariant} />
+            <StatusBadge
+              label={paymentPending ? `Payment ${policy.paymentStatus || "pending"}` : liveRiskLabel}
+              variant={paymentPending ? "warning" : riskVariant}
+            />
           </View>
           <View style={[styles.summaryStatsRow, isCompactScreen ? styles.summaryStatsRowCompact : null]}>
             <SummaryStat label="Average Daily Income" value={meanIncomeValue} />
             <SummaryStat label="Daily Coverage" value={coverageValue} />
           </View>
+          {paymentPending && (
+            <>
+              <Text style={styles.paymentHint}>Premium payment is required before claims are unlocked.</Text>
+              {!!paymentError && <Text style={styles.paymentError}>{paymentError}</Text>}
+              <Button
+                loading={paymentLoading}
+                onPress={async () => {
+                  const result = await activatePolicyPayment();
+                  if (result?.success && result?.checkoutUrl) {
+                    navigation.navigate("Payment", {
+                      checkoutUrl: result.checkoutUrl,
+                      orderId: result.orderId
+                    });
+                  }
+                }}
+                style={styles.payButton}
+                title={`Pay Now • ${premiumValue}`}
+              />
+            </>
+          )}
         </Card>
 
         <Card style={styles.liveRiskCard}>
@@ -261,7 +289,7 @@ function DashboardScreen({ navigation }) {
         </View>
 
         {!isCoverageEligible && policyReady && (
-          <Text style={styles.warningText}>{eligibilityMessage}</Text>
+          <Text style={styles.warningText}>{policy.paymentStatus === "success" ? eligibilityMessage : "Premium payment required"}</Text>
         )}
 
         <Card style={styles.messageCard}>
@@ -325,6 +353,21 @@ const styles = StyleSheet.create({
   },
   summaryStatsRowCompact: {
     flexDirection: "column"
+  },
+  paymentHint: {
+    color: appTheme.colors.textSecondary,
+    fontFamily: "Rajdhani_600SemiBold",
+    fontSize: 14,
+    marginTop: appTheme.spacing.sm
+  },
+  paymentError: {
+    color: appTheme.colors.dangerText,
+    fontFamily: "Rajdhani_600SemiBold",
+    fontSize: 13,
+    marginTop: appTheme.spacing.xs
+  },
+  payButton: {
+    marginTop: appTheme.spacing.sm
   },
   summaryStat: {
     flex: 1

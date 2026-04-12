@@ -52,7 +52,7 @@ function ClaimsScreen({ navigation }) {
   const latestClaim = useMemo(() => {
     return claimsHistory.length > 0 ? claimsHistory[0] : null;
   }, [claimsHistory]);
-  const isCoverageEligible = !!policy && policy.status === "active" && policy.eligibilityStatus === "eligible";
+  const isCoverageEligible = !!policy && policy.status === "active" && policy.eligibilityStatus === "eligible" && policy.paymentStatus === "success";
   const listContentStyle = useMemo(
     () => ({
       paddingHorizontal: appTheme.spacing.sm,
@@ -115,6 +115,7 @@ function ClaimsScreen({ navigation }) {
                   <Card style={styles.resultCard}>
                     <Text style={styles.resultHeading}>Latest Claim Update</Text>
                     <Text style={styles.resultSubHeading}>{capitalizeStatus(latestClaim.status)}</Text>
+                    {!!latestClaim.reason && <Text style={styles.resultReason}>{latestClaim.reason}</Text>}
                     <Text style={styles.resultAmount}>
                       {latestClaim.amount > 0
                         ? `${formatRupee(latestClaim.amount)} Credited 🎉`
@@ -124,6 +125,8 @@ function ClaimsScreen({ navigation }) {
                             : "Conditions not met"
                           : "Verification Pending"}
                     </Text>
+                    {!!latestClaim.transactionId && <Text style={styles.resultMeta}>{`Transaction ID: ${latestClaim.transactionId}`}</Text>}
+                    {!!latestClaim.paidAt && <Text style={styles.resultMeta}>{`Paid at: ${latestClaim.paidAt}`}</Text>}
                     <StatusBadge
                       label={capitalizeStatus(latestClaim.status)}
                       variant={latestClaim.status === "approved" ? "success" : latestClaim.status === "rejected" ? "danger" : "warning"}
@@ -133,7 +136,7 @@ function ClaimsScreen({ navigation }) {
               )}
 
               <Text style={styles.historyTitle}>Claim History</Text>
-              {!isCoverageEligible && <Text style={styles.warningText}>{eligibilityMessage}</Text>}
+              {!isCoverageEligible && <Text style={styles.warningText}>{policy?.paymentStatus === "success" ? eligibilityMessage : "Premium payment required"}</Text>}
               {claimsLoading && <Text style={styles.loadingText}>Refreshing claims...</Text>}
               {!!dataError && <Text style={styles.errorText}>{dataError}</Text>}
             </View>
@@ -192,12 +195,24 @@ const styles = StyleSheet.create({
     fontSize: 15,
     marginTop: appTheme.spacing.xs
   },
+  resultReason: {
+    color: appTheme.colors.textSecondary,
+    fontFamily: "Rajdhani_600SemiBold",
+    fontSize: 14,
+    marginTop: appTheme.spacing.xs
+  },
   resultAmount: {
     color: appTheme.colors.successText,
     fontFamily: "Orbitron_700Bold",
     fontSize: 22,
     marginBottom: appTheme.spacing.sm,
     marginTop: appTheme.spacing.sm
+  },
+  resultMeta: {
+    color: appTheme.colors.textSecondary,
+    fontFamily: "Rajdhani_500Medium",
+    fontSize: 13,
+    marginBottom: 2
   },
   historyTitle: {
     color: appTheme.colors.textPrimary,

@@ -83,11 +83,18 @@ SUPABASE_ANON_KEY=<your-anon-key>
 SUPABASE_SERVICE_ROLE_KEY=<your-service-role-key>
 SUPABASE_USERS_TABLE=app_users
 SUPABASE_ONBOARDING_TABLE=onboarding_profiles
+SUPABASE_POLICIES_TABLE=policies
+SUPABASE_CLAIMS_TABLE=claims
+
+RAZORPAY_KEY_ID=<your-razorpay-test-key-id>
+RAZORPAY_KEY_SECRET=<your-razorpay-test-key-secret>
+RAZORPAY_CURRENCY=INR
 
 JWT_SECRET=<use-a-long-random-secret>
 JWT_ALGORITHM=HS256
 ACCESS_TOKEN_EXP_MINUTES=60
 REFRESH_TOKEN_EXP_DAYS=7
+CORS_ALLOW_ORIGIN_REGEX=
 ```
 
 5. Run SQL in Supabase SQL Editor (in order):
@@ -101,6 +108,9 @@ REFRESH_TOKEN_EXP_DAYS=7
 - `backend/sql/007_relax_legacy_income_not_null.sql`
 - `backend/sql/008_add_policy_onboarding_fk.sql`
 - `backend/sql/009_normalize_fraud_score_scale.sql`
+- `backend/sql/010_enforce_daily_claim_limit.sql`
+- `backend/sql/011_add_razorpay_payout_fields.sql`
+- `backend/sql/012_add_policy_payment_fields.sql`
 
 Important: paste SQL content, not file paths.
 
@@ -187,3 +197,23 @@ curl http://localhost:8000/api/health
 - Custom backend auth (`app_users` + JWT)
 - Phone + password registration/login
 - No Twilio required
+
+## 5. Railway Deployment (Frontend PWA + Backend API)
+
+Deploy as two separate Railway services from this monorepo.
+
+Backend service:
+- Root directory: `backend`
+- Uses: `backend/railway.json`, `backend/nixpacks.toml`
+- Health check: `/api/health`
+
+Frontend PWA service:
+- Root directory: `frontend`
+- Uses: `frontend/railway.json`, `frontend/nixpacks.toml`
+- Build output: `dist`
+- Start command: `npm run start:railway`
+
+Required cross-service environment values:
+- Frontend `EXPO_PUBLIC_API_BASE_URL=https://<backend-domain>.up.railway.app`
+- Backend `CORS_ORIGINS=https://<frontend-domain>.up.railway.app`
+- Optional wildcard: `CORS_ALLOW_ORIGIN_REGEX=https://.*\\.up\\.railway\\.app`

@@ -171,3 +171,24 @@ npm run web
 - Frontend intentionally avoids financial/trigger calculations.
 - UI status text is designed to communicate automation steps in real time.
 - Data is synchronized through app context and API service modules.
+
+## 9. Railway PWA Deployment
+
+Deploy frontend as a separate Railway service from the same repository.
+
+1. Create a new Railway service from this repo.
+2. Set `Root Directory` to `frontend`.
+3. Railway will use:
+	- `frontend/railway.json`
+	- `frontend/nixpacks.toml`
+4. Build/start behavior for Railway:
+	- Build: `npm run build:web` (Expo static web export to `dist`)
+	- Start: `npm run start:railway` (serves `dist` as SPA on `$PORT`)
+5. Set environment variables:
+	- `EXPO_PUBLIC_API_BASE_URL=https://<backend-domain>.up.railway.app`
+6. Redeploy and verify:
+	- App loads on Railway URL
+	- Install prompt appears in supported browsers (PWA)
+	- Payment route opens Razorpay checkout screen
+
+PWA assets are served from `frontend/public` (`manifest.json`, `sw.js`, icons) and service worker registration is done in `frontend/index.js`.

@@ -65,6 +65,9 @@ class PolicyResponse(BaseModel):
     income_variance: Optional[float] = None
     premium: float
     coverage_amount: float
+    payment_status: Optional[str] = "pending"
+    payment_id: Optional[str] = None
+    activated_at: Optional[str] = None
     policy_start_date: str
     status: Literal["active", "inactive"]
     eligibility_status: str = "eligible"
@@ -89,6 +92,29 @@ class PremiumCalculateResponse(BaseModel):
     premium: float
 
 
+class PaymentOrderCreateRequest(BaseModel):
+    token: Optional[str] = None
+
+
+class PaymentOrderResponse(BaseModel):
+    order_id: str
+    amount: int
+    currency: str
+    premium: float
+
+
+class PaymentVerifyRequest(BaseModel):
+    order_id: str
+    payment_id: Optional[str] = None
+
+
+class PaymentVerifyResponse(BaseModel):
+    payment_status: Literal["success"]
+    payment_id: str
+    activated_at: str
+    order_id: str
+
+
 class ClaimCreateRequest(BaseModel):
     lat: Optional[float] = None
     lon: Optional[float] = None
@@ -104,6 +130,12 @@ class ClaimResponse(BaseModel):
     payout_amount: float
     status: Literal["pending", "approved", "rejected"]
     fraud_score: Optional[float] = Field(None, ge=0, le=1)
+    payment_status: Optional[str] = None
+    transaction_id: Optional[str] = None
+    paid_at: Optional[str] = None
+    payout_method: Optional[str] = None
+    trigger_snapshot: Optional[dict] = None
+    rule_decision_reason: Optional[str] = None
     created_at: str
     updated_at: str
 

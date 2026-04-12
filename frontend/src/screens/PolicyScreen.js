@@ -5,6 +5,7 @@ import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import Card from "../components/Card";
+import Button from "../components/Button";
 import Header from "../components/Header";
 import StatusBadge from "../components/StatusBadge";
 import { useAppContext } from "../context/AppContext";
@@ -23,9 +24,9 @@ function Row({ label, value }) {
   );
 }
 
-export default function PolicyScreen() {
+export default function PolicyScreen({ navigation }) {
   const tabBarHeight = useBottomTabBarHeight();
-  const { policy, policyLoading, dataError, refreshPolicy, eligibilityMessage } = useAppContext();
+  const { policy, policyLoading, dataError, refreshPolicy, eligibilityMessage, activatePolicyPayment, paymentLoading, paymentError } = useAppContext();
   const contentStyle = React.useMemo(
     () => ({
       paddingHorizontal: appTheme.spacing.lg,
@@ -44,6 +45,7 @@ export default function PolicyScreen() {
 
   const policyReady = !policyLoading && !!policy;
   const policyStatus = policyReady ? (policy.status === "active" ? "Active" : "Inactive") : "Loading...";
+  const paymentStatus = policyReady ? (policy.paymentStatus === "success" ? "Paid" : "Pending") : "Loading...";
 
   return (
     <SafeAreaView style={styles.screen}>
@@ -61,9 +63,31 @@ export default function PolicyScreen() {
           <Row label="Premium" value={policyReady ? `${formatRupee(policy.premium)}/week` : "Loading..."} />
           <Row label="Coverage" value={policyReady ? `${formatRupee(policy.coverageAmount)}/day` : "Loading..."} />
           <Row label="Status" value={policyStatus} />
+          <Row label="Payment Status" value={paymentStatus} />
           <Row label="Eligibility" value={policyReady ? policy.eligibilityStatus : "Loading..."} />
           <Row label="Worker Tier" value={policyReady ? policy.workerTier : "Loading..."} />
         </Card>
+
+        {policyReady && policy.paymentStatus !== "success" && (
+          <Card style={styles.warningCard}>
+            <Text style={styles.warningText}>Premium payment is required before claims can be submitted.</Text>
+            {!!paymentError && <Text style={styles.errorText}>{paymentError}</Text>}
+            <Button
+              loading={paymentLoading}
+              onPress={async () => {
+                const result = await activatePolicyPayment();
+                if (result?.success && result?.checkoutUrl) {
+                  navigation.navigate("Payment", {
+                    checkoutUrl: result.checkoutUrl,
+                    orderId: result.orderId
+                  });
+                }
+              }}
+              style={styles.payButton}
+              title={`Pay Now • ${formatRupee(policy.premium)}`}
+            />
+          </Card>
+        )}
 
         <Card gradient style={styles.coverageCard}>
           <Text style={styles.coverageLabel}>Policy Start</Text>
@@ -147,6 +171,9 @@ const styles = StyleSheet.create({
   },
   warningCard: {
     marginBottom: appTheme.spacing.md
+  },
+  payButton: {
+    marginTop: appTheme.spacing.sm
   },
   warningText: {
     color: appTheme.colors.warningText,

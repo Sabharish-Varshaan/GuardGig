@@ -111,8 +111,13 @@ APScheduler runs hourly.
 - Python 3.10+
 - Supabase project
 - OpenWeather API key for AQI fallback
+- Razorpay test credentials for payout simulation
 
 The backend also needs network access to the public aqi.in city pages for the primary AQI lookup.
+
+Premium payment flow uses Razorpay test mode. Onboarding creates a policy in `pending` payment state, then `/api/payment/create-order` and `/api/payment/verify` activate the policy by updating `payment_status`, `payment_id`, and `activated_at`.
+
+Razorpay test-mode payouts are automatic. The backend creates a Razorpay order after claim approval and stores the resulting transaction details on the claim row.
 
 Optional for demo validation:
 
@@ -161,6 +166,8 @@ SUPABASE_USERS_TABLE=app_users
 SUPABASE_ONBOARDING_TABLE=onboarding_profiles
 SUPABASE_POLICIES_TABLE=policies
 SUPABASE_CLAIMS_TABLE=claims
+RAZORPAY_KEY_ID=<your-razorpay-test-key-id>
+RAZORPAY_KEY_SECRET=<your-razorpay-test-key-secret>
 
 OPENWEATHER_API_KEY=your_api_key_here
 
@@ -182,6 +189,9 @@ CLAIM_FRAUD_THRESHOLD=0.7
 - `backend/sql/007_relax_legacy_income_not_null.sql`
 - `backend/sql/008_add_policy_onboarding_fk.sql`
 - `backend/sql/009_normalize_fraud_score_scale.sql`
+- `backend/sql/010_enforce_daily_claim_limit.sql`
+- `backend/sql/011_add_razorpay_payout_fields.sql`
+- `backend/sql/012_add_policy_payment_fields.sql`
 
 Important: paste SQL file contents into Supabase SQL Editor, not file path strings.
 
@@ -259,3 +269,32 @@ Demo flow check:
 - Auth is custom backend JWT auth, no Twilio.
 - Keep frontend `EXPO_PUBLIC_API_BASE_URL` aligned with this backend host.
 - Restart server after changing env variables.
+
+## 8. Railway Deployment
+
+Deploy backend as its own Railway service using the `backend` root directory.
+
+1. Create a Railway service from this repository.
+2. Set `Root Directory` to `backend`.
+3. Railway uses `backend/railway.json` for runtime start (`uvicorn app.main:app --host 0.0.0.0 --port $PORT`).
+4. Keep `backend/nixpacks.toml` in repo so install/start behavior is deterministic.
+5. Add these required environment variables in Railway:
+   - `SUPABASE_URL`
+   - `SUPABASE_ANON_KEY`
+   - `SUPABASE_SERVICE_ROLE_KEY`
+   - `SUPABASE_USERS_TABLE`
+   - `SUPABASE_ONBOARDING_TABLE`
+   - `SUPABASE_POLICIES_TABLE`
+   - `SUPABASE_CLAIMS_TABLE`
+   - `JWT_SECRET`
+   - `JWT_ALGORITHM`
+   - `ACCESS_TOKEN_EXP_MINUTES`
+   - `REFRESH_TOKEN_EXP_DAYS`
+   - `OPENWEATHER_API_KEY`
+   - `RAZORPAY_KEY_ID`
+   - `RAZORPAY_KEY_SECRET`
+   - `RAZORPAY_CURRENCY`
+6. Set CORS for deployed frontend domain:
+   - `CORS_ORIGINS=https://<frontend-domain>.up.railway.app`
+   - Optional wildcard support with `CORS_ALLOW_ORIGIN_REGEX=https://.*\\.up\\.railway\\.app`
+7. Verify deployment with `GET /api/health`.

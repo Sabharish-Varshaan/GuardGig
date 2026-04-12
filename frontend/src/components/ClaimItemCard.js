@@ -18,6 +18,7 @@ export default function ClaimItemCard({ item, style }) {
   const statusLabel = formatStatus(item.status);
   const isApproved = statusLabel === "Approved";
   const claimType = item.type ? `${String(item.type).toUpperCase()} Event` : "Rain Event";
+  const paymentStatus = formatStatus(item.paymentStatus || "pending");
 
   return (
     <NeonCard style={style} variant="elevated">
@@ -28,6 +29,9 @@ export default function ClaimItemCard({ item, style }) {
       <Text style={[styles.payout, { color: isApproved ? appTheme.colors.semanticSafe : appTheme.colors.semanticWarning }]}>
         {formatRupee(item.amount)}
       </Text>
+      <Text style={styles.meta}>{item.reason || "Automatic claim payout"}</Text>
+      <Text style={styles.meta}>{`Payment: ${paymentStatus}${item.transactionId ? ` · ${item.transactionId}` : ""}`}</Text>
+      {!!item.paidAt && <Text style={styles.meta}>{`Paid at: ${item.paidAt}`}</Text>}
       <Text style={styles.meta}>{item.timestamp}</Text>
     </NeonCard>
   );

@@ -17,10 +17,12 @@ from .routes.auth import router as auth_router
 from .routes.onboarding import router as onboarding_router
 from .routes.policy import router as policy_router
 from .routes.premium import router as premium_router
+from .routes.payment import router as payment_router
 from .routes.trigger import router as trigger_router
 from .routes.claim import router as claim_router
 from .routes.fraud import router as fraud_router
 from .routes.ml_demo import router as ml_demo_router
+from .services.payment_service import persist_claim_payment, simulate_razorpay_payout
 from .supabase_client import get_admin_client
 from .trigger_utils import check_trigger, fetch_aqi, fetch_rain_mm
 
@@ -101,6 +103,9 @@ async def automated_claim_check():
         if not trigger_data.get("trigger"):
             continue
 
+        if str(policy.get("payment_status") or "pending").lower() != "success":
+            continue
+
         trigger_type = trigger_data["type"]
         severity = trigger_data["severity"]
 
@@ -121,6 +126,19 @@ async def automated_claim_check():
         else:
             payout = 0.0
         payout = round(min(payout, coverage_amount), 2)
+        rule_decision_reason = f"approved_after_{trigger_type}_{severity}_checks"
+        trigger_snapshot = {
+            "trigger_type": trigger_type,
+            "severity": severity,
+            "rain": rain,
+            "aqi": aqi,
+            "payout_amount": payout,
+            "fraud_score": None,
+            "activity_status": "active",
+            "location_valid": True,
+            "rule_decision_reason": rule_decision_reason,
+            "city": city,
+        }
 
         claim_count = fetch_recent_claim_count(
             admin,
@@ -154,16 +172,43 @@ async def automated_claim_check():
             "fraud_score": fraud_score,
             "activity_status": "active",
             "location_valid": True,
-            "rule_decision_reason": f"approved_after_{trigger_type}_{severity}_checks",
+            "rule_decision_reason": rule_decision_reason,
             "updated_at": datetime.now(IST).isoformat(),
         }
 
         try:
-            admin.table(settings.supabase_claims_table).insert(claim_data).execute()
+            claim_response = admin.table(settings.supabase_claims_table).insert(claim_data).execute()
         except Exception as exc:
             if "daily claim limit reached" in str(exc).lower():
                 continue
             raise
+
+        claim_rows = claim_response.data or []
+        if not claim_rows:
+            continue
+
+        claim = claim_rows[0]
+
+        try:
+            payout_result = simulate_razorpay_payout(payout, user_id)
+            payment_status = payout_result["status"]
+            transaction_id = payout_result["transaction_id"]
+            paid_at = payout_result["paid_at"]
+        except Exception:
+            payment_status = "failed"
+            transaction_id = None
+            paid_at = None
+
+        persist_claim_payment(
+            admin,
+            settings.supabase_claims_table,
+            claim["id"],
+            payment_status,
+            transaction_id,
+            paid_at,
+            "Razorpay",
+            trigger_snapshot,
+        )
 
 @app.on_event("startup")
 async def startup_event():
@@ -203,6 +248,7 @@ app.include_router(auth_router)
 app.include_router(onboarding_router)
 app.include_router(policy_router)
 app.include_router(premium_router)
+app.include_router(payment_router)
 app.include_router(trigger_router)
 app.include_router(claim_router)
 app.include_router(fraud_router)
