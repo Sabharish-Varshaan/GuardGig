@@ -67,12 +67,13 @@ export async function verifyPayment(token, payload) {
   });
 }
 
-export function buildPremiumCheckoutUrl({ token, orderId, amount, currency }) {
+export function buildPremiumCheckoutUrl({ token, orderId, amount, currency, redirectUri }) {
   const params = new URLSearchParams({
     token: token || "",
     order_id: orderId || "",
     amount: String(amount || 0),
-    currency: currency || "INR"
+    currency: currency || "INR",
+    redirect_uri: redirectUri || "guardgig://payment-success"
   });
 
   return `${API_BASE_URL}/api/payment/checkout?${params.toString()}`;

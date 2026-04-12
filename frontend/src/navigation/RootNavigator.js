@@ -10,7 +10,6 @@ import { StatusBar } from "expo-status-bar";
 import { useAppContext } from "../context/AppContext";
 import SettingsScreen from "../screens/SettingsScreen";
 import SplashScreen from "../screens/SplashScreen";
-import PaymentScreen from "../screens/PaymentScreen";
 import { appTheme } from "../styles/theme";
 import AuthNavigator from "./AuthNavigator";
 import MainTabNavigator from "./MainTabNavigator";
@@ -93,11 +92,6 @@ export default function RootNavigator() {
               component={SettingsScreen}
               name="Settings"
               options={{ title: "Settings" }}
-            />
-            <RootStack.Screen
-              component={PaymentScreen}
-              name="Payment"
-              options={{ title: "Premium Payment" }}
             />
           </>
         ) : (

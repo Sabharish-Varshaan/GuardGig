@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import * as Location from "expo-location";
+import { Linking } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as SecureStore from "expo-secure-store";
 
@@ -16,7 +17,8 @@ import {
   createPolicy,
   createPaymentOrder,
   getMyClaims,
-  getMyPolicy
+  getMyPolicy,
+  verifyPayment
 } from "../services/insuranceApi";
 
 const AppContext = createContext(null);
@@ -286,6 +288,77 @@ export function AppProvider({ children }) {
   const [movementScore] = useState(null);
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [themeEnabled, setThemeEnabled] = useState(false);
+  const pendingPaymentOrderIdRef = useRef("");
+  const handledPaymentIdRef = useRef("");
+  const authTokenRef = useRef("");
+
+  useEffect(() => {
+    authTokenRef.current = authToken;
+  }, [authToken]);
+
+  const parsePaymentCallbackUrl = useCallback((url) => {
+    if (!url || !url.toLowerCase().startsWith("guardgig://payment-success")) {
+      return null;
+    }
+
+    try {
+      const parsed = new URL(url);
+      const orderId = parsed.searchParams.get("order_id") || "";
+      const paymentId = parsed.searchParams.get("payment_id") || "";
+      return { orderId, paymentId };
+    } catch (_error) {
+      const query = url.includes("?") ? url.split("?")[1] : "";
+      const params = new URLSearchParams(query);
+      return {
+        orderId: params.get("order_id") || "",
+        paymentId: params.get("payment_id") || ""
+      };
+    }
+  }, []);
+
+  const processPaymentCallback = useCallback(
+    async (url) => {
+      const parsed = parsePaymentCallbackUrl(url);
+      if (!parsed) {
+        return;
+      }
+
+      const token = authTokenRef.current;
+      if (!token) {
+        setPaymentError("Session expired. Please login again.");
+        return;
+      }
+
+      const resolvedOrderId = parsed.orderId || pendingPaymentOrderIdRef.current;
+      const resolvedPaymentId = parsed.paymentId || resolvedOrderId;
+      if (!resolvedOrderId || !resolvedPaymentId) {
+        setPaymentError("Payment callback missing required details.");
+        return;
+      }
+
+      const dedupeKey = `${resolvedOrderId}:${resolvedPaymentId}`;
+      if (handledPaymentIdRef.current === dedupeKey) {
+        return;
+      }
+
+      handledPaymentIdRef.current = dedupeKey;
+      setPaymentLoading(true);
+      setPaymentError("");
+
+      try {
+        await verifyPayment(token, {
+          orderId: resolvedOrderId,
+          paymentId: resolvedPaymentId
+        });
+        await refreshPolicy(token);
+      } catch (error) {
+        setPaymentError(toErrorMessage(error, "Payment verification failed"));
+      } finally {
+        setPaymentLoading(false);
+      }
+    },
+    [parsePaymentCallbackUrl, refreshPolicy]
+  );
 
   // Keep location ref in sync with location state to avoid circular dependencies
   useEffect(() => {
@@ -296,6 +369,33 @@ export function AppProvider({ children }) {
     setAuthToken(session.access_token || "");
     setAuthUserId(session.user_id || "");
   }, []);
+
+  useEffect(() => {
+    let active = true;
+
+    const handleIncomingUrl = (event) => {
+      if (!active) {
+        return;
+      }
+      processPaymentCallback(event?.url || "").catch(() => {});
+    };
+
+    const subscription = Linking.addEventListener("url", handleIncomingUrl);
+
+    Linking.getInitialURL()
+      .then((url) => {
+        if (active && url) {
+          return processPaymentCallback(url);
+        }
+        return null;
+      })
+      .catch(() => {});
+
+    return () => {
+      active = false;
+      subscription.remove();
+    };
+  }, [processPaymentCallback]);
 
   const clearAuthState = useCallback(() => {
     setAuthToken("");
@@ -888,12 +988,16 @@ export function AppProvider({ children }) {
 
     try {
       const orderResponse = await createPaymentOrder(authToken);
+      pendingPaymentOrderIdRef.current = orderResponse.order_id;
       const checkoutUrl = buildPremiumCheckoutUrl({
         token: authToken,
         orderId: orderResponse.order_id,
         amount: orderResponse.amount,
-        currency: orderResponse.currency
+        currency: orderResponse.currency,
+        redirectUri: "guardgig://payment-success"
       });
+
+      await Linking.openURL(checkoutUrl);
 
       return {
         success: true,

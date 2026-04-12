@@ -24,7 +24,7 @@ function Row({ label, value }) {
   );
 }
 
-export default function PolicyScreen({ navigation }) {
+export default function PolicyScreen() {
   const tabBarHeight = useBottomTabBarHeight();
   const { policy, policyLoading, dataError, refreshPolicy, eligibilityMessage, activatePolicyPayment, paymentLoading, paymentError } = useAppContext();
   const contentStyle = React.useMemo(
@@ -74,15 +74,7 @@ export default function PolicyScreen({ navigation }) {
             {!!paymentError && <Text style={styles.errorText}>{paymentError}</Text>}
             <Button
               loading={paymentLoading}
-              onPress={async () => {
-                const result = await activatePolicyPayment();
-                if (result?.success && result?.checkoutUrl) {
-                  navigation.navigate("Payment", {
-                    checkoutUrl: result.checkoutUrl,
-                    orderId: result.orderId
-                  });
-                }
-              }}
+              onPress={() => activatePolicyPayment().catch(() => {})}
               style={styles.payButton}
               title={`Pay Now • ${formatRupee(policy.premium)}`}
             />

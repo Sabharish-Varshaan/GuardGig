@@ -81,7 +81,7 @@ def create_order(current_user: dict = Depends(require_current_user)):
 
 
 @router.get("/checkout", response_class=HTMLResponse)
-def checkout_page(order_id: str, amount: int, currency: str, token: str):
+def checkout_page(order_id: str, amount: int, currency: str, token: str, redirect_uri: str = "guardgig://payment-success"):
         settings = get_settings()
 
         if not settings.razorpay_key_id:
@@ -95,7 +95,7 @@ def checkout_page(order_id: str, amount: int, currency: str, token: str):
 
         title = "GuardGig Premium Payment"
         description = "Complete weekly premium to activate policy"
-        success_message = "Payment successful. You can return to GuardGig now."
+        success_message = "Payment successful. Redirecting to GuardGig..."
         cancel_message = "Payment cancelled. You can close this tab and retry from the app."
 
         html = f"""
@@ -163,8 +163,7 @@ def checkout_page(order_id: str, amount: int, currency: str, token: str):
             const orderId = {_to_js_string(order_id)};
             const amount = {amount};
             const currency = {_to_js_string(currency)};
-            const bearer = {_to_js_string(token)};
-            const verifyEndpoint = '/api/payment/verify';
+            const redirectUri = {_to_js_string(redirect_uri)};
             const statusNode = document.getElementById('status');
 
             const setStatus = (message) => {{
@@ -178,31 +177,13 @@ def checkout_page(order_id: str, amount: int, currency: str, token: str):
                 name: 'GuardGig',
                 description: {_to_js_string(description)},
                 order_id: orderId,
-                handler: async function (response) {{
-                    try {{
-                        setStatus('Verifying payment...');
-                        const verifyResponse = await fetch(verifyEndpoint, {{
-                            method: 'POST',
-                            headers: {{
-                                'Content-Type': 'application/json',
-                                'Authorization': `Bearer ${{bearer}}`
-                            }},
-                            body: JSON.stringify({{
-                                order_id: orderId,
-                                payment_id: response.razorpay_payment_id || orderId
-                            }})
-                        }});
-
-                        const payload = await verifyResponse.json().catch(() => ({{}}));
-
-                        if (!verifyResponse.ok) {{
-                            throw new Error(payload.detail || payload.message || 'Verification failed');
-                        }}
-
-                        setStatus({_to_js_string(success_message)});
-                    }} catch (error) {{
-                        setStatus(`Verification failed: ${{error.message || 'Unknown error'}}`);
-                    }}
+                handler: function (response) {{
+                    setStatus({_to_js_string(success_message)});
+                    const paymentId = encodeURIComponent(response.razorpay_payment_id || '');
+                    const returnedOrderId = encodeURIComponent(response.razorpay_order_id || orderId);
+                    const signature = encodeURIComponent(response.razorpay_signature || '');
+                    const join = redirectUri.includes('?') ? '&' : '?';
+                    window.location.href = `${{redirectUri}}${{join}}order_id=${{returnedOrderId}}&payment_id=${{paymentId}}&signature=${{signature}}`;
                 }},
                 modal: {{
                     ondismiss: function () {{
