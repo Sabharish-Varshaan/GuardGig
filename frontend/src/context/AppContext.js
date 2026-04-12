@@ -1,6 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import * as Location from "expo-location";
 import { Linking } from "react-native";
+import * as ExpoLinking from "expo-linking";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as SecureStore from "expo-secure-store";
 
@@ -73,6 +74,7 @@ const initialLocation = {
 };
 
 const INELIGIBLE_MESSAGE = "You need 5 active days to activate coverage";
+const PAYMENT_SUCCESS_PATH = "payment-success";
 
 const createIneligiblePolicy = () => ({
   id: "",
@@ -297,15 +299,39 @@ export function AppProvider({ children }) {
   }, [authToken]);
 
   const parsePaymentCallbackUrl = useCallback((url) => {
-    if (!url || !url.toLowerCase().startsWith("guardgig://payment-success")) {
+    if (!url) {
       return null;
     }
 
     try {
+      const parsedExpoUrl = ExpoLinking.parse(url);
+      const path = String(parsedExpoUrl?.path || "").toLowerCase();
+      const host = String(parsedExpoUrl?.hostname || "").toLowerCase();
+
+      const matchesPaymentCallback =
+        path === PAYMENT_SUCCESS_PATH ||
+        path.endsWith(`/${PAYMENT_SUCCESS_PATH}`) ||
+        host === PAYMENT_SUCCESS_PATH;
+
+      if (!matchesPaymentCallback) {
+        return null;
+      }
+
+      const query = parsedExpoUrl?.queryParams || {};
+      const orderFromQuery = query.order_id;
+      const paymentFromQuery = query.payment_id;
+
+      const orderId = typeof orderFromQuery === "string" ? orderFromQuery : "";
+      const paymentId = typeof paymentFromQuery === "string" ? paymentFromQuery : "";
+
+      if (orderId || paymentId) {
+        return { orderId, paymentId };
+      }
+
       const parsed = new URL(url);
-      const orderId = parsed.searchParams.get("order_id") || "";
-      const paymentId = parsed.searchParams.get("payment_id") || "";
-      return { orderId, paymentId };
+      const fallbackOrderId = parsed.searchParams.get("order_id") || "";
+      const fallbackPaymentId = parsed.searchParams.get("payment_id") || "";
+      return { orderId: fallbackOrderId, paymentId: fallbackPaymentId };
     } catch (_error) {
       const query = url.includes("?") ? url.split("?")[1] : "";
       const params = new URLSearchParams(query);
@@ -992,12 +1018,15 @@ export function AppProvider({ children }) {
     try {
       const orderResponse = await createPaymentOrder(authToken);
       pendingPaymentOrderIdRef.current = orderResponse.order_id;
+
+      // Works in Expo Go (`exp://.../--/payment-success`) and in standalone builds (`guardgig://payment-success`).
+      const redirectUri = ExpoLinking.createURL(PAYMENT_SUCCESS_PATH);
       const checkoutUrl = buildPremiumCheckoutUrl({
         token: authToken,
         orderId: orderResponse.order_id,
         amount: orderResponse.amount,
         currency: orderResponse.currency,
-        redirectUri: "guardgig://payment-success"
+        redirectUri
       });
 
       await Linking.openURL(checkoutUrl);
