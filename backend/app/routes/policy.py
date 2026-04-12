@@ -24,14 +24,11 @@ def _parse_datetime(value: str | None) -> datetime | None:
 def _derive_underwriting(onboarding_created_at: str | None) -> tuple[str, str, int]:
     created_at = _parse_datetime(onboarding_created_at)
     if created_at is None:
-        return "ineligible", "low", 0
+        return "eligible", "low", 0
 
     active_days = max(0, (datetime.now(timezone.utc) - created_at).days)
 
-    if active_days < 5:
-        return "ineligible", "low", active_days
-
-    if 5 <= active_days < 7:
+    if active_days < 7:
         return "eligible", "low", active_days
 
     return "eligible", "medium", active_days
@@ -99,13 +96,6 @@ def create_policy(current_user: dict = Depends(require_current_user)):
     if settings.demo_mode:
         eligibility_status = "eligible"
         worker_tier = "medium"
-
-    if eligibility_status == "ineligible":
-        return PolicyCreateResponse(
-            status="ineligible",
-            policy=None,
-            message="User is ineligible for policy creation based on onboarding age.",
-        )
 
     # Check if policy already exists
     existing_policy = (
