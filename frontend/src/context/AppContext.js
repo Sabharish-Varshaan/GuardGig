@@ -350,14 +350,17 @@ export function AppProvider({ children }) {
           orderId: resolvedOrderId,
           paymentId: resolvedPaymentId
         });
-        await refreshPolicy(token);
+
+        // Avoid depending on refreshPolicy here because this callback is declared before it.
+        const latestPolicy = await getMyPolicy(token);
+        setPolicy(normalizePolicy(latestPolicy));
       } catch (error) {
         setPaymentError(toErrorMessage(error, "Payment verification failed"));
       } finally {
         setPaymentLoading(false);
       }
     },
-    [parsePaymentCallbackUrl, refreshPolicy]
+    [parsePaymentCallbackUrl]
   );
 
   // Keep location ref in sync with location state to avoid circular dependencies
