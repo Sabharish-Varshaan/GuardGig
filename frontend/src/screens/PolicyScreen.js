@@ -24,9 +24,20 @@ function Row({ label, value }) {
   );
 }
 
-export default function PolicyScreen({ navigation }) {
+export default function PolicyScreen() {
   const tabBarHeight = useBottomTabBarHeight();
-  const { policy, policyLoading, dataError, refreshPolicy, eligibilityMessage, activatePolicyPayment, paymentLoading, paymentError } = useAppContext();
+  const {
+    policy,
+    policyLoading,
+    dataError,
+    refreshPolicy,
+    eligibilityMessage,
+    payPremium,
+    paymentLoading,
+    paymentError,
+    paymentMessage,
+    paymentOutcome
+  } = useAppContext();
   const contentStyle = React.useMemo(
     () => ({
       paddingHorizontal: appTheme.spacing.lg,
@@ -75,19 +86,14 @@ export default function PolicyScreen({ navigation }) {
             <Button
               loading={paymentLoading}
               onPress={async () => {
-                const result = await activatePolicyPayment();
-                if (result?.success && result?.orderId) {
-                  navigation.navigate("Payment", {
-                    orderId: result.orderId,
-                    amount: result.amount,
-                    checkoutUrl: result.checkoutUrl,
-                    source: "policy"
-                  });
-                }
+                await payPremium();
               }}
               style={styles.payButton}
               title={`Pay Now • ${formatRupee(policy.premium)}`}
             />
+            {!!paymentMessage && (
+              <Text style={paymentOutcome === "success" ? styles.successText : styles.warningText}>{paymentMessage}</Text>
+            )}
           </Card>
         )}
 
@@ -186,5 +192,11 @@ const styles = StyleSheet.create({
     color: appTheme.colors.danger,
     fontFamily: "Rajdhani_600SemiBold",
     fontSize: 14
+  },
+  successText: {
+    color: appTheme.colors.success,
+    fontFamily: "Rajdhani_700Bold",
+    fontSize: 14,
+    marginTop: appTheme.spacing.xs
   }
 });

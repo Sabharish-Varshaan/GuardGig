@@ -2,6 +2,7 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useR
 import * as Location from "expo-location";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as SecureStore from "expo-secure-store";
+import { Platform } from "react-native";
 
 import {
   getOnboardingProfile,
@@ -10,13 +11,13 @@ import {
   submitOnboardingProfile
 } from "../services/authApi";
 import {
-  buildHostedPaymentUrl,
   checkTrigger,
   createClaim,
   createPolicy,
   createPaymentOrder,
   getMyClaims,
-  getMyPolicy
+  getMyPolicy,
+  verifyPayment
 } from "../services/insuranceApi";
 
 const AppContext = createContext(null);
@@ -274,6 +275,8 @@ export function AppProvider({ children }) {
   const [claimsLoading, setClaimsLoading] = useState(false);
   const [paymentLoading, setPaymentLoading] = useState(false);
   const [paymentError, setPaymentError] = useState("");
+  const [paymentMessage, setPaymentMessage] = useState("");
+  const [paymentOutcome, setPaymentOutcome] = useState("idle");
   const [risk, setRisk] = useState(initialRisk);
   const [location, setLocation] = useState(initialLocation);
   const locationRef = useRef(initialLocation);
@@ -866,7 +869,7 @@ export function AppProvider({ children }) {
     }
   }, [authToken, coverageLoading, policy, refreshClaims, refreshPolicy, refreshRisk]);
 
-  const activatePolicyPayment = useCallback(async () => {
+  const payPremium = useCallback(async () => {
     if (!authToken) {
       const message = "Session expired. Please login again.";
       setPaymentError(message);
@@ -880,36 +883,125 @@ export function AppProvider({ children }) {
     }
 
     if ((policy.paymentStatus || "pending") === "success") {
+      setPaymentOutcome("success");
+      setPaymentMessage("Premium already paid");
       return { success: true, alreadyPaid: true };
+    }
+
+    if (Platform.OS !== "web") {
+      const message = "Razorpay checkout is available only on PWA/browser.";
+      setPaymentError(message);
+      setPaymentOutcome("failure");
+      setPaymentMessage("Payment failed");
+      return { success: false, error: message };
+    }
+
+    const RazorpayConstructor = globalThis?.Razorpay;
+    if (typeof RazorpayConstructor !== "function") {
+      const message = "Razorpay checkout failed to load. Refresh and try again.";
+      setPaymentError(message);
+      setPaymentOutcome("failure");
+      setPaymentMessage("Payment failed");
+      return { success: false, error: message };
     }
 
     setPaymentLoading(true);
     setPaymentError("");
+    setPaymentMessage("Creating payment order...");
+    setPaymentOutcome("idle");
 
     try {
       const orderResponse = await createPaymentOrder(authToken);
-      const checkoutUrl = buildHostedPaymentUrl({
-        orderId: orderResponse.order_id,
-        amount: orderResponse.amount,
-        currency: orderResponse.currency,
-        keyId: orderResponse.key_id
-      });
 
-      return {
-        success: true,
-        orderId: orderResponse.order_id,
-        checkoutUrl,
-        amount: orderResponse.amount,
-        currency: orderResponse.currency
-      };
+      return await new Promise((resolve) => {
+        let settled = false;
+        const complete = (result) => {
+          if (settled) {
+            return;
+          }
+
+          settled = true;
+          setPaymentLoading(false);
+          resolve(result);
+        };
+
+        const options = {
+          key: orderResponse.key_id,
+          amount: Number(orderResponse.amount || 0),
+          currency: orderResponse.currency || "INR",
+          name: "GuardGig",
+          description: "Weekly Insurance Premium",
+          order_id: orderResponse.order_id,
+          handler: async function (response) {
+            setPaymentMessage("Verifying payment...");
+
+            try {
+              const paymentId = response?.razorpay_payment_id;
+              if (!paymentId) {
+                throw new Error("Missing Razorpay payment id");
+              }
+
+              await verifyPayment(authToken, {
+                orderId: orderResponse.order_id,
+                paymentId
+              });
+
+              await refreshPolicy(authToken);
+              setPaymentError("");
+              setPaymentOutcome("success");
+              setPaymentMessage("Payment successful. Policy activated.");
+              complete({ success: true, orderId: orderResponse.order_id, paymentId });
+            } catch (error) {
+              const message = toErrorMessage(error, "Payment verification failed");
+              setPaymentError(message);
+              setPaymentOutcome("failure");
+              setPaymentMessage("Payment failed");
+              complete({ success: false, error: message });
+            }
+          },
+          modal: {
+            ondismiss: function () {
+              setPaymentError("Payment was cancelled");
+              setPaymentOutcome("failure");
+              setPaymentMessage("Payment cancelled");
+              complete({ success: false, cancelled: true, error: "Payment cancelled" });
+            }
+          }
+        };
+
+        try {
+          const checkout = new RazorpayConstructor(options);
+
+          checkout.on("payment.failed", (event) => {
+            const message =
+              event?.error?.description ||
+              event?.error?.reason ||
+              "Payment failed";
+
+            setPaymentError(message);
+            setPaymentOutcome("failure");
+            setPaymentMessage("Payment failed");
+            complete({ success: false, error: message });
+          });
+
+          setPaymentMessage("Opening Razorpay checkout...");
+          checkout.open();
+        } catch (error) {
+          const message = toErrorMessage(error, "Unable to open Razorpay checkout");
+          setPaymentError(message);
+          setPaymentOutcome("failure");
+          setPaymentMessage("Payment failed");
+          complete({ success: false, error: message });
+        }
+      });
     } catch (error) {
       const message = toErrorMessage(error, "Payment failed");
       setPaymentError(message);
+      setPaymentOutcome("failure");
+      setPaymentMessage("Payment failed");
       return { success: false, error: message };
-    } finally {
-      setPaymentLoading(false);
     }
-  }, [authToken, policy]);
+  }, [authToken, policy, refreshPolicy]);
 
   const value = useMemo(
     () => ({
@@ -937,6 +1029,8 @@ export function AppProvider({ children }) {
       claimsLoading,
       paymentLoading,
       paymentError,
+      paymentMessage,
+      paymentOutcome,
       eligibilityMessage: INELIGIBLE_MESSAGE,
       notificationsEnabled,
       themeEnabled,
@@ -950,7 +1044,8 @@ export function AppProvider({ children }) {
       refreshRisk,
       refreshPolicy,
       refreshClaims,
-      activatePolicyPayment,
+      payPremium,
+      activatePolicyPayment: payPremium,
       setNotificationsEnabled,
       setThemeEnabled,
       setAuthError
@@ -980,6 +1075,8 @@ export function AppProvider({ children }) {
       claimsLoading,
       paymentLoading,
       paymentError,
+      paymentMessage,
+      paymentOutcome,
       INELIGIBLE_MESSAGE,
       notificationsEnabled,
       themeEnabled,
@@ -987,7 +1084,8 @@ export function AppProvider({ children }) {
       requestLocation,
       refreshRisk,
       refreshPolicy,
-      refreshClaims
+      refreshClaims,
+      payPremium
     ]
   );
 

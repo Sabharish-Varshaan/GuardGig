@@ -106,7 +106,7 @@ class PaymentOrderResponse(BaseModel):
 
 class PaymentVerifyRequest(BaseModel):
     order_id: str
-    payment_id: Optional[str] = None
+    payment_id: str
 
 
 class PaymentVerifyResponse(BaseModel):

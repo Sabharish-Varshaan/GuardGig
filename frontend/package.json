@@ -4,6 +4,9 @@
   "main": "index.js",
   "scripts": {
     "start": "expo start",
+    "start:tunnel": "expo start --tunnel --clear",
+    "start:clear": "expo start --clear",
+    "postinstall": "node scripts/fix-expo-tsconfig.mjs",
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
@@ -37,6 +40,7 @@
   "private": true,
   "devDependencies": {
     "@types/react": "~19.1.10",
+    "expo-module-scripts": "^55.0.2",
     "typescript": "~5.9.2"
   }
 }

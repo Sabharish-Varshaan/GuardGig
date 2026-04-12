@@ -131,9 +131,11 @@ function DashboardScreen({ navigation }) {
     requestLocation,
     refreshRisk,
     startCoverageCheck,
-    activatePolicyPayment,
+    payPremium,
     paymentLoading,
-    paymentError
+    paymentError,
+    paymentMessage,
+    paymentOutcome
   } = useAppContext();
   const { width } = useWindowDimensions();
   const tabBarHeight = useBottomTabBarHeight();
@@ -254,19 +256,14 @@ function DashboardScreen({ navigation }) {
               <Button
                 loading={paymentLoading}
                 onPress={async () => {
-                  const result = await activatePolicyPayment();
-                  if (result?.success && result?.orderId) {
-                    navigation.navigate("Payment", {
-                      orderId: result.orderId,
-                      amount: result.amount,
-                      checkoutUrl: result.checkoutUrl,
-                      source: "dashboard"
-                    });
-                  }
+                  await payPremium();
                 }}
                 style={styles.payButton}
                 title={`Pay Now • ${premiumValue}`}
               />
+              {!!paymentMessage && (
+                <Text style={paymentOutcome === "success" ? styles.paymentSuccess : styles.paymentHint}>{paymentMessage}</Text>
+              )}
             </>
           )}
         </Card>
@@ -365,6 +362,12 @@ const styles = StyleSheet.create({
   paymentError: {
     color: appTheme.colors.dangerText,
     fontFamily: "Rajdhani_600SemiBold",
+    fontSize: 13,
+    marginTop: appTheme.spacing.xs
+  },
+  paymentSuccess: {
+    color: appTheme.colors.success,
+    fontFamily: "Rajdhani_700Bold",
     fontSize: 13,
     marginTop: appTheme.spacing.xs
   },

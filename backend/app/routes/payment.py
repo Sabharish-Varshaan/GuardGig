@@ -212,7 +212,10 @@ def verify_payment(request: PaymentVerifyRequest, current_user: dict = Depends(r
     admin = get_admin_client()
     policy = _get_policy(admin, settings, current_user["id"])
 
-    payment_id = request.payment_id or request.order_id
+    payment_id = (request.payment_id or "").strip()
+    if not payment_id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing Razorpay payment id")
+
     activated_at = datetime.now(timezone.utc).isoformat()
 
     try:
