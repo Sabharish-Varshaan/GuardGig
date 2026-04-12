@@ -1,4 +1,5 @@
 import { apiRequest } from "./apiClient";
+import { API_BASE_URL } from "../config/api";
 
 export async function createPolicy(token) {
   return apiRequest("/api/policy/create", {
@@ -64,4 +65,15 @@ export async function verifyPayment(token, payload) {
       payment_id: payload.paymentId
     }
   });
+}
+
+export function buildHostedPaymentUrl({ orderId, amount, currency, keyId }) {
+  const params = new URLSearchParams({
+    order_id: orderId || "",
+    amount: String(amount || 0),
+    currency: currency || "INR",
+    key_id: keyId || ""
+  });
+
+  return `${API_BASE_URL}/payment-pages/payment.html?${params.toString()}`;
 }

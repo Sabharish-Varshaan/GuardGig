@@ -259,7 +259,7 @@ function DashboardScreen({ navigation }) {
                     navigation.navigate("Payment", {
                       orderId: result.orderId,
                       amount: result.amount,
-                      paymentId: result.paymentId,
+                      checkoutUrl: result.checkoutUrl,
                       source: "dashboard"
                     });
                   }

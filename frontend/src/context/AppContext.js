@@ -10,6 +10,7 @@ import {
   submitOnboardingProfile
 } from "../services/authApi";
 import {
+  buildHostedPaymentUrl,
   checkTrigger,
   createClaim,
   createPolicy,
@@ -887,11 +888,17 @@ export function AppProvider({ children }) {
 
     try {
       const orderResponse = await createPaymentOrder(authToken);
+      const checkoutUrl = buildHostedPaymentUrl({
+        orderId: orderResponse.order_id,
+        amount: orderResponse.amount,
+        currency: orderResponse.currency,
+        keyId: orderResponse.key_id
+      });
 
       return {
         success: true,
         orderId: orderResponse.order_id,
-        paymentId: `${orderResponse.order_id}_simulated`,
+        checkoutUrl,
         amount: orderResponse.amount,
         currency: orderResponse.currency
       };

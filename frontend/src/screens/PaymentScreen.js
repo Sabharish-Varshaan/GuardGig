@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { WebView } from "react-native-webview";
 
 import Button from "../components/Button";
 import { useAppContext } from "../context/AppContext";
@@ -9,48 +10,63 @@ import { appTheme } from "../styles/theme";
 
 export default function PaymentScreen({ navigation, route }) {
   const { authToken, refreshPolicy } = useAppContext();
+  const checkoutUrl = route?.params?.checkoutUrl || "";
   const orderId = route?.params?.orderId || "";
   const amountPaise = Number(route?.params?.amount || 0);
-  const fallbackPaymentId = route?.params?.paymentId || "";
   const [isProcessing, setIsProcessing] = useState(false);
   const [paymentError, setPaymentError] = useState("");
+  const [statusMessage, setStatusMessage] = useState("Opening Razorpay...");
 
   const amountRupees = useMemo(() => (amountPaise > 0 ? (amountPaise / 100).toFixed(2) : "0.00"), [amountPaise]);
 
-  const onPayNow = async () => {
+  const onWebMessage = async (event) => {
+    let payload;
+    try {
+      payload = JSON.parse(event?.nativeEvent?.data || "{}");
+    } catch (_error) {
+      return;
+    }
+
+    if (payload?.type === "payment_failed") {
+      setStatusMessage("Payment failed");
+      setPaymentError(payload.reason || "Payment failed");
+      return;
+    }
+
+    if (payload?.type !== "payment_success") {
+      return;
+    }
+
     if (!authToken) {
       setPaymentError("Session expired. Please login again.");
       return;
     }
 
-    if (!orderId) {
-      setPaymentError("Missing order details. Please retry payment.");
-      return;
-    }
-
     setIsProcessing(true);
     setPaymentError("");
+    setStatusMessage("Verifying payment...");
 
     try {
-      // Simulated in-app payment success delay.
-      await new Promise((resolve) => setTimeout(resolve, 2000));
-      const paymentId = fallbackPaymentId || `${orderId}_simulated`;
+      const receivedOrderId = payload.order_id || orderId;
+      const paymentId = payload.payment_id || `${receivedOrderId}_simulated`;
 
       await verifyPayment(authToken, {
-        orderId,
+        orderId: receivedOrderId,
         paymentId
       });
 
       await refreshPolicy(authToken);
+      setStatusMessage("Payment successful");
       navigation.navigate("MainTabs", { screen: "Home" });
     } catch (error) {
-      setPaymentError(error instanceof Error ? error.message : "Payment failed");
+      setPaymentError(error instanceof Error ? error.message : "Payment verification failed");
+      setStatusMessage("Verification failed");
     } finally {
       setIsProcessing(false);
     }
   };
 
-  if (!orderId) {
+  if (!orderId || !checkoutUrl) {
     return (
       <SafeAreaView style={styles.screen}>
         <View style={styles.centered}>
@@ -68,14 +84,29 @@ export default function PaymentScreen({ navigation, route }) {
         <Text style={styles.title}>Complete Payment</Text>
         <Text style={styles.meta}>{`Order: ${orderId}`}</Text>
         <Text style={styles.amount}>{`Amount: ₹${amountRupees}`}</Text>
+        <Text style={styles.meta}>{statusMessage}</Text>
 
-        {isProcessing ? (
+        <View style={styles.webViewWrap}>
+          <WebView
+            source={{ uri: checkoutUrl }}
+            javaScriptEnabled
+            domStorageEnabled
+            startInLoadingState
+            onMessage={onWebMessage}
+            renderLoading={() => (
+              <View style={styles.loaderWrap}>
+                <ActivityIndicator color={appTheme.colors.accentPrimary} size="large" />
+                <Text style={styles.meta}>Loading Razorpay UI...</Text>
+              </View>
+            )}
+          />
+        </View>
+
+        {isProcessing && (
           <View style={styles.loaderWrap}>
-            <ActivityIndicator color={appTheme.colors.accentPrimary} size="large" />
-            <Text style={styles.meta}>Processing simulated payment...</Text>
+            <ActivityIndicator color={appTheme.colors.accentPrimary} size="small" />
+            <Text style={styles.meta}>Finalizing payment...</Text>
           </View>
-        ) : (
-          <Button onPress={onPayNow} style={styles.actionButton} title="Pay Now" />
         )}
 
         {!!paymentError && <Text style={styles.errorText}>{paymentError}</Text>}
@@ -102,6 +133,16 @@ const styles = StyleSheet.create({
     gap: appTheme.spacing.sm,
     marginTop: appTheme.spacing.md
   },
+  webViewWrap: {
+    height: 380,
+    width: "100%",
+    marginTop: appTheme.spacing.md,
+    borderRadius: 12,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: appTheme.colors.borderSubtle,
+    backgroundColor: appTheme.colors.bgCard
+  },
   title: {
     color: appTheme.colors.textPrimary,
     fontFamily: "Orbitron_600SemiBold",
@@ -118,10 +159,6 @@ const styles = StyleSheet.create({
     fontFamily: "Orbitron_700Bold",
     fontSize: 24,
     marginTop: appTheme.spacing.sm
-  },
-  actionButton: {
-    marginTop: appTheme.spacing.md,
-    minWidth: 140
   },
   secondaryButton: {
     marginTop: appTheme.spacing.sm,

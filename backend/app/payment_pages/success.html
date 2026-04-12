@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Payment Success</title>
+    <style>
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        background: #07223d;
+        color: #e9f7ff;
+      }
+      .box {
+        width: min(420px, 92vw);
+        border-radius: 14px;
+        padding: 24px;
+        text-align: center;
+        background: rgba(255, 255, 255, 0.08);
+        border: 1px solid rgba(255, 255, 255, 0.18);
+      }
+      h1 { margin: 0 0 8px; font-size: 22px; }
+      p { margin: 8px 0; }
+    </style>
+  </head>
+  <body>
+    <main class="box">
+      <h1>Payment Successful</h1>
+      <p id="meta"></p>
+      <p>Returning to app...</p>
+    </main>
+
+    <script>
+      const params = new URLSearchParams(window.location.search);
+      const payload = {
+        type: 'payment_success',
+        order_id: params.get('order_id') || '',
+        payment_id: params.get('payment_id') || '',
+        signature: params.get('signature') || ''
+      };
+
+      const meta = document.getElementById('meta');
+      meta.textContent = `Order: ${payload.order_id}`;
+
+      if (window.ReactNativeWebView && typeof window.ReactNativeWebView.postMessage === 'function') {
+        window.ReactNativeWebView.postMessage(JSON.stringify(payload));
+      }
+    </script>
+  </body>
+</html>

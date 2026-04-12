@@ -1,5 +1,8 @@
+from pathlib import Path
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 from datetime import datetime
@@ -34,6 +37,9 @@ app = FastAPI(
     version="0.1.0",
     description="Registration, login, and onboarding APIs for GuardGig"
 )
+
+payment_pages_dir = Path(__file__).resolve().parent / "payment_pages"
+app.mount("/payment-pages", StaticFiles(directory=str(payment_pages_dir), html=True), name="payment-pages")
 
 scheduler = AsyncIOScheduler()
 

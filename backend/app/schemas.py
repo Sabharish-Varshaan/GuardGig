@@ -101,6 +101,7 @@ class PaymentOrderResponse(BaseModel):
     amount: int
     currency: str
     premium: float
+    key_id: str
 
 
 class PaymentVerifyRequest(BaseModel):

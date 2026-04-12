@@ -77,6 +77,7 @@ def create_order(current_user: dict = Depends(require_current_user)):
         amount=amount_paise,
         currency=settings.razorpay_currency,
         premium=premium,
+        key_id=settings.razorpay_key_id,
     )
 
 
