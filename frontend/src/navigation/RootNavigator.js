@@ -8,6 +8,7 @@ import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { StatusBar } from "expo-status-bar";
 
 import { useAppContext } from "../context/AppContext";
+import PaymentScreen from "../screens/PaymentScreen";
 import SettingsScreen from "../screens/SettingsScreen";
 import SplashScreen from "../screens/SplashScreen";
 import { appTheme } from "../styles/theme";
@@ -92,6 +93,11 @@ export default function RootNavigator() {
               component={SettingsScreen}
               name="Settings"
               options={{ title: "Settings" }}
+            />
+            <RootStack.Screen
+              component={PaymentScreen}
+              name="Payment"
+              options={{ title: "Premium Payment" }}
             />
           </>
         ) : (

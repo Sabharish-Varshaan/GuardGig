@@ -1,7 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import * as Location from "expo-location";
-import { Linking } from "react-native";
-import * as ExpoLinking from "expo-linking";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as SecureStore from "expo-secure-store";
 
@@ -12,14 +10,12 @@ import {
   submitOnboardingProfile
 } from "../services/authApi";
 import {
-  buildPremiumCheckoutUrl,
   checkTrigger,
   createClaim,
   createPolicy,
   createPaymentOrder,
   getMyClaims,
-  getMyPolicy,
-  verifyPayment
+  getMyPolicy
 } from "../services/insuranceApi";
 
 const AppContext = createContext(null);
@@ -74,7 +70,6 @@ const initialLocation = {
 };
 
 const INELIGIBLE_MESSAGE = "You need 5 active days to activate coverage";
-const PAYMENT_SUCCESS_PATH = "payment-success";
 
 const createIneligiblePolicy = () => ({
   id: "",
@@ -290,104 +285,6 @@ export function AppProvider({ children }) {
   const [movementScore] = useState(null);
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [themeEnabled, setThemeEnabled] = useState(false);
-  const pendingPaymentOrderIdRef = useRef("");
-  const handledPaymentIdRef = useRef("");
-  const authTokenRef = useRef("");
-
-  useEffect(() => {
-    authTokenRef.current = authToken;
-  }, [authToken]);
-
-  const parsePaymentCallbackUrl = useCallback((url) => {
-    if (!url) {
-      return null;
-    }
-
-    try {
-      const parsedExpoUrl = ExpoLinking.parse(url);
-      const path = String(parsedExpoUrl?.path || "").toLowerCase();
-      const host = String(parsedExpoUrl?.hostname || "").toLowerCase();
-
-      const matchesPaymentCallback =
-        path === PAYMENT_SUCCESS_PATH ||
-        path.endsWith(`/${PAYMENT_SUCCESS_PATH}`) ||
-        host === PAYMENT_SUCCESS_PATH;
-
-      if (!matchesPaymentCallback) {
-        return null;
-      }
-
-      const query = parsedExpoUrl?.queryParams || {};
-      const orderFromQuery = query.order_id;
-      const paymentFromQuery = query.payment_id;
-
-      const orderId = typeof orderFromQuery === "string" ? orderFromQuery : "";
-      const paymentId = typeof paymentFromQuery === "string" ? paymentFromQuery : "";
-
-      if (orderId || paymentId) {
-        return { orderId, paymentId };
-      }
-
-      const parsed = new URL(url);
-      const fallbackOrderId = parsed.searchParams.get("order_id") || "";
-      const fallbackPaymentId = parsed.searchParams.get("payment_id") || "";
-      return { orderId: fallbackOrderId, paymentId: fallbackPaymentId };
-    } catch (_error) {
-      const query = url.includes("?") ? url.split("?")[1] : "";
-      const params = new URLSearchParams(query);
-      return {
-        orderId: params.get("order_id") || "",
-        paymentId: params.get("payment_id") || ""
-      };
-    }
-  }, []);
-
-  const processPaymentCallback = useCallback(
-    async (url) => {
-      const parsed = parsePaymentCallbackUrl(url);
-      if (!parsed) {
-        return;
-      }
-
-      const token = authTokenRef.current;
-      if (!token) {
-        setPaymentError("Session expired. Please login again.");
-        return;
-      }
-
-      const resolvedOrderId = parsed.orderId || pendingPaymentOrderIdRef.current;
-      const resolvedPaymentId = parsed.paymentId || resolvedOrderId;
-      if (!resolvedOrderId || !resolvedPaymentId) {
-        setPaymentError("Payment callback missing required details.");
-        return;
-      }
-
-      const dedupeKey = `${resolvedOrderId}:${resolvedPaymentId}`;
-      if (handledPaymentIdRef.current === dedupeKey) {
-        return;
-      }
-
-      handledPaymentIdRef.current = dedupeKey;
-      setPaymentLoading(true);
-      setPaymentError("");
-
-      try {
-        await verifyPayment(token, {
-          orderId: resolvedOrderId,
-          paymentId: resolvedPaymentId
-        });
-
-        // Avoid depending on refreshPolicy here because this callback is declared before it.
-        const latestPolicy = await getMyPolicy(token);
-        setPolicy(normalizePolicy(latestPolicy));
-      } catch (error) {
-        setPaymentError(toErrorMessage(error, "Payment verification failed"));
-      } finally {
-        setPaymentLoading(false);
-      }
-    },
-    [parsePaymentCallbackUrl]
-  );
 
   // Keep location ref in sync with location state to avoid circular dependencies
   useEffect(() => {
@@ -398,33 +295,6 @@ export function AppProvider({ children }) {
     setAuthToken(session.access_token || "");
     setAuthUserId(session.user_id || "");
   }, []);
-
-  useEffect(() => {
-    let active = true;
-
-    const handleIncomingUrl = (event) => {
-      if (!active) {
-        return;
-      }
-      processPaymentCallback(event?.url || "").catch(() => {});
-    };
-
-    const subscription = Linking.addEventListener("url", handleIncomingUrl);
-
-    Linking.getInitialURL()
-      .then((url) => {
-        if (active && url) {
-          return processPaymentCallback(url);
-        }
-        return null;
-      })
-      .catch(() => {});
-
-    return () => {
-      active = false;
-      subscription.remove();
-    };
-  }, [processPaymentCallback]);
 
   const clearAuthState = useCallback(() => {
     setAuthToken("");
@@ -1017,24 +887,11 @@ export function AppProvider({ children }) {
 
     try {
       const orderResponse = await createPaymentOrder(authToken);
-      pendingPaymentOrderIdRef.current = orderResponse.order_id;
-
-      // Works in Expo Go (`exp://.../--/payment-success`) and in standalone builds (`guardgig://payment-success`).
-      const redirectUri = ExpoLinking.createURL(PAYMENT_SUCCESS_PATH);
-      const checkoutUrl = buildPremiumCheckoutUrl({
-        token: authToken,
-        orderId: orderResponse.order_id,
-        amount: orderResponse.amount,
-        currency: orderResponse.currency,
-        redirectUri
-      });
-
-      await Linking.openURL(checkoutUrl);
 
       return {
         success: true,
         orderId: orderResponse.order_id,
-        checkoutUrl,
+        paymentId: `${orderResponse.order_id}_simulated`,
         amount: orderResponse.amount,
         currency: orderResponse.currency
       };

@@ -1,5 +1,4 @@
 import { apiRequest } from "./apiClient";
-import { API_BASE_URL } from "../config/api";
 
 export async function createPolicy(token) {
   return apiRequest("/api/policy/create", {
@@ -65,16 +64,4 @@ export async function verifyPayment(token, payload) {
       payment_id: payload.paymentId
     }
   });
-}
-
-export function buildPremiumCheckoutUrl({ token, orderId, amount, currency, redirectUri }) {
-  const params = new URLSearchParams({
-    token: token || "",
-    order_id: orderId || "",
-    amount: String(amount || 0),
-    currency: currency || "INR",
-    redirect_uri: redirectUri || "guardgig://payment-success"
-  });
-
-  return `${API_BASE_URL}/api/payment/checkout?${params.toString()}`;
 }

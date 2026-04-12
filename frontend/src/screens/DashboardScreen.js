@@ -253,7 +253,17 @@ function DashboardScreen({ navigation }) {
               {!!paymentError && <Text style={styles.paymentError}>{paymentError}</Text>}
               <Button
                 loading={paymentLoading}
-                onPress={() => activatePolicyPayment().catch(() => {})}
+                onPress={async () => {
+                  const result = await activatePolicyPayment();
+                  if (result?.success && result?.orderId) {
+                    navigation.navigate("Payment", {
+                      orderId: result.orderId,
+                      amount: result.amount,
+                      paymentId: result.paymentId,
+                      source: "dashboard"
+                    });
+                  }
+                }}
                 style={styles.payButton}
                 title={`Pay Now • ${premiumValue}`}
               />
