@@ -16,8 +16,10 @@ class TriggerCheckRequest(BaseModel):
 class TriggerCheckResponse(BaseModel):
     rain: float
     aqi: float
+    triggered: bool
     trigger_type: str | None = None
     severity: str | None = None
+    payout_percentage: int | None = None
 
 @router.post("/check", response_model=TriggerCheckResponse)
 async def check_trigger(request: TriggerCheckRequest):
@@ -27,8 +29,17 @@ async def check_trigger(request: TriggerCheckRequest):
         return TriggerCheckResponse(
             rain=rain,
             aqi=aqi,
-            trigger_type=trigger.get("type"),
-            severity=trigger.get("severity")
+            triggered=trigger.get("triggered", False),
+            trigger_type=trigger.get("trigger_type"),
+            severity=trigger.get("severity"),
+            payout_percentage=trigger.get("payout_percentage")
         )
     except Exception:
-        return TriggerCheckResponse(rain=0.0, aqi=0.0, trigger_type=None, severity=None)
+        return TriggerCheckResponse(
+            rain=0.0,
+            aqi=0.0,
+            triggered=False,
+            trigger_type=None,
+            severity=None,
+            payout_percentage=None
+        )

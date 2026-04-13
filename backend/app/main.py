@@ -121,7 +121,7 @@ async def automated_claim_check():
         # 3) Trigger gate
         trigger_data = check_trigger(rain, aqi)
 
-        if not trigger_data.get("trigger"):
+        if not trigger_data.get("triggered"):
             continue
 
         # 4) Daily claim limit
@@ -130,8 +130,9 @@ async def automated_claim_check():
         except ValueError:
             continue
 
-        trigger_type = trigger_data["type"]
+        trigger_type = trigger_data["trigger_type"]
         severity = trigger_data["severity"]
+        payout_percentage_raw = trigger_data["payout_percentage"]
 
         try:
             enforce_waiting_period(policy, waiting_hours=24)
@@ -143,20 +144,11 @@ async def automated_claim_check():
         if mean_income <= 0:
             continue
 
+        # Standardized payout formula: (payout_percentage / 100) * min(mean_income, coverage_amount)
         payout_base = min(mean_income, coverage_amount)
-        if severity == "full":
-            payout = payout_base
-            payout_percentage = 1.0
-        elif severity == "severe":
-            payout = payout_base * 0.70
-            payout_percentage = 0.70
-        elif severity == "partial":
-            payout = payout_base * 0.30
-            payout_percentage = 0.30
-        else:
-            payout = 0.0
-            payout_percentage = 0.0
-        payout = round(min(payout, coverage_amount), 2)
+        payout = round((payout_percentage_raw / 100.0) * payout_base, 2)
+        payout_percentage = payout_percentage_raw / 100.0
+        
         rule_decision_reason = f"approved_after_{trigger_type}_{severity}_checks"
         trigger_snapshot = {
             "trigger_type": trigger_type,

@@ -77,11 +77,15 @@ function getVariantFromRiskLevel(level) {
 }
 
 function resolveRiskHeadline(severity) {
-  if (severity === "full") {
+  if (severity === "extreme") {
+    return "EXTREME RISK";
+  }
+
+  if (severity === "high") {
     return "HIGH RISK DETECTED";
   }
 
-  if (severity === "partial") {
+  if (severity === "moderate") {
     return "MODERATE RISK";
   }
 

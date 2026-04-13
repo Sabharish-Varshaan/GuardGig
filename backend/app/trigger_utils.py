@@ -265,19 +265,76 @@ def get_aqi(location: str | None = None, lat: float | None = None, lon: float | 
 
 
 def check_trigger(rain: float, aqi: float) -> dict:
-    if rain >= 100:
-        return {"trigger": True, "type": "rain", "severity": "full"}
-
-    if rain >= 60:
-        return {"trigger": True, "type": "rain", "severity": "partial"}
-
-    if aqi >= 400:
-        return {"trigger": True, "type": "aqi", "severity": "full"}
-
-    if aqi >= 300:
-        return {"trigger": True, "type": "aqi", "severity": "partial"}
-
-    return {"trigger": False}
+    """
+    Evaluate rain and AQI against industry-standard parametric insurance thresholds.
+    Returns tiered payout percentages based on severity.
+    If multiple triggers fire, selects the one with highest payout percentage.
+    
+    Returns:
+        {
+            "triggered": bool,
+            "trigger_type": "rain" | "aqi",
+            "severity": "moderate" | "high" | "extreme",
+            "payout_percentage": int (0, 30, 60, 100),
+            "rain": float,
+            "aqi": float
+        }
+    """
+    rain_trigger = None
+    rain_payout = 0
+    
+    # Rain thresholds (mm)
+    if rain >= 150:
+        rain_trigger = {"trigger_type": "rain", "severity": "extreme", "payout_percentage": 100}
+        rain_payout = 100
+    elif rain >= 100:
+        rain_trigger = {"trigger_type": "rain", "severity": "high", "payout_percentage": 60}
+        rain_payout = 60
+    elif rain >= 50:
+        rain_trigger = {"trigger_type": "rain", "severity": "moderate", "payout_percentage": 30}
+        rain_payout = 30
+    
+    aqi_trigger = None
+    aqi_payout = 0
+    
+    # AQI thresholds
+    if aqi >= 500:
+        aqi_trigger = {"trigger_type": "aqi", "severity": "extreme", "payout_percentage": 100}
+        aqi_payout = 100
+    elif aqi >= 400:
+        aqi_trigger = {"trigger_type": "aqi", "severity": "high", "payout_percentage": 60}
+        aqi_payout = 60
+    elif aqi >= 300:
+        aqi_trigger = {"trigger_type": "aqi", "severity": "moderate", "payout_percentage": 30}
+        aqi_payout = 30
+    
+    # No trigger
+    if not rain_trigger and not aqi_trigger:
+        return {
+            "triggered": False,
+            "rain": rain,
+            "aqi": aqi
+        }
+    
+    # Multiple triggers: choose higher payout percentage
+    if rain_trigger and aqi_trigger:
+        if rain_payout >= aqi_payout:
+            selected = rain_trigger
+        else:
+            selected = aqi_trigger
+    elif rain_trigger:
+        selected = rain_trigger
+    else:
+        selected = aqi_trigger
+    
+    return {
+        "triggered": True,
+        "trigger_type": selected["trigger_type"],
+        "severity": selected["severity"],
+        "payout_percentage": selected["payout_percentage"],
+        "rain": rain,
+        "aqi": aqi
+    }
 
 
 async def fetch_rain_mm(

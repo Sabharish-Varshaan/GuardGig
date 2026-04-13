@@ -177,11 +177,11 @@ const normalizeClaim = (claim) => {
 };
 
 const resolveRiskLevel = (severity) => {
-  if (severity === "full") {
+  if (severity === "extreme") {
     return "HIGH";
   }
 
-  if (severity === "partial") {
+  if (severity === "high" || severity === "moderate") {
     return "MODERATE";
   }
 
