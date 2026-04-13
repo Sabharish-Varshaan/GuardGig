@@ -1,7 +1,6 @@
 import React, { memo, useEffect, useMemo, useState } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
-import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
 import Button from "../components/Button";
 import Card from "../components/Card";
@@ -12,7 +11,7 @@ import { useAppContext } from "../context/AppContext";
 import { appTheme } from "../styles/theme";
 
 function PayoutSetupScreen() {
-  const tabBarHeight = useBottomTabBarHeight();
+  const insets = useSafeAreaInsets();
   const { payoutDetails, savePayoutDetails, payoutDetailsLoading } = useAppContext();
   const [form, setForm] = useState({
     accountHolderName: payoutDetails?.accountHolderName || "",
@@ -41,9 +40,9 @@ function PayoutSetupScreen() {
     () => ({
       paddingHorizontal: appTheme.spacing.sm,
       paddingTop: appTheme.spacing.md,
-      paddingBottom: tabBarHeight + appTheme.spacing.lg
+      paddingBottom: insets.bottom + appTheme.spacing.lg
     }),
-    [tabBarHeight]
+    [insets.bottom]
   );
 
   const updateField = (key, value) => {

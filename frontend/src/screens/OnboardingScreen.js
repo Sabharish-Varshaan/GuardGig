@@ -58,10 +58,14 @@ function OnboardingScreen({ navigation, route }) {
     workHours: "",
     minIncome: "",
     maxIncome: "",
-    riskPreference: "Medium"
+    riskPreference: "Medium",
+    accountHolderName: "",
+    bankAccountNumber: "",
+    ifscCode: "",
+    upiId: ""
   });
 
-  const stepProgress = useMemo(() => ((step + 1) / 4) * 100, [step]);
+  const stepProgress = useMemo(() => ((step + 1) / 5) * 100, [step]);
 
   const updateField = useCallback((key, value) => {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -112,6 +116,19 @@ function OnboardingScreen({ navigation, route }) {
       };
     }
 
+    if (step === 4) {
+      const hasBank = !!form.bankAccountNumber.trim();
+      const hasIfsc = !!form.ifscCode.trim();
+      const hasUpi = !!form.upiId.trim();
+
+      nextErrors = {
+        accountHolderName: form.accountHolderName.trim() ? "" : "Name is required.",
+        payout: hasUpi || (hasBank && hasIfsc) ? "" : "Provide bank+IFSC or UPI ID.",
+        ifscCode: !hasIfsc || /^([A-Za-z]{4}0[A-Za-z0-9]{6})$/.test(form.ifscCode.trim()) ? "" : "Invalid IFSC format.",
+        upiId: !hasUpi || form.upiId.includes("@") ? "" : "UPI ID must contain @"
+      };
+    }
+
     setErrors(nextErrors);
 
     return !Object.values(nextErrors).some(Boolean);
@@ -122,7 +139,7 @@ function OnboardingScreen({ navigation, route }) {
       return;
     }
 
-    setStep((prev) => Math.min(3, prev + 1));
+    setStep((prev) => Math.min(4, prev + 1));
   };
 
   const prevStep = () => {
@@ -151,9 +168,9 @@ function OnboardingScreen({ navigation, route }) {
           showsVerticalScrollIndicator={false}
         >
           <Header
-            subtitle="Complete your 4-step profile to generate your personalized insurance plan"
+            subtitle="Complete your 5-step profile to generate your personalized insurance plan"
             title="Onboarding"
-            rightElement={<StatusBadge label={`Step ${step + 1}/4`} variant="info" />}
+            rightElement={<StatusBadge label={`Step ${step + 1}/5`} variant="info" />}
           />
 
           <Card style={styles.progressCard}>
@@ -298,6 +315,46 @@ function OnboardingScreen({ navigation, route }) {
               </View>
             )}
 
+            {step === 4 && (
+              <View>
+                <Text style={styles.sectionTitle}>Step 5: Payout Setup</Text>
+                <Text style={styles.helperHint}>Add destination for automated compensation settlement.</Text>
+                <InputField
+                  error={errors.accountHolderName}
+                  label="Name"
+                  onChangeText={(value) => updateField("accountHolderName", value)}
+                  placeholder="Account holder full name"
+                  value={form.accountHolderName}
+                  autoCapitalize="words"
+                />
+                <InputField
+                  label="Bank Account"
+                  onChangeText={(value) => updateField("bankAccountNumber", value)}
+                  placeholder="Optional if UPI is provided"
+                  value={form.bankAccountNumber}
+                  keyboardType="number-pad"
+                />
+                <InputField
+                  error={errors.ifscCode}
+                  label="IFSC"
+                  onChangeText={(value) => updateField("ifscCode", value.toUpperCase())}
+                  placeholder="Example: HDFC0001234"
+                  value={form.ifscCode}
+                  autoCapitalize="characters"
+                />
+                <Text style={styles.helperHint}>OR</Text>
+                <InputField
+                  error={errors.upiId}
+                  label="UPI ID"
+                  onChangeText={(value) => updateField("upiId", value)}
+                  placeholder="example@upi"
+                  value={form.upiId}
+                  autoCapitalize="none"
+                />
+                {!!errors.payout && <Text style={styles.errorText}>{errors.payout}</Text>}
+              </View>
+            )}
+
             <View style={styles.actionRow}>
               {step > 0 ? (
                 <Button
@@ -310,7 +367,7 @@ function OnboardingScreen({ navigation, route }) {
                 <View style={styles.backButton} />
               )}
 
-              {step < 3 ? (
+              {step < 4 ? (
                 <Button onPress={nextStep} style={styles.nextButton} title="Next" />
               ) : (
                 <Button
@@ -318,7 +375,7 @@ function OnboardingScreen({ navigation, route }) {
                   loading={authLoading}
                   onPress={handleGenerate}
                   style={styles.nextButton}
-                  title="Generate Plan"
+                  title="Finish Setup"
                 />
               )}
             </View>

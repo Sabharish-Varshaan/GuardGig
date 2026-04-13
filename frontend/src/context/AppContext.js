@@ -848,12 +848,20 @@ export function AppProvider({ children }) {
     setAuthError("");
 
     try {
+      const payoutPayload = {
+        accountHolderName: payload.accountHolderName,
+        bankAccountNumber: payload.bankAccountNumber,
+        ifscCode: payload.ifscCode,
+        upiId: payload.upiId
+      };
+
       const onboardingData = await submitOnboardingProfile(payload, authToken);
       const profile = onboardingData?.profile || payload;
 
       setUser((prev) => mapProfileToUser(profile, prev));
       await createPolicyForCurrentUser(authToken);
       await refreshClaims(authToken);
+      await savePayoutDetails(payoutPayload);
 
       setPendingOnboardingUser(null);
       setIsAuthenticated(true);
