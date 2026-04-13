@@ -2,7 +2,11 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from ..config import get_settings, LOSS_RATIO_THRESHOLD
+from ..config import (
+    get_settings,
+    LOSS_RATIO_THRESHOLD,
+    LOSS_RATIO_MIN_PREMIUM_FOR_ENFORCEMENT,
+)
 from ..dependencies import require_current_user
 from ..metrics_utils import check_loss_ratio_threshold
 from ..premium_utils import calculate_premium
@@ -41,7 +45,11 @@ def create_policy(current_user: dict = Depends(require_current_user)):
 
     # Check loss ratio threshold - block policy creation if risk is too high
     try:
-        check_loss_ratio_threshold(admin, threshold=LOSS_RATIO_THRESHOLD)
+        check_loss_ratio_threshold(
+            admin,
+            threshold=LOSS_RATIO_THRESHOLD,
+            min_total_premium_for_enforcement=LOSS_RATIO_MIN_PREMIUM_FOR_ENFORCEMENT,
+        )
     except ValueError as exc:
         return PolicyCreateResponse(
             status="ineligible",

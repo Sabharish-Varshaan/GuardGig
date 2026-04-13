@@ -8,6 +8,7 @@ load_dotenv()
 
 # Risk control thresholds
 LOSS_RATIO_THRESHOLD = 0.85  # 85% - system stops accepting new policies above this
+LOSS_RATIO_MIN_PREMIUM_FOR_ENFORCEMENT = 500.0  # Avoid blocking at tiny sample sizes in early-stage/dev data
 
 
 class Settings(BaseModel):

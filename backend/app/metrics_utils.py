@@ -220,12 +220,28 @@ def get_full_metrics(admin, metrics_table: str = "system_metrics") -> dict:
         }
 
 
-def check_loss_ratio_threshold(admin, threshold: float = 0.85, metrics_table: str = "system_metrics") -> bool:
+def check_loss_ratio_threshold(
+    admin,
+    threshold: float = 0.85,
+    metrics_table: str = "system_metrics",
+    min_total_premium_for_enforcement: float = 500.0,
+) -> bool:
     """
     Check if loss ratio exceeds threshold.
     Returns True if within safe bounds (loss_ratio <= threshold).
     Raises ValueError if threshold exceeded (for use in policy creation).
     """
+    metrics = _get_or_init_metrics(admin, metrics_table)
+    total_premium = float(metrics.get("total_premium", 0) or 0)
+
+    if total_premium < min_total_premium_for_enforcement:
+        logger.info(
+            "[RISK CONTROL] Skipping loss-ratio block: total_premium=₹%.2f < min_enforcement=₹%.2f",
+            total_premium,
+            min_total_premium_for_enforcement,
+        )
+        return True
+
     loss_ratio = get_current_loss_ratio(admin, metrics_table)
     
     if loss_ratio > threshold:
