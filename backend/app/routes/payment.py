@@ -212,10 +212,30 @@ def verify_payment(request: PaymentVerifyRequest, current_user: dict = Depends(r
     admin = get_admin_client()
     policy = _get_policy(admin, settings, current_user["id"])
 
+    # Extract and validate request parameters
+    order_id = (request.order_id or "").strip()
     payment_id = (request.payment_id or "").strip()
+    signature = (request.signature or "").strip()
+    
+    if not order_id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing Razorpay order id")
     if not payment_id:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing Razorpay payment id")
+    if not signature:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing Razorpay signature")
 
+    # Step 1: Verify Razorpay signature BEFORE activating policy (fail-safe security)
+    client = _build_client()
+    try:
+        client.utility.verify_payment_signature({
+            "razorpay_order_id": order_id,
+            "razorpay_payment_id": payment_id,
+            "razorpay_signature": signature
+        })
+    except Exception as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid payment signature. Payment verification failed.") from exc
+
+    # Step 2: Only after successful signature verification → activate policy
     activated_at_dt = datetime.now(timezone.utc)
     expires_at_dt = activated_at_dt + timedelta(days=7)
     activated_at = activated_at_dt.isoformat()
@@ -277,5 +297,5 @@ def verify_payment(request: PaymentVerifyRequest, current_user: dict = Depends(r
         payment_id=payment_id,
         activated_at=activated_at,
         expires_at=expires_at,
-        order_id=request.order_id,
+        order_id=order_id,
     )

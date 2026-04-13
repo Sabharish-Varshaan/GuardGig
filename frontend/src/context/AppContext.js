@@ -813,13 +813,18 @@ export function AppProvider({ children }) {
 
             try {
               const paymentId = response?.razorpay_payment_id;
+              const signature = response?.razorpay_signature;
               if (!paymentId) {
                 throw new Error("Missing Razorpay payment id");
+              }
+              if (!signature) {
+                throw new Error("Missing Razorpay signature");
               }
 
               await verifyPayment(authToken, {
                 orderId: orderResponse.order_id,
-                paymentId
+                paymentId,
+                signature
               });
 
               await refreshPolicy(authToken);

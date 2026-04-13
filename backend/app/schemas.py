@@ -108,6 +108,7 @@ class PaymentOrderResponse(BaseModel):
 class PaymentVerifyRequest(BaseModel):
     order_id: str
     payment_id: str
+    signature: str
 
 
 class PaymentVerifyResponse(BaseModel):

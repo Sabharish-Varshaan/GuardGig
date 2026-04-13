@@ -44,7 +44,8 @@ export async function verifyPayment(token, payload) {
     token,
     body: {
       order_id: payload.orderId,
-      payment_id: payload.paymentId
+      payment_id: payload.paymentId,
+      signature: payload.signature
     }
   });
 }
