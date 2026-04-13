@@ -6,7 +6,6 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import ClaimsScreen from "../screens/ClaimsScreen";
 import DashboardScreen from "../screens/DashboardScreen";
-import PayoutScreen from "../screens/PayoutScreen";
 import PolicyScreen from "../screens/PolicyScreen";
 import ProfileScreen from "../screens/ProfileScreen";
 import RiskScreen from "../screens/RiskScreen";
@@ -19,7 +18,6 @@ const iconMap = {
   Risk: "pulse-outline",
   Policy: "document-text-outline",
   Payouts: "cash-outline",
-  Payout: "wallet-outline",
   Profile: "person-circle-outline"
 };
 
@@ -82,7 +80,6 @@ function MainTabNavigator() {
       <Tab.Screen component={RiskScreen} name="Risk" />
       <Tab.Screen component={PolicyScreen} name="Policy" />
       <Tab.Screen component={ClaimsScreen} name="Payouts" />
-      <Tab.Screen component={PayoutScreen} name="Payout" />
       <Tab.Screen component={ProfileScreen} name="Profile" />
     </Tab.Navigator>
   );
