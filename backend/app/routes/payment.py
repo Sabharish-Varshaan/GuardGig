@@ -300,6 +300,7 @@ def verify_payment(request: PaymentVerifyRequest, current_user: dict = Depends(r
     if premium_amount > 0:
         try:
             update_metrics_on_premium(admin, premium_amount)
+            print("Premium added:", premium_amount)
         except Exception as exc:
             # Don't fail payment if metrics update fails - log and continue
             import logging

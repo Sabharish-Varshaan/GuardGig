@@ -58,6 +58,7 @@ def get_metrics(current_admin: dict = Depends(require_admin_user)):
     """
     admin = get_admin_client()
     metrics = get_full_metrics(admin)
+    print("Metrics API response:", metrics)
     
     # Determine health status based on loss ratio
     loss_ratio = metrics["loss_ratio"]

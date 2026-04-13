@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS system_metrics (
 -- Create index on last_updated for querying recent metrics
 CREATE INDEX IF NOT EXISTS system_metrics_last_updated_idx ON system_metrics (last_updated);
 
--- Initialize single row if it doesn't exist
-TRUNCATE TABLE system_metrics;
+-- Initialize single row only if missing (non-destructive)
 INSERT INTO system_metrics (id, total_premium, total_payout, loss_ratio, updated_by, last_updated)
-VALUES (1, 0, 0, 0, 'initialization', NOW());
+VALUES (1, 0, 0, 0, 'initialization', NOW())
+ON CONFLICT (id) DO NOTHING;

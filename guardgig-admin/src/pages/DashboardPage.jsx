@@ -24,6 +24,7 @@ export default function DashboardPage() {
     const loadMetrics = async () => {
       try {
         const response = await api.get('/api/admin/metrics');
+        console.log(response.data);
         if (!mounted) {
           return;
         }
