@@ -66,6 +66,8 @@ def register(payload: RegisterRequest):
                 "full_name": metadata["full_name"],
                 "phone": payload.phone,
                 "password_hash": hash_password(payload.password),
+                "role": "user",
+                "email": None,
                 "created_at": now,
                 "updated_at": now
             }
@@ -76,8 +78,8 @@ def register(payload: RegisterRequest):
             detail=f"Unable to register user: {str(exc)}"
         ) from exc
 
-    access_token = create_access_token(user_id=user_id, phone=payload.phone)
-    refresh_token = create_refresh_token(user_id=user_id, phone=payload.phone)
+    access_token = create_access_token(user_id=user_id, phone=payload.phone, role="user")
+    refresh_token = create_refresh_token(user_id=user_id, phone=payload.phone, role="user")
 
     return AuthResponse(
         access_token=access_token,
@@ -94,7 +96,7 @@ def login(payload: LoginRequest):
 
     result = (
         admin.table(settings.supabase_users_table)
-        .select("id,phone,password_hash")
+        .select("id,phone,password_hash,role,email")
         .eq("phone", payload.phone)
         .limit(1)
         .execute()
@@ -116,8 +118,18 @@ def login(payload: LoginRequest):
         )
 
     onboarding_completed = _get_onboarding_status(user["id"])
-    access_token = create_access_token(user_id=user["id"], phone=user["phone"])
-    refresh_token = create_refresh_token(user_id=user["id"], phone=user["phone"])
+    access_token = create_access_token(
+        user_id=user["id"],
+        phone=user["phone"],
+        role=user.get("role", "user"),
+        email=user.get("email")
+    )
+    refresh_token = create_refresh_token(
+        user_id=user["id"],
+        phone=user["phone"],
+        role=user.get("role", "user"),
+        email=user.get("email")
+    )
 
     return AuthResponse(
         access_token=access_token,

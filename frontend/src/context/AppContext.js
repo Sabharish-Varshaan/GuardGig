@@ -139,6 +139,7 @@ const normalizePolicy = (policy) => {
     paymentStatus: policy.payment_status || "pending",
     paymentId: policy.payment_id || "",
     activatedAt: policy.activated_at || "",
+    expiresAt: policy.expires_at || "",
     policyStartDate: policy.policy_start_date || "",
     status: policy.status || "inactive",
     eligibilityStatus: policy.eligibility_status || "eligible",
@@ -151,13 +152,21 @@ const normalizeClaim = (claim) => {
   const createdAt = claim?.created_at || "";
   const snapshot = claim?.trigger_snapshot && typeof claim.trigger_snapshot === "object" ? claim.trigger_snapshot : {};
   const reason = claim?.rule_decision_reason || snapshot.rule_decision_reason || "";
+  const triggerType = claim?.trigger_type || snapshot.trigger_type || "rain";
+  const severity = (claim?.severity || snapshot.severity || "moderate").toLowerCase();
+  const payoutPercentage = Number(claim?.payout_percentage ?? snapshot.payout_percentage ?? 0);
+  const triggerValue = Number(claim?.trigger_value ?? snapshot.trigger_value ?? 0);
 
   return {
     id: claim?.id || String(Date.now()),
-    type: claim?.trigger_type || "rain",
+    type: triggerType,
+    triggerType,
+    severity,
+    payoutPercentage,
     status: (claim?.status || "pending").toLowerCase(),
     amount: Number(claim?.payout_amount || 0),
-    triggerValue: Number(claim?.trigger_value || 0),
+    triggerValue,
+    triggerLabel: triggerType === "aqi" ? "AQI" : "Rain",
     paymentStatus: (claim?.payment_status || "pending").toLowerCase(),
     transactionId: claim?.transaction_id || "",
     paidAt: claim?.paid_at || "",
@@ -174,6 +183,34 @@ const normalizeClaim = (claim) => {
         })
       : ""
   };
+};
+
+const createDemoClaim = ({ triggerType, severity, payoutPercentage, payoutAmount }) => {
+  const now = new Date().toISOString();
+
+  return normalizeClaim({
+    id: `demo-${Date.now()}`,
+    trigger_type: triggerType,
+    severity,
+    payout_amount: payoutAmount,
+    payout_percentage: payoutPercentage,
+    trigger_value: triggerType === "aqi" ? 420 : 88,
+    status: "approved",
+    payment_status: "paid",
+    transaction_id: `demo-${triggerType}-${Date.now()}`,
+    paid_at: now,
+    payout_method: "demo",
+    created_at: now,
+    trigger_snapshot: {
+      trigger_type: triggerType,
+      severity,
+      payout_percentage: payoutPercentage,
+      payout_amount: payoutAmount,
+      trigger_value: triggerType === "aqi" ? 420 : 88,
+      rule_decision_reason: `demo_mode_${triggerType}_${severity}`
+    },
+    rule_decision_reason: `demo_mode_${triggerType}_${severity}`
+  });
 };
 
 const resolveRiskLevel = (severity) => {
@@ -270,6 +307,8 @@ export function AppProvider({ children }) {
   const [policyLoading, setPolicyLoading] = useState(false);
   const [claimsHistory, setClaimsHistory] = useState([]);
   const [claimsLoading, setClaimsLoading] = useState(false);
+  const [demoMode, setDemoMode] = useState(false);
+  const [demoClaimsHistory, setDemoClaimsHistory] = useState([]);
   const [paymentLoading, setPaymentLoading] = useState(false);
   const [paymentError, setPaymentError] = useState("");
   const [paymentMessage, setPaymentMessage] = useState("");
@@ -283,6 +322,7 @@ export function AppProvider({ children }) {
   const [workflowMessage, setWorkflowMessage] = useState("No active claim check");
   const [coverageLoading, setCoverageLoading] = useState(false);
   const [payoutAmount, setPayoutAmount] = useState(0);
+  const [lastRiskCheckAt, setLastRiskCheckAt] = useState("");
   const [movementScore] = useState(null);
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [themeEnabled, setThemeEnabled] = useState(false);
@@ -437,6 +477,47 @@ export function AppProvider({ children }) {
     [authToken]
   );
 
+  const setDemoModeEnabled = useCallback(
+    (enabled) => {
+      const nextEnabled = Boolean(enabled);
+      setDemoMode(nextEnabled);
+
+      if (!nextEnabled) {
+        setDemoClaimsHistory([]);
+        setWorkflowState(WORKFLOW_STATES.idle);
+        setWorkflowMessage("No active automated payout");
+        setPaymentMessage("");
+        setPaymentError("");
+        return;
+      }
+
+      const triggerType = risk.triggerType === "aqi" ? "aqi" : "rain";
+      const severity = (risk.severity || (triggerType === "aqi" ? "high" : "high")).toLowerCase();
+      const coverageBase = Number(policy?.meanIncome || user.meanIncome || 0);
+      const coverageLimit = Number(policy?.coverageAmount || 0);
+      const payoutPercentage = triggerType === "aqi" ? 100 : severity === "high" ? 60 : 30;
+      const payoutBase = coverageBase > 0 ? Math.min(coverageBase, coverageLimit > 0 ? coverageLimit : coverageBase) : 300;
+      const payoutAmountValue = Math.max(300, Math.round((payoutPercentage / 100) * payoutBase));
+      const demoClaim = createDemoClaim({
+        triggerType,
+        severity,
+        payoutPercentage,
+        payoutAmount: payoutAmountValue
+      });
+
+      setDemoClaimsHistory([demoClaim]);
+      setWorkflowState(WORKFLOW_STATES.approved);
+      setWorkflowMessage("Demo payout simulated");
+      setPayoutAmount(demoClaim.amount);
+      setPaymentOutcome("success");
+      setPaymentMessage("Demo payout credited instantly");
+      setPaymentError("");
+      setRiskMessage(triggerType === "aqi" ? "Demo AQI disruption" : "Demo rainfall disruption");
+      setLastRiskCheckAt(new Date().toISOString());
+    },
+    [policy?.coverageAmount, policy?.meanIncome, risk.severity, risk.triggerType, user.meanIncome]
+  );
+
   const requestLocation = useCallback(async () => {
     try {
       const permission = await Location.requestForegroundPermissionsAsync();
@@ -522,6 +603,7 @@ export function AppProvider({ children }) {
 
       // Single state update for message after risk data is set
       setRiskMessage(finalStatusMessage);
+      setLastRiskCheckAt(new Date().toISOString());
 
       return {
         trigger: {
@@ -739,9 +821,12 @@ export function AppProvider({ children }) {
     setLocation(initialLocation);
     setRiskMessage("Awaiting live check");
     setClaimsHistory([]);
+    setDemoClaimsHistory([]);
     setPayoutAmount(0);
     setWorkflowState(WORKFLOW_STATES.idle);
     setWorkflowMessage("No active claim check");
+    setDemoMode(false);
+    setLastRiskCheckAt("");
     setIsAuthenticated(false);
   };
 
@@ -884,6 +969,12 @@ export function AppProvider({ children }) {
     }
   }, [authToken, policy, refreshPolicy]);
 
+  const visibleClaimsHistory = useMemo(
+    () => (demoMode && demoClaimsHistory.length > 0 ? [...demoClaimsHistory, ...claimsHistory] : claimsHistory),
+    [claimsHistory, demoClaimsHistory, demoMode]
+  );
+  const visiblePayoutAmount = demoMode && demoClaimsHistory[0] ? demoClaimsHistory[0].amount : payoutAmount;
+
   const value = useMemo(
     () => ({
       isAuthenticated,
@@ -904,14 +995,17 @@ export function AppProvider({ children }) {
       workflowState,
       workflowMessage,
       coverageLoading,
-      payoutAmount,
+      payoutAmount: visiblePayoutAmount,
       movementScore,
-      claimsHistory,
+      claimsHistory: visibleClaimsHistory,
       claimsLoading,
+      demoMode,
+      setDemoModeEnabled,
       paymentLoading,
       paymentError,
       paymentMessage,
       paymentOutcome,
+      lastRiskCheckAt,
       eligibilityMessage: INELIGIBLE_MESSAGE,
       notificationsEnabled,
       themeEnabled,
@@ -949,14 +1043,17 @@ export function AppProvider({ children }) {
       workflowState,
       workflowMessage,
       coverageLoading,
-      payoutAmount,
+      visiblePayoutAmount,
       movementScore,
-      claimsHistory,
+      visibleClaimsHistory,
       claimsLoading,
+      demoMode,
+      setDemoModeEnabled,
       paymentLoading,
       paymentError,
       paymentMessage,
       paymentOutcome,
+      lastRiskCheckAt,
       INELIGIBLE_MESSAGE,
       notificationsEnabled,
       themeEnabled,

@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timezone
 
 import razorpay
 
 from ..config import get_settings
+
+logger = logging.getLogger(__name__)
 
 
 def _build_client() -> razorpay.Client:
@@ -17,6 +20,7 @@ def _build_client() -> razorpay.Client:
 
 
 def simulate_razorpay_payout(amount: float, user_id: str) -> dict[str, str]:
+    logger.info(f"  [PAYOUT] Creating Razorpay order: amount=₹{amount}, user_id={user_id}")
     client = _build_client()
     amount_paise = max(1, int(round(float(amount) * 100)))
 
@@ -35,7 +39,8 @@ def simulate_razorpay_payout(amount: float, user_id: str) -> dict[str, str]:
 
     transaction_id = str(order.get("id") or "")
     paid_at = datetime.now(timezone.utc).isoformat()
-
+    
+    logger.info(f"  [PAYOUT] ✓ Order created: transaction_id={transaction_id}, amount_paise={amount_paise}")
     return {
         "status": "paid",
         "transaction_id": transaction_id,
@@ -53,6 +58,7 @@ def persist_claim_payment(
     payout_method: str,
     trigger_snapshot: dict,
 ) -> dict:
+    logger.debug(f"  [PERSIST] Saving payout to claim {claim_id}: status={payment_status}, transaction_id={transaction_id}")
     response = (
         admin.table(claims_table)
         .update(
@@ -69,4 +75,7 @@ def persist_claim_payment(
     )
 
     rows = response.data or []
-    return rows[0] if rows else {}
+    result = rows[0] if rows else {}
+    if result:
+        logger.debug(f"  [PERSIST] ✓ Payout persisted: claim_id={claim_id}, status={payment_status}")
+    return result

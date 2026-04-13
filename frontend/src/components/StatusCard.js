@@ -20,11 +20,11 @@ const STATE_META = {
     tone: "warning"
   },
   fraud_check: {
-    message: "Processing claim",
+    message: "Processing payout",
     tone: "warning"
   },
   approved: {
-    message: "Claim approved",
+    message: "Payout approved",
     tone: "success"
   },
   flagged: {
@@ -69,14 +69,14 @@ export default function StatusCard({ workflowState, workflowMessage, payoutAmoun
 
   const resolvedMessage = useMemo(() => {
     if (workflowState === "approved") {
-      return `Claim Approved ✅ Payout released: ₹${payoutAmount || 0}.`;
+      return `Payout Approved ✅ Payout released: ₹${payoutAmount || 0}.`;
     }
 
     if (workflowState === "flagged") {
       if (workflowMessage) {
         return workflowMessage;
       }
-      return "Conditions not met for automated claim approval.";
+      return "Conditions not met for automated payout approval.";
     }
 
     if (workflowState === "checking_conditions") {
@@ -88,10 +88,10 @@ export default function StatusCard({ workflowState, workflowMessage, payoutAmoun
     }
 
     if (workflowState === "fraud_check") {
-      return "Processing claim...";
+      return "Processing payout...";
     }
 
-    return "System idle. Tap Check Coverage to run automated verification.";
+    return "System idle. Automated checks run from the dashboard.";
   }, [workflowMessage, workflowState, payoutAmount]);
 
   const isInProgress =
@@ -136,7 +136,7 @@ export default function StatusCard({ workflowState, workflowMessage, payoutAmoun
                 ? "Checking conditions"
                 : workflowState === "validating"
                   ? "Validating eligibility"
-                  : "Processing claim"
+                  : "Processing payout"
             }
             tone="warning"
           />

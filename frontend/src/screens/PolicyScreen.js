@@ -81,7 +81,7 @@ export default function PolicyScreen() {
 
         {policyReady && policy.paymentStatus !== "success" && (
           <Card style={styles.warningCard}>
-            <Text style={styles.warningText}>Premium payment is required before claims can be submitted.</Text>
+            <Text style={styles.warningText}>Premium payment is required before coverage can be activated.</Text>
             {!!paymentError && <Text style={styles.errorText}>{paymentError}</Text>}
             <Button
               loading={paymentLoading}

@@ -1,24 +1,15 @@
-import React, { memo, useMemo } from "react";
-import { ScrollView, StyleSheet, Text, View, useWindowDimensions } from "react-native";
+import React, { memo } from "react";
+import { ActivityIndicator, ScrollView, StyleSheet, Switch, Text, View, useWindowDimensions } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import Card from "../components/Card";
 import Button from "../components/Button";
+import Card from "../components/Card";
 import Header from "../components/Header";
 import StatusBadge from "../components/StatusBadge";
 import { useAppContext } from "../context/AppContext";
 import { appTheme } from "../styles/theme";
-
-function InfoRow({ icon, label, value }) {
-  return (
-    <View style={styles.infoRow}>
-      <Text style={styles.infoLabel}>{`${icon} ${label}`}</Text>
-      <Text style={styles.infoValue}>{value}</Text>
-    </View>
-  );
-}
 
 function SummaryStat({ label, value }) {
   return (
@@ -29,110 +20,130 @@ function SummaryStat({ label, value }) {
   );
 }
 
+function KeyValueRow({ label, value }) {
+  return (
+    <View style={styles.keyValueRow}>
+      <Text style={styles.keyValueLabel}>{label}</Text>
+      <Text style={styles.keyValueValue}>{value}</Text>
+    </View>
+  );
+}
+
 function formatRupee(value) {
-  return `₹${value}`;
+  const amount = Number(value || 0);
+  return `₹${amount.toLocaleString("en-IN")}`;
 }
 
-function formatRelativeTime(timestamp) {
-  if (!timestamp) {
-    return "Just now";
+function formatDateTime(value) {
+  if (!value) {
+    return "--";
   }
 
-  const date = new Date(timestamp);
-  const deltaMs = Date.now() - date.getTime();
+  const date = new Date(value);
 
-  if (Number.isNaN(deltaMs) || deltaMs < 0) {
-    return "Just now";
+  if (Number.isNaN(date.getTime())) {
+    return String(value);
   }
 
-  const minutes = Math.floor(deltaMs / 60000);
-  if (minutes < 1) {
-    return "Just now";
-  }
-  if (minutes < 60) {
-    return `${minutes} minute${minutes === 1 ? "" : "s"} ago`;
-  }
-
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) {
-    return `${hours} hour${hours === 1 ? "" : "s"} ago`;
-  }
-
-  const days = Math.floor(hours / 24);
-  return `${days} day${days === 1 ? "" : "s"} ago`;
+  return date.toLocaleString("en-IN", {
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    month: "short",
+    year: "numeric"
+  });
 }
 
-function getVariantFromRiskLevel(level) {
-  const normalized = (level || "safe").toLowerCase();
+function getPolicyState(policy) {
+  if (!policy) {
+    return {
+      isExpired: false,
+      label: "INACTIVE",
+      note: "Activate policy to stay protected",
+      variant: "danger"
+    };
+  }
+
+  const status = String(policy.status || "inactive").toLowerCase();
+  const paymentStatus = String(policy.paymentStatus || "pending").toLowerCase();
+  const expiresAt = policy.expiresAt ? new Date(policy.expiresAt).getTime() : null;
+  const isExpired = expiresAt !== null && !Number.isNaN(expiresAt) && Date.now() > expiresAt;
+
+  if (isExpired) {
+    return {
+      isExpired: true,
+      label: "EXPIRED",
+      note: "Renew policy to stay protected",
+      variant: "info"
+    };
+  }
+
+  if (status === "active" && paymentStatus === "success") {
+    return {
+      isExpired: false,
+      label: "ACTIVE",
+      note: "Coverage is live",
+      variant: "success"
+    };
+  }
+
+  return {
+    isExpired: false,
+    label: "INACTIVE",
+    note: "Activate policy to stay protected",
+    variant: "danger"
+  };
+}
+
+function getSeverityLabel(severity) {
+  const normalized = String(severity || "moderate").toLowerCase();
+
+  if (normalized === "extreme") {
+    return "Extreme";
+  }
 
   if (normalized === "high") {
-    return "danger";
+    return "High";
   }
 
-  if (normalized === "moderate") {
-    return "warning";
-  }
-
-  return "success";
+  return "Moderate";
 }
 
-function resolveRiskHeadline(severity) {
-  if (severity === "extreme") {
-    return "EXTREME RISK";
+function getTriggerLabel(item) {
+  if (item.triggerLabel) {
+    return item.triggerLabel;
   }
 
-  if (severity === "high") {
-    return "HIGH RISK DETECTED";
-  }
-
-  if (severity === "moderate") {
-    return "MODERATE RISK";
-  }
-
-  return "SAFE CONDITIONS";
+  return item.triggerType === "aqi" ? "AQI" : "Rain";
 }
 
-function getWorkflowStatusMeta(workflowState, workflowMessage) {
-  if (workflowState === "checking_conditions") {
-    return { label: "System evaluating...", variant: "info" };
+function getPillColor(policyState) {
+  if (policyState.variant === "success") {
+    return appTheme.colors.successSoft;
   }
 
-  if (workflowState === "validating") {
-    return { label: "Claim triggered automatically", variant: "info" };
+  if (policyState.variant === "info") {
+    return appTheme.colors.warningSoft;
   }
 
-  if (workflowState === "fraud_check") {
-    return { label: "Processing...", variant: "warning" };
-  }
-
-  if (workflowState === "approved") {
-    return { label: "Approved", variant: "success" };
-  }
-
-  if (workflowState === "flagged") {
-    if ((workflowMessage || "").toLowerCase().includes("already")) {
-      return { label: "Claim is already done", variant: "danger" };
-    }
-    return { label: "Conditions not met", variant: "danger" };
-  }
-
-  return { label: "No active claim check", variant: "info" };
+  return appTheme.colors.dangerSoft;
 }
 
-function DashboardScreen({ navigation }) {
+function DashboardScreen() {
   const {
     user,
     policy,
     policyLoading,
-    risk,
-    location,
     riskLoading,
     riskMessage,
-    workflowState,
-    workflowMessage,
     claimsHistory,
-    eligibilityMessage,
-    requestLocation,
+    claimsLoading,
+    demoMode,
+    setDemoModeEnabled,
+    lastRiskCheckAt,
+    dataError,
+    refreshPolicy,
+    refreshClaims,
     refreshRisk,
     payPremium,
     paymentLoading,
@@ -144,38 +155,17 @@ function DashboardScreen({ navigation }) {
   const tabBarHeight = useBottomTabBarHeight();
   const isMobileLayout = width < 768;
   const isCompactScreen = width < 390;
-  const contentWidthStyle = useMemo(
-    () => ({
-      alignSelf: "center",
-      maxWidth: width >= 1200 ? 980 : width >= 768 ? 760 : undefined,
-      width: "100%"
-    }),
-    [width]
-  );
-  const contentSpacingStyle = useMemo(
-    () => ({
-      paddingBottom: tabBarHeight + 18,
-      paddingHorizontal: isMobileLayout ? 14 : 20,
-      paddingTop: isMobileLayout ? 14 : 20
-    }),
-    [isMobileLayout, tabBarHeight]
-  );
-  const policyReady = !policyLoading && !!policy;
-  const isCoverageEligible =
-    policyReady && policy.status === "active" && policy.eligibilityStatus === "eligible" && policy.paymentStatus === "success";
-  const paymentPending = policyReady && policy.paymentStatus !== "success";
+  const policyState = getPolicyState(policy);
+  const recentPayouts = claimsHistory.slice(0, 5);
+  const needsActivation = policyState.label !== "ACTIVE";
 
   useFocusEffect(
     React.useCallback(() => {
       let active = true;
 
       const syncLiveSnapshot = async () => {
-        const coords = await requestLocation();
-        if (!active) {
-          return;
-        }
-
-        await refreshRisk(coords || undefined);
+        await Promise.allSettled([refreshPolicy(), refreshClaims(), refreshRisk()]);
+        return active;
       };
 
       syncLiveSnapshot().catch(() => {});
@@ -183,112 +173,151 @@ function DashboardScreen({ navigation }) {
       return () => {
         active = false;
       };
-    }, [refreshRisk, requestLocation])
+    }, [refreshClaims, refreshPolicy, refreshRisk])
   );
 
-  const riskVariant = useMemo(() => getVariantFromRiskLevel(risk.level), [risk.level]);
-  const compactRiskLabel = useMemo(() => resolveRiskHeadline(risk.severity), [risk.severity]);
-  const workflowMeta = useMemo(() => getWorkflowStatusMeta(workflowState, workflowMessage), [workflowMessage, workflowState]);
-  const liveRiskLabel = riskLoading ? "CHECKING" : compactRiskLabel;
-  const premiumValue = policyReady ? `${formatRupee(policy.premium)}/week` : "Loading...";
-  const meanIncomeValue = policyReady ? `${formatRupee(policy.meanIncome)}/day` : "Loading...";
-  const coverageValue = policyReady ? `${formatRupee(policy.coverageAmount)}/day` : "Loading...";
-  const recentEvents = useMemo(() => {
-    const claimEvents = claimsHistory.slice(0, 3).map((claim) => {
-      const label = claim.type === "aqi" ? "AQI trigger" : "Rain trigger";
-      return `${label}: ${claim.status} (${formatRelativeTime(claim.createdAt)})`;
-    });
-
-    const workflowEvent = workflowMessage ? `Workflow: ${workflowMessage}` : null;
-    const riskEvent = riskMessage ? `Risk: ${riskMessage}` : null;
-
-    return [workflowEvent, riskEvent, ...claimEvents].filter(Boolean);
-  }, [claimsHistory, riskMessage, workflowMessage]);
+  const premiumValue = policy ? formatRupee(policy.premium) : "Loading...";
+  const meanIncomeValue = policy ? `${formatRupee(policy.meanIncome)}/day` : "Loading...";
+  const coverageValue = policy ? `${formatRupee(policy.coverageAmount)}/day` : "Loading...";
+  const activatedAtValue = policy ? formatDateTime(policy.activatedAt) : "Loading...";
+  const expiresAtValue = policy ? formatDateTime(policy.expiresAt) : "Loading...";
+  const monitoringMessage = riskLoading ? "Monitoring environmental conditions..." : "System Status: Monitoring environmental conditions...";
+  const buttonLabel = policyState.isExpired ? "Renew Policy" : "Activate Policy";
+  const contentWidthStyle = {
+    alignSelf: "center",
+    maxWidth: width >= 1200 ? 980 : width >= 768 ? 760 : undefined,
+    width: "100%"
+  };
+  const contentSpacingStyle = {
+    paddingBottom: tabBarHeight + 20,
+    paddingHorizontal: isMobileLayout ? 14 : 20,
+    paddingTop: isMobileLayout ? 14 : 20
+  };
 
   return (
     <SafeAreaView style={styles.screen}>
       <ScrollView contentContainerStyle={[styles.content, contentSpacingStyle, contentWidthStyle]} showsVerticalScrollIndicator={false}>
         <Header
-          subtitle="Your income is protected"
+          subtitle="Fully automated income protection"
           title={`Hello, ${user.fullName || "Worker"} 👋`}
-          rightElement={<StatusBadge label={liveRiskLabel} variant={riskVariant} />}
+          rightElement={<StatusBadge label={policyState.label} variant={policyState.variant} />}
         />
 
-        <Card gradient style={styles.summaryCard}>
-          <Text style={styles.heroCaption}>Policy Snapshot</Text>
-          <View style={[styles.summaryTopRow, isCompactScreen ? styles.summaryTopRowCompact : null]}>
-            <View style={styles.summaryPrimaryBlock}>
-              <Text style={styles.heroLabel}>Premium</Text>
-              <Text style={styles.heroValue}>{premiumValue}</Text>
+        <Card gradient style={styles.sectionCard}>
+          <Text style={styles.heroCaption}>Policy Status</Text>
+          <View style={styles.policyHeaderRow}>
+            <View style={styles.policyHeaderBlock}>
+              <Text style={styles.heroLabel}>{policyState.label}</Text>
+              <Text style={styles.policyNote}>{policyState.note}</Text>
             </View>
-            <StatusBadge
-              label={paymentPending ? `Payment ${policy.paymentStatus || "pending"}` : liveRiskLabel}
-              variant={paymentPending ? "warning" : riskVariant}
-            />
+            <View style={[styles.policyPill, { backgroundColor: getPillColor(policyState) }]}>
+              <Text style={styles.policyPillText}>{policyState.label}</Text>
+            </View>
           </View>
           <View style={[styles.summaryStatsRow, isCompactScreen ? styles.summaryStatsRowCompact : null]}>
-            <SummaryStat label="Average Daily Income" value={meanIncomeValue} />
-            <SummaryStat label="Daily Coverage" value={coverageValue} />
+            <SummaryStat label="Activated At" value={activatedAtValue} />
+            <SummaryStat label="Expires At" value={expiresAtValue} />
           </View>
-          {paymentPending && (
-            <>
-              <Text style={styles.paymentHint}>Premium payment is required before claims are unlocked.</Text>
-              {!!paymentError && <Text style={styles.paymentError}>{paymentError}</Text>}
-              <Button
-                loading={paymentLoading}
-                onPress={async () => {
-                  await payPremium();
-                }}
-                style={styles.payButton}
-                title={`Pay Now • ${premiumValue}`}
-              />
-              {!!paymentMessage && (
-                <Text style={paymentOutcome === "success" ? styles.paymentSuccess : styles.paymentHint}>{paymentMessage}</Text>
-              )}
-            </>
-          )}
+          {policyState.isExpired && <Text style={styles.renewalHint}>Renew policy to stay protected</Text>}
         </Card>
 
-        <Card style={styles.liveRiskCard}>
+        <Card style={styles.sectionCard}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Live Risk Panel</Text>
-            <StatusBadge label={liveRiskLabel} variant={riskVariant} />
+            <Text style={styles.sectionTitle}>Coverage & Income</Text>
+            <StatusBadge label={policyState.label === "ACTIVE" ? "Protected" : "Not active"} variant={policyState.label === "ACTIVE" ? "success" : "warning"} />
           </View>
-          <View style={[styles.liveRiskGrid, isCompactScreen ? styles.liveRiskGridCompact : null]}>
-            <InfoRow icon="🌧️" label="Rain" value={risk.rain === null ? "--" : `${risk.rain} mm`} />
-            <InfoRow icon="🌫️" label="AQI" value={risk.aqi === null ? "--" : `${risk.aqi}`} />
-            <InfoRow icon="📍" label="Latitude" value={location.lat === null ? "--" : `${location.lat.toFixed(4)}`} />
-            <InfoRow icon="📍" label="Longitude" value={location.lon === null ? "--" : `${location.lon.toFixed(4)}`} />
-            <InfoRow icon="⚡" label="Risk Status" value={liveRiskLabel} />
+          <View style={[styles.summaryStatsRow, isCompactScreen ? styles.summaryStatsRowCompact : null]}>
+            <SummaryStat label="Daily Income" value={meanIncomeValue} />
+            <SummaryStat label="Coverage Amount" value={coverageValue} />
           </View>
+          <SummaryStat label="Weekly Premium" value={policy ? `${premiumValue}/week` : "Loading..."} />
+          <Text style={styles.coverageNote}>Coverage is based on your average daily income</Text>
         </Card>
 
-        <View style={styles.inlineStatusRow}>
-          <Text style={styles.inlineStatusLabel}>Live</Text>
-          <StatusBadge label={riskMessage} variant={riskLoading ? "warning" : riskVariant} />
-        </View>
+        <Card style={styles.sectionCard}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Automation</Text>
+            <StatusBadge label={demoMode ? "Demo Mode" : "Live"} variant={demoMode ? "warning" : "info"} />
+          </View>
+          <Text style={styles.automationText}>✔ Payouts are automatically triggered when disruptions occur. No manual claims needed.</Text>
+          <View style={styles.toggleRow}>
+            <View style={styles.toggleCopy}>
+              <Text style={styles.toggleTitle}>Demo Mode</Text>
+              <Text style={styles.toggleSubtitle}>Simulate a rainfall or AQI payout instantly for demo recordings.</Text>
+            </View>
+            <Switch
+              onValueChange={setDemoModeEnabled}
+              trackColor={{ false: appTheme.colors.switchTrackOff, true: appTheme.colors.switchTrackOn }}
+              thumbColor={demoMode ? appTheme.colors.accentSuccess : appTheme.colors.switchThumbOff}
+              value={demoMode}
+            />
+          </View>
+          {!!paymentMessage && <Text style={paymentOutcome === "success" ? styles.paymentSuccess : styles.paymentHint}>{paymentMessage}</Text>}
+          {!!paymentError && <Text style={styles.paymentError}>{paymentError}</Text>}
+        </Card>
 
-        {!isCoverageEligible && policyReady && (
-          <Text style={styles.warningText}>{policy.paymentStatus === "success" ? eligibilityMessage : "Premium payment required"}</Text>
+        <Card style={styles.sectionCard}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>System Status</Text>
+            <StatusBadge label={riskLoading ? "Monitoring" : "Stable"} variant={riskLoading ? "warning" : "success"} />
+          </View>
+          <Text style={styles.statusText}>{monitoringMessage}</Text>
+          <Text style={styles.statusMeta}>{lastRiskCheckAt ? `Last check: ${formatDateTime(lastRiskCheckAt)}` : "Last check: pending"}</Text>
+          {!!riskMessage && <Text style={styles.statusMeta}>{riskMessage}</Text>}
+          {(policyLoading || claimsLoading || riskLoading) && (
+            <View style={styles.loadingRow}>
+              <ActivityIndicator color={appTheme.colors.accentPrimary} />
+              <Text style={styles.loadingText}>Syncing policy and payout data...</Text>
+            </View>
+          )}
+          {!!dataError && <Text style={styles.errorText}>{dataError}</Text>}
+        </Card>
+
+        {needsActivation && (
+          <Card style={styles.sectionCard}>
+            <Text style={styles.sectionTitle}>Policy Payment</Text>
+            <Text style={styles.paymentCopy}>{policyState.isExpired ? "Your policy has expired. Renew coverage to keep protection active." : "Activate policy to begin automatic protection."}</Text>
+            <Button
+              loading={paymentLoading}
+              onPress={async () => {
+                await payPremium();
+                await refreshPolicy();
+              }}
+              style={styles.payButton}
+              title={buttonLabel}
+            />
+            {!!paymentError && <Text style={styles.paymentError}>{paymentError}</Text>}
+          </Card>
         )}
 
-        <Card style={styles.messageCard}>
-          <Text style={styles.messageHeading}>Automation Feed</Text>
-          <Text style={styles.feedItem}>Payouts are automatic when disruption occurs.</Text>
-          {recentEvents.length === 0 ? (
-            <Text style={styles.feedItem}>No activity yet</Text>
+        <Card style={styles.sectionCard}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Recent Payouts</Text>
+            <StatusBadge label={recentPayouts.length > 0 ? `${recentPayouts.length} recorded` : "Empty"} variant={recentPayouts.length > 0 ? "success" : "info"} />
+          </View>
+          {recentPayouts.length === 0 ? (
+            <Text style={styles.emptyText}>No payouts yet. You are protected when disruptions occur.</Text>
           ) : (
-            recentEvents.map((event) => (
-              <Text key={event} style={styles.feedItem}>{event}</Text>
+            recentPayouts.map((item) => (
+              <View key={String(item.id)} style={styles.payoutItem}>
+                <View style={styles.payoutTopRow}>
+                  <Text style={styles.payoutTitle} numberOfLines={1}>
+                    {`${getTriggerLabel(item)} (${getSeverityLabel(item.severity)})`}
+                  </Text>
+                  <Text style={styles.payoutAmount}>{formatRupee(item.amount)} credited</Text>
+                </View>
+                <View style={styles.payoutMetaGrid}>
+                  <KeyValueRow label="Date" value={formatDateTime(item.paidAt || item.createdAt)} />
+                  <KeyValueRow label="Trigger" value={getTriggerLabel(item)} />
+                  <KeyValueRow label="Severity" value={getSeverityLabel(item.severity)} />
+                  <KeyValueRow label="Payout %" value={item.payoutPercentage ? `${item.payoutPercentage}%` : "--"} />
+                  <KeyValueRow label="Amount" value={formatRupee(item.amount)} />
+                </View>
+                {!!item.reason && <Text style={styles.payoutReason}>{item.reason}</Text>}
+              </View>
             ))
           )}
         </Card>
-
-        <View style={styles.inlineStatusRow}>
-          <Text style={styles.inlineStatusLabel}>Workflow</Text>
-            <StatusBadge label={workflowMessage} variant={workflowMeta.variant} />
-        </View>
-
       </ScrollView>
     </SafeAreaView>
   );
@@ -304,7 +333,7 @@ const styles = StyleSheet.create({
   content: {
     flexGrow: 1
   },
-  summaryCard: {
+  sectionCard: {
     marginBottom: appTheme.spacing.md
   },
   heroCaption: {
@@ -314,18 +343,41 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
     textTransform: "uppercase"
   },
-  summaryTopRow: {
+  policyHeaderRow: {
     alignItems: "flex-start",
     flexDirection: "row",
     justifyContent: "space-between",
     marginTop: appTheme.spacing.sm
   },
-  summaryTopRowCompact: {
-    flexDirection: "column"
-  },
-  summaryPrimaryBlock: {
+  policyHeaderBlock: {
     flex: 1,
     paddingRight: appTheme.spacing.md
+  },
+  heroLabel: {
+    color: appTheme.colors.textPrimary,
+    fontFamily: "Orbitron_700Bold",
+    fontSize: 24,
+    letterSpacing: 0.3
+  },
+  policyNote: {
+    color: appTheme.colors.textSecondary,
+    fontFamily: "Rajdhani_600SemiBold",
+    fontSize: 14,
+    lineHeight: 20,
+    marginTop: 4
+  },
+  policyPill: {
+    alignItems: "center",
+    borderRadius: appTheme.radius.pill,
+    paddingHorizontal: 12,
+    paddingVertical: 8
+  },
+  policyPillText: {
+    color: appTheme.colors.textPrimary,
+    fontFamily: "Rajdhani_700Bold",
+    fontSize: 12,
+    letterSpacing: 0.8,
+    textTransform: "uppercase"
   },
   summaryStatsRow: {
     flexDirection: "row",
@@ -335,11 +387,115 @@ const styles = StyleSheet.create({
   summaryStatsRowCompact: {
     flexDirection: "column"
   },
+  summaryStat: {
+    flex: 1
+  },
+  summaryStatLabel: {
+    color: appTheme.colors.textSecondary,
+    fontFamily: "Rajdhani_700Bold",
+    fontSize: 11,
+    letterSpacing: 0.4,
+    textTransform: "uppercase"
+  },
+  summaryStatValue: {
+    color: appTheme.colors.textPrimary,
+    fontFamily: "Orbitron_700Bold",
+    fontSize: 22,
+    marginTop: appTheme.spacing.xs
+  },
+  renewalHint: {
+    color: appTheme.colors.warningText,
+    fontFamily: "Rajdhani_700Bold",
+    fontSize: 14,
+    marginTop: appTheme.spacing.sm
+  },
+  sectionHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: appTheme.spacing.sm
+  },
+  sectionTitle: {
+    color: appTheme.colors.textPrimary,
+    fontFamily: "Orbitron_600SemiBold",
+    fontSize: 17
+  },
+  coverageNote: {
+    color: appTheme.colors.textSecondary,
+    fontFamily: "Rajdhani_600SemiBold",
+    fontSize: 14,
+    lineHeight: 20,
+    marginTop: appTheme.spacing.sm
+  },
+  automationText: {
+    color: appTheme.colors.textPrimary,
+    fontFamily: "Rajdhani_600SemiBold",
+    fontSize: 15,
+    lineHeight: 22
+  },
+  toggleRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: appTheme.spacing.md
+  },
+  toggleCopy: {
+    flex: 1,
+    paddingRight: appTheme.spacing.sm
+  },
+  toggleTitle: {
+    color: appTheme.colors.textPrimary,
+    fontFamily: "Rajdhani_700Bold",
+    fontSize: 15
+  },
+  toggleSubtitle: {
+    color: appTheme.colors.textSecondary,
+    fontFamily: "Rajdhani_500Medium",
+    fontSize: 13,
+    lineHeight: 18,
+    marginTop: 2
+  },
+  statusText: {
+    color: appTheme.colors.textPrimary,
+    fontFamily: "Rajdhani_600SemiBold",
+    fontSize: 15,
+    lineHeight: 22
+  },
+  statusMeta: {
+    color: appTheme.colors.textSecondary,
+    fontFamily: "Rajdhani_500Medium",
+    fontSize: 13,
+    marginTop: appTheme.spacing.xs
+  },
+  loadingRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 10,
+    marginTop: appTheme.spacing.sm
+  },
+  loadingText: {
+    color: appTheme.colors.textSecondary,
+    fontFamily: "Rajdhani_600SemiBold",
+    fontSize: 13
+  },
+  errorText: {
+    color: appTheme.colors.dangerText,
+    fontFamily: "Rajdhani_600SemiBold",
+    fontSize: 13,
+    marginTop: appTheme.spacing.sm
+  },
+  paymentCopy: {
+    color: appTheme.colors.textSecondary,
+    fontFamily: "Rajdhani_600SemiBold",
+    fontSize: 14,
+    lineHeight: 20,
+    marginTop: appTheme.spacing.xs
+  },
   paymentHint: {
     color: appTheme.colors.textSecondary,
     fontFamily: "Rajdhani_600SemiBold",
     fontSize: 14,
-    marginTop: appTheme.spacing.sm
+    marginTop: appTheme.spacing.xs
   },
   paymentError: {
     color: appTheme.colors.dangerText,
@@ -356,105 +512,64 @@ const styles = StyleSheet.create({
   payButton: {
     marginTop: appTheme.spacing.sm
   },
-  summaryStat: {
-    flex: 1
-  },
-  summaryStatLabel: {
-    color: appTheme.colors.textSecondary,
-    fontFamily: "Rajdhani_700Bold",
-    fontSize: 12,
-    textTransform: "uppercase"
-  },
-  summaryStatValue: {
-    color: appTheme.colors.textPrimary,
-    fontFamily: "Rajdhani_700Bold",
-    fontSize: 18,
-    marginTop: appTheme.spacing.xs
-  },
-  heroLabel: {
-    color: appTheme.colors.textSecondary,
-    fontFamily: "Rajdhani_700Bold",
-    fontSize: 14
-  },
-  heroValue: {
-    color: appTheme.colors.textPrimary,
-    fontFamily: "Orbitron_700Bold",
-    fontSize: 30,
-    marginTop: appTheme.spacing.xs
-  },
-  liveRiskCard: {
-    marginBottom: appTheme.spacing.lg
-  },
-  sectionHeader: {
-    alignItems: "center",
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: appTheme.spacing.md
-  },
-  sectionTitle: {
-    color: appTheme.colors.textPrimary,
-    fontFamily: "Orbitron_600SemiBold",
-    fontSize: 18,
-    letterSpacing: 0.2
-  },
-  liveRiskGrid: {
-    gap: appTheme.spacing.sm
-  },
-  liveRiskGridCompact: {
-    gap: appTheme.spacing.xs
-  },
-  infoRow: {
-    alignItems: "center",
-    borderBottomColor: appTheme.colors.borderSubtle,
-    borderBottomWidth: 1,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    paddingBottom: appTheme.spacing.xs,
-    paddingTop: appTheme.spacing.xs
-  },
-  infoLabel: {
+  emptyText: {
     color: appTheme.colors.textSecondary,
     fontFamily: "Rajdhani_600SemiBold",
-    fontSize: 14
-  },
-  infoValue: {
-    color: appTheme.colors.accentPrimary,
-    fontFamily: "Rajdhani_700Bold",
-    fontSize: 15
-  },
-  inlineStatusRow: {
-    alignItems: "center",
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: appTheme.spacing.md,
-    marginTop: appTheme.spacing.xs
-  },
-  inlineStatusLabel: {
-    color: appTheme.colors.textSecondary,
-    fontFamily: "Rajdhani_700Bold",
-    fontSize: 12,
-    letterSpacing: 0.8,
-    textTransform: "uppercase"
-  },
-  messageCard: {
-    marginBottom: appTheme.spacing.md
-  },
-  warningText: {
-    color: appTheme.colors.warningText,
-    fontFamily: "Rajdhani_700Bold",
     fontSize: 14,
-    marginBottom: appTheme.spacing.md
+    lineHeight: 20
   },
-  messageHeading: {
+  payoutItem: {
+    borderColor: appTheme.colors.borderSoft,
+    borderTopWidth: 1,
+    marginTop: appTheme.spacing.sm,
+    paddingTop: appTheme.spacing.sm
+  },
+  payoutTopRow: {
+    alignItems: "flex-start",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 12
+  },
+  payoutTitle: {
     color: appTheme.colors.textPrimary,
-    fontFamily: "Orbitron_600SemiBold",
+    flex: 1,
+    fontFamily: "Rajdhani_700Bold",
     fontSize: 16,
-    marginBottom: appTheme.spacing.xs
-  },
-  feedItem: {
-    color: appTheme.colors.textSecondary,
-    fontFamily: "Rajdhani_600SemiBold",
-    fontSize: 15,
     lineHeight: 22
   },
+  payoutAmount: {
+    color: appTheme.colors.accentSuccess,
+    fontFamily: "Orbitron_700Bold",
+    fontSize: 15,
+    textAlign: "right"
+  },
+  payoutMetaGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 12,
+    marginTop: appTheme.spacing.sm
+  },
+  keyValueRow: {
+    minWidth: "44%"
+  },
+  keyValueLabel: {
+    color: appTheme.colors.textSecondary,
+    fontFamily: "Rajdhani_700Bold",
+    fontSize: 11,
+    letterSpacing: 0.6,
+    textTransform: "uppercase"
+  },
+  keyValueValue: {
+    color: appTheme.colors.textPrimary,
+    fontFamily: "Rajdhani_600SemiBold",
+    fontSize: 14,
+    marginTop: 2
+  },
+  payoutReason: {
+    color: appTheme.colors.textSecondary,
+    fontFamily: "Rajdhani_500Medium",
+    fontSize: 13,
+    lineHeight: 18,
+    marginTop: appTheme.spacing.sm
+  }
 });

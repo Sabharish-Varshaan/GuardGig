@@ -192,8 +192,18 @@ CLAIM_FRAUD_THRESHOLD=0.7
 - `backend/sql/010_enforce_daily_claim_limit.sql`
 - `backend/sql/011_add_razorpay_payout_fields.sql`
 - `backend/sql/012_add_policy_payment_fields.sql`
+- `backend/sql/013_add_policy_expires_at.sql`
+- `backend/sql/014_create_system_metrics.sql`
+- `backend/sql/015_add_app_users_email_role.sql`
 
 Important: paste SQL file contents into Supabase SQL Editor, not file path strings.
+
+To seed the admin account used by the separate web dashboard, run:
+
+```bash
+cd /Users/sabharishvarshaans/Documents/GuardGig/backend
+.venv/bin/python scripts/seed_admin.py
+```
 
 7. Start backend:
 

@@ -26,6 +26,7 @@ This root section contains complete setup instructions for both backend and fron
 - `backend/ml/`: model training and prediction artifacts/utilities.
 - `frontend/`: Expo React Native app.
 - `frontend/src/`: UI screens, navigation, context state, components, API client.
+- `guardgig-admin/`: Separate React + Vite web admin dashboard.
 
 ### 2. Prerequisites and Dependencies
 
@@ -37,6 +38,12 @@ Backend prerequisites:
 - Network access to public aqi.in dashboard pages
 
 Frontend prerequisites:
+
+- Node.js 18+
+- npm
+- Backend running at a reachable URL
+
+Admin dashboard prerequisites:
 
 - Node.js 18+
 - npm
@@ -106,6 +113,11 @@ Automated claims:
 - `GET /api/claims/me`
 - `POST /api/fraud/check`
 - `GET /api/health`
+
+Admin-only endpoints:
+
+- `POST /api/admin/login`
+- `GET /api/admin/metrics`
 
 ### 5. Backend Setup (Step by Step)
 

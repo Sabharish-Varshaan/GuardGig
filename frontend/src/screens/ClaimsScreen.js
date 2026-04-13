@@ -1,43 +1,66 @@
-import React, { memo, useEffect, useMemo, useRef } from "react";
-import { Animated, FlatList, StyleSheet, Text, View } from "react-native";
+import React, { memo, useMemo } from "react";
+import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
 import Card from "../components/Card";
-import ClaimItemCard from "../components/ClaimItemCard";
 import Header from "../components/Header";
-import NeonButton from "../components/NeonButton";
-import StatusCard from "../components/StatusCard";
 import StatusBadge from "../components/StatusBadge";
 import { useAppContext } from "../context/AppContext";
 import { appTheme } from "../styles/theme";
 
 function formatRupee(value) {
-  return `₹${value}`;
+  const amount = Number(value || 0);
+  return `₹${amount.toLocaleString("en-IN")}`;
 }
 
-function capitalizeStatus(value) {
-  const normalized = String(value || "pending").toLowerCase();
-  return normalized[0].toUpperCase() + normalized.slice(1);
+function formatDateTime(value) {
+  if (!value) {
+    return "--";
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return String(value);
+  }
+
+  return date.toLocaleString("en-IN", {
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    month: "short",
+    year: "numeric"
+  });
 }
 
-function ClaimsScreen({ navigation }) {
+function getTriggerLabel(item) {
+  if (item.triggerLabel) {
+    return item.triggerLabel;
+  }
+
+  return item.triggerType === "aqi" ? "AQI" : "Rain";
+}
+
+function getSeverityLabel(severity) {
+  const normalized = String(severity || "moderate").toLowerCase();
+
+  if (normalized === "extreme") {
+    return "Extreme";
+  }
+
+  if (normalized === "high") {
+    return "High";
+  }
+
+  return "Moderate";
+}
+
+function ClaimsScreen() {
   const insets = useSafeAreaInsets();
   const tabBarHeight = useBottomTabBarHeight();
-  const {
-    claimsHistory,
-    workflowState,
-    workflowMessage,
-    payoutAmount,
-    movementScore,
-    policy,
-    eligibilityMessage,
-    claimsLoading,
-    refreshClaims,
-    dataError
-  } = useAppContext();
-  const alreadyDoneMessage = (workflowMessage || "").toLowerCase().includes("already");
+  const { claimsHistory, claimsLoading, dataError, refreshClaims, policy, demoMode } = useAppContext();
 
   useFocusEffect(
     React.useCallback(() => {
@@ -46,126 +69,78 @@ function ClaimsScreen({ navigation }) {
     }, [refreshClaims])
   );
 
-  const fade = useRef(new Animated.Value(1)).current;
-  const rise = useRef(new Animated.Value(0)).current;
-
-  const latestClaim = useMemo(() => {
-    return claimsHistory.length > 0 ? claimsHistory[0] : null;
-  }, [claimsHistory]);
-  const isCoverageEligible = !!policy && policy.status === "active" && policy.eligibilityStatus === "eligible" && policy.paymentStatus === "success";
   const listContentStyle = useMemo(
     () => ({
+      paddingBottom: tabBarHeight + insets.bottom + 20,
       paddingHorizontal: appTheme.spacing.sm,
-      paddingTop: appTheme.spacing.sm,
-      paddingBottom: tabBarHeight + insets.bottom + 20
+      paddingTop: appTheme.spacing.sm
     }),
     [insets.bottom, tabBarHeight]
   );
 
-  const animateStateTransition = () => {
-    fade.setValue(0);
-    rise.setValue(18);
-
-    Animated.parallel([
-      Animated.timing(fade, {
-        duration: 350,
-        toValue: 1,
-        useNativeDriver: true
-      }),
-      Animated.timing(rise, {
-        duration: 350,
-        toValue: 0,
-        useNativeDriver: true
-      })
-    ]).start();
-  };
-
-  useEffect(() => {
-    if (latestClaim) {
-      animateStateTransition();
-      return;
-    }
-
-    // Keep default state visible when there is no latest claim to animate.
-    fade.setValue(1);
-    rise.setValue(0);
-  }, [latestClaim, workflowState]);
+  const isPolicyActive = !!policy && policy.status === "active" && policy.paymentStatus === "success";
 
   return (
     <SafeAreaView style={styles.screen}>
-      <View style={styles.content}>
-        <FlatList
-          ListHeaderComponent={
-            <View>
-              <Header
-                subtitle="Claims run automatically with fraud checks"
-                title="Claims"
-                rightElement={<StatusBadge label="Realtime" variant="success" />}
-              />
-              <Text style={styles.automationText}>Payouts are automatic when disruption occurs.</Text>
-
-              <StatusCard
-                workflowState={workflowState}
-                workflowMessage={workflowMessage}
-                movementScore={movementScore}
-                payoutAmount={payoutAmount}
-              />
-
-              {!!latestClaim && (
-                <Animated.View style={{ opacity: fade, transform: [{ translateY: rise }] }}>
-                  <Card style={styles.resultCard}>
-                    <Text style={styles.resultHeading}>Latest Claim Update</Text>
-                    <Text style={styles.resultSubHeading}>{capitalizeStatus(latestClaim.status)}</Text>
-                    {!!latestClaim.reason && <Text style={styles.resultReason}>{latestClaim.reason}</Text>}
-                    <Text style={styles.resultAmount}>
-                      {latestClaim.amount > 0
-                        ? `${formatRupee(latestClaim.amount)} Credited 🎉`
-                        : latestClaim.status === "rejected"
-                          ? alreadyDoneMessage
-                            ? "Claim is already done"
-                            : "Conditions not met"
-                          : "Verification Pending"}
-                    </Text>
-                    {!!latestClaim.transactionId && <Text style={styles.resultMeta}>{`Transaction ID: ${latestClaim.transactionId}`}</Text>}
-                    {!!latestClaim.paidAt && <Text style={styles.resultMeta}>{`Paid at: ${latestClaim.paidAt}`}</Text>}
-                    <StatusBadge
-                      label={capitalizeStatus(latestClaim.status)}
-                      variant={latestClaim.status === "approved" ? "success" : latestClaim.status === "rejected" ? "danger" : "warning"}
-                    />
-                  </Card>
-                </Animated.View>
-              )}
-
-              <Text style={styles.historyTitle}>Claim History</Text>
-              {!isCoverageEligible && <Text style={styles.warningText}>{policy?.paymentStatus === "success" ? eligibilityMessage : "Premium payment required"}</Text>}
-              {claimsLoading && <Text style={styles.loadingText}>Refreshing claims...</Text>}
-              {!!dataError && <Text style={styles.errorText}>{dataError}</Text>}
-            </View>
-          }
-          contentContainerStyle={listContentStyle}
-          data={claimsHistory}
-          keyExtractor={(item) => String(item.id)}
-          ListEmptyComponent={
-            <Card>
-              <Text style={styles.emptyTitle}>No claims yet</Text>
-              <Text style={styles.emptySubtitle}>
-                Claims appear automatically after trigger checks.
-              </Text>
-            </Card>
-          }
-          renderItem={({ item }) => <ClaimItemCard item={item} style={styles.historyCard} />}
-          ListFooterComponent={
-            <NeonButton
-              disabled={!isCoverageEligible}
-              onPress={() => navigation.navigate("Payout")}
-              style={styles.payoutButton}
-              title={isCoverageEligible ? "Open Payout Center" : "Coverage Locked"}
-              variant="secondary"
-            />
-          }
-          showsVerticalScrollIndicator={false}
+      <ScrollView contentContainerStyle={listContentStyle} showsVerticalScrollIndicator={false}>
+        <Header
+          subtitle="Read-only record of backend-driven settlements"
+          title="Payouts"
+          rightElement={<StatusBadge label={demoMode ? "Demo Mode" : "Live"} variant={demoMode ? "warning" : "success"} />}
         />
-      </View>
+
+        <Card style={styles.summaryCard}>
+          <Text style={styles.summaryTitle}>Automation Summary</Text>
+          <Text style={styles.summaryText}>Payouts are created by backend trigger checks. There is no manual payout action in this app.</Text>
+          <Text style={styles.summaryText}>{isPolicyActive ? "Your policy is active and monitoring is enabled." : "Activate your policy to begin automated coverage."}</Text>
+        </Card>
+
+        <Card style={styles.summaryCard}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Payout History</Text>
+            <StatusBadge label={claimsHistory.length > 0 ? `${claimsHistory.length} records` : "Empty"} variant={claimsHistory.length > 0 ? "success" : "info"} />
+          </View>
+
+          {claimsLoading && (
+            <View style={styles.loadingRow}>
+              <ActivityIndicator color={appTheme.colors.accentPrimary} />
+              <Text style={styles.loadingText}>Refreshing payouts...</Text>
+            </View>
+          )}
+
+          {!!dataError && <Text style={styles.errorText}>{dataError}</Text>}
+
+          {claimsHistory.length === 0 ? (
+            <Text style={styles.emptyText}>No payouts yet. You are protected when disruptions occur.</Text>
+          ) : (
+            claimsHistory.map((item) => (
+              <View key={String(item.id)} style={styles.payoutItem}>
+                <View style={styles.payoutTopRow}>
+                  <Text style={styles.payoutTitle}>{`${getTriggerLabel(item)} (${getSeverityLabel(item.severity)})`}</Text>
+                  <StatusBadge
+                    label={item.status === "approved" || item.paymentStatus === "paid" ? "Credited" : item.status}
+                    variant={item.status === "approved" || item.paymentStatus === "paid" ? "success" : "warning"}
+                  />
+                </View>
+                <Text style={styles.payoutAmount}>{`${item.payoutPercentage ? `${item.payoutPercentage}%` : "--"} • ${formatRupee(item.amount)} credited`}</Text>
+                <View style={styles.metaGrid}>
+                  <Text style={styles.metaText}>Date: {formatDateTime(item.paidAt || item.createdAt)}</Text>
+                  <Text style={styles.metaText}>Trigger: {getTriggerLabel(item)}</Text>
+                  <Text style={styles.metaText}>Severity: {getSeverityLabel(item.severity)}</Text>
+                  <Text style={styles.metaText}>Payout %: {item.payoutPercentage ? `${item.payoutPercentage}%` : "--"}</Text>
+                  <Text style={styles.metaText}>Amount: {formatRupee(item.amount)}</Text>
+                </View>
+                {!!item.reason && <Text style={styles.reasonText}>{item.reason}</Text>}
+              </View>
+            ))
+          )}
+        </Card>
+
+        <Card style={styles.summaryCard}>
+          <Text style={styles.sectionTitle}>Trust Layer</Text>
+          <Text style={styles.summaryText}>Trigger checks, fraud checks, and settlement updates are all driven by the backend and reflected here after sync.</Text>
+        </Card>
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -177,92 +152,96 @@ const styles = StyleSheet.create({
     backgroundColor: appTheme.colors.background,
     flex: 1
   },
-  content: {
-    flex: 1
+  summaryCard: {
+    marginBottom: appTheme.spacing.md
   },
-  resultCard: {
-    backgroundColor: appTheme.colors.successSoft,
-    borderColor: appTheme.colors.borderSoft,
-    marginBottom: appTheme.spacing.lg
-  },
-  resultHeading: {
-    color: appTheme.colors.textPrimary,
-    fontFamily: "Orbitron_700Bold",
-    fontSize: 18
-  },
-  resultSubHeading: {
-    color: appTheme.colors.accentPrimary,
-    fontFamily: "Rajdhani_700Bold",
-    fontSize: 15,
-    marginTop: appTheme.spacing.xs
-  },
-  resultReason: {
-    color: appTheme.colors.textSecondary,
-    fontFamily: "Rajdhani_600SemiBold",
-    fontSize: 14,
-    marginTop: appTheme.spacing.xs
-  },
-  resultAmount: {
-    color: appTheme.colors.successText,
-    fontFamily: "Orbitron_700Bold",
-    fontSize: 22,
-    marginBottom: appTheme.spacing.sm,
-    marginTop: appTheme.spacing.sm
-  },
-  resultMeta: {
-    color: appTheme.colors.textSecondary,
-    fontFamily: "Rajdhani_500Medium",
-    fontSize: 13,
-    marginBottom: 2
-  },
-  historyTitle: {
+  summaryTitle: {
     color: appTheme.colors.textPrimary,
     fontFamily: "Orbitron_600SemiBold",
     fontSize: 18,
-    marginBottom: appTheme.spacing.md,
-    marginTop: appTheme.spacing.xs
+    marginBottom: appTheme.spacing.xs
   },
-  automationText: {
+  summaryText: {
     color: appTheme.colors.textSecondary,
     fontFamily: "Rajdhani_600SemiBold",
-    fontSize: 14,
-    marginBottom: appTheme.spacing.sm
-  },
-  historyCard: {
-    marginBottom: appTheme.spacing.md
-  },
-  emptyTitle: {
-    color: appTheme.colors.textPrimary,
-    fontFamily: "Rajdhani_700Bold",
-    fontSize: 18
-  },
-  emptySubtitle: {
-    color: appTheme.colors.textSecondary,
-    fontFamily: "Rajdhani_500Medium",
     fontSize: 14,
     lineHeight: 20,
     marginTop: appTheme.spacing.xs
   },
-  payoutButton: {
-    marginBottom: appTheme.spacing.sm,
-    marginTop: appTheme.spacing.sm
+  sectionHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: appTheme.spacing.sm
+  },
+  sectionTitle: {
+    color: appTheme.colors.textPrimary,
+    fontFamily: "Orbitron_600SemiBold",
+    fontSize: 18
+  },
+  loadingRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 10,
+    marginBottom: appTheme.spacing.sm
   },
   loadingText: {
     color: appTheme.colors.textSecondary,
     fontFamily: "Rajdhani_600SemiBold",
-    fontSize: 14,
-    marginBottom: appTheme.spacing.sm
-  },
-  warningText: {
-    color: appTheme.colors.warningText,
-    fontFamily: "Rajdhani_700Bold",
-    fontSize: 14,
-    marginBottom: appTheme.spacing.sm
+    fontSize: 14
   },
   errorText: {
-    color: appTheme.colors.danger,
+    color: appTheme.colors.dangerText,
     fontFamily: "Rajdhani_600SemiBold",
     fontSize: 14,
     marginBottom: appTheme.spacing.sm
+  },
+  emptyText: {
+    color: appTheme.colors.textSecondary,
+    fontFamily: "Rajdhani_600SemiBold",
+    fontSize: 14,
+    lineHeight: 20
+  },
+  payoutItem: {
+    borderColor: appTheme.colors.borderSoft,
+    borderTopWidth: 1,
+    marginTop: appTheme.spacing.sm,
+    paddingTop: appTheme.spacing.sm
+  },
+  payoutTopRow: {
+    alignItems: "flex-start",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 12
+  },
+  payoutTitle: {
+    color: appTheme.colors.textPrimary,
+    flex: 1,
+    fontFamily: "Rajdhani_700Bold",
+    fontSize: 16,
+    lineHeight: 22
+  },
+  payoutAmount: {
+    color: appTheme.colors.accentSuccess,
+    fontFamily: "Orbitron_700Bold",
+    fontSize: 14,
+    marginTop: appTheme.spacing.xs
+  },
+  metaGrid: {
+    marginTop: appTheme.spacing.sm
+  },
+  metaText: {
+    color: appTheme.colors.textSecondary,
+    fontFamily: "Rajdhani_500Medium",
+    fontSize: 13,
+    lineHeight: 18,
+    marginTop: 2
+  },
+  reasonText: {
+    color: appTheme.colors.textSecondary,
+    fontFamily: "Rajdhani_600SemiBold",
+    fontSize: 13,
+    lineHeight: 18,
+    marginTop: appTheme.spacing.sm
   }
 });

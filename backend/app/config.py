@@ -6,6 +6,9 @@ from pydantic import BaseModel, Field
 
 load_dotenv()
 
+# Risk control thresholds
+LOSS_RATIO_THRESHOLD = 0.85  # 85% - system stops accepting new policies above this
+
 
 class Settings(BaseModel):
     app_env: str = Field(default="development")

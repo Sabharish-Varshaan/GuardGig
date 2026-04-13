@@ -1,0 +1,9 @@
+# Test Requirements
+# Add to your existing backend/requirements.txt
+
+pytest>=7.0.0
+pytest-asyncio>=0.20.0
+pytest-cov>=4.0.0
+pytest-html>=3.2.0
+pytest-timeout>=2.1.0
+httpx>=0.23.0

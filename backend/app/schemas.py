@@ -28,6 +28,16 @@ class AuthResponse(BaseModel):
     onboarding_completed: bool
 
 
+class AdminLoginRequest(BaseModel):
+    email: str = Field(min_length=3, max_length=120)
+    password: str = Field(min_length=6, max_length=72)
+
+
+class AdminLoginResponse(BaseModel):
+    access_token: str
+    role: Literal["admin"]
+
+
 class OnboardingRequest(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
@@ -169,3 +179,12 @@ class FraudCheckResponse(BaseModel):
     fraud_score: float
     decision: str  # "approved" or "rejected"
     message: str
+
+
+class AdminMetricsResponse(BaseModel):
+    total_premium: float
+    total_payout: float
+    loss_ratio: float
+    loss_ratio_percentage: float  # For UI: loss_ratio * 100
+    status: str  # "healthy", "warning", "critical"
+    last_updated: str

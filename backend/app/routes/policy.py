@@ -2,8 +2,9 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from ..config import get_settings
+from ..config import get_settings, LOSS_RATIO_THRESHOLD
 from ..dependencies import require_current_user
+from ..metrics_utils import check_loss_ratio_threshold
 from ..premium_utils import calculate_premium
 from ..schemas import PolicyCreateResponse, PolicyResponse
 from ..supabase_client import get_admin_client
@@ -37,6 +38,16 @@ def _derive_underwriting(onboarding_created_at: str | None) -> tuple[str, str, i
 def create_policy(current_user: dict = Depends(require_current_user)):
     settings = get_settings()
     admin = get_admin_client()
+
+    # Check loss ratio threshold - block policy creation if risk is too high
+    try:
+        check_loss_ratio_threshold(admin, threshold=LOSS_RATIO_THRESHOLD)
+    except ValueError as exc:
+        return PolicyCreateResponse(
+            status="ineligible",
+            policy=None,
+            message=str(exc),
+        )
 
     # Check if user has completed onboarding
     onboarding_response = (
@@ -127,7 +138,8 @@ def create_policy(current_user: dict = Depends(require_current_user)):
         "premium": premium,
         "coverage_amount": 700.00,
         "policy_start_date": now.date().isoformat(),
-        "status": "active",
+        "status": "inactive",
+        "payment_status": "pending",
         "eligibility_status": eligibility_status,
         "worker_tier": worker_tier,
         "active_days": active_days,

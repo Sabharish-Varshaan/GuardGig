@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 import re
 import time
@@ -11,6 +12,8 @@ import requests
 from dotenv import load_dotenv
 
 from .config import get_settings
+
+logger = logging.getLogger(__name__)
 
 load_dotenv()
 
@@ -310,6 +313,7 @@ def check_trigger(rain: float, aqi: float) -> dict:
     
     # No trigger
     if not rain_trigger and not aqi_trigger:
+        logger.debug(f"  [TRIGGER] No trigger detected (rain={rain}mm, aqi={aqi})")
         return {
             "triggered": False,
             "rain": rain,
@@ -320,13 +324,18 @@ def check_trigger(rain: float, aqi: float) -> dict:
     if rain_trigger and aqi_trigger:
         if rain_payout >= aqi_payout:
             selected = rain_trigger
+            logger.debug(f"  [TRIGGER] Multi-trigger: rain={rain_payout}% >= aqi={aqi_payout}%, selecting rain")
         else:
             selected = aqi_trigger
+            logger.debug(f"  [TRIGGER] Multi-trigger: aqi={aqi_payout}% > rain={rain_payout}%, selecting aqi")
     elif rain_trigger:
         selected = rain_trigger
+        logger.debug(f"  [TRIGGER] Rain trigger only: {rain_payout}% payout")
     else:
         selected = aqi_trigger
+        logger.debug(f"  [TRIGGER] AQI trigger only: {aqi_payout}% payout")
     
+    logger.info(f"  → TRIGGER DETECTED: type={selected['trigger_type']}, severity={selected['severity']}, payout%={selected['payout_percentage']} (rain={rain}mm, aqi={aqi})")
     return {
         "triggered": True,
         "trigger_type": selected["trigger_type"],

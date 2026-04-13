@@ -83,7 +83,7 @@ function PayoutScreen() {
     if (workflowState === "approved") {
       return {
         badge: "Payout Successful",
-        description: "Funds credited from automated claim approval.",
+        description: "Funds credited from automated trigger approval.",
         tone: "success"
       };
     }
@@ -98,7 +98,7 @@ function PayoutScreen() {
 
     return {
       badge: "Awaiting Trigger",
-      description: "Payout appears after a trigger-based approved claim.",
+      description: "Payout appears after a trigger-based approval.",
       tone: "info"
     };
   }, [eligibilityMessage, isCoverageEligible, workflowState]);

@@ -18,7 +18,7 @@ const iconMap = {
   Home: "grid-outline",
   Risk: "pulse-outline",
   Policy: "document-text-outline",
-  Claims: "cash-outline",
+  Payouts: "cash-outline",
   Payout: "wallet-outline",
   Profile: "person-circle-outline"
 };
@@ -81,7 +81,7 @@ function MainTabNavigator() {
       <Tab.Screen component={DashboardScreen} name="Home" />
       <Tab.Screen component={RiskScreen} name="Risk" />
       <Tab.Screen component={PolicyScreen} name="Policy" />
-      <Tab.Screen component={ClaimsScreen} name="Claims" />
+      <Tab.Screen component={ClaimsScreen} name="Payouts" />
       <Tab.Screen component={PayoutScreen} name="Payout" />
       <Tab.Screen component={ProfileScreen} name="Profile" />
     </Tab.Navigator>

@@ -7,6 +7,7 @@ from fastapi.responses import HTMLResponse
 
 from ..config import get_settings
 from ..dependencies import require_current_user
+from ..metrics_utils import update_metrics_on_premium
 from ..schemas import PaymentOrderResponse, PaymentVerifyRequest, PaymentVerifyResponse
 from ..supabase_client import get_admin_client
 
@@ -246,6 +247,7 @@ def verify_payment(request: PaymentVerifyRequest, current_user: dict = Depends(r
             admin.table(settings.supabase_policies_table)
             .update(
                 {
+                    "status": "active",
                     "payment_status": "success",
                     "payment_id": payment_id,
                     "activated_at": activated_at,
@@ -266,6 +268,7 @@ def verify_payment(request: PaymentVerifyRequest, current_user: dict = Depends(r
                 admin.table(settings.supabase_policies_table)
                 .update(
                     {
+                        "status": "active",
                         "payment_status": "success",
                         "payment_id": payment_id,
                         "updated_at": activated_at,
@@ -291,6 +294,17 @@ def verify_payment(request: PaymentVerifyRequest, current_user: dict = Depends(r
 
     if not rows:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to update policy payment state")
+
+    # Track premium in system metrics (non-blocking)
+    premium_amount = float(policy.get("premium", 0))
+    if premium_amount > 0:
+        try:
+            update_metrics_on_premium(admin, premium_amount)
+        except Exception as exc:
+            # Don't fail payment if metrics update fails - log and continue
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Failed to update metrics on premium payment: {exc}")
 
     return PaymentVerifyResponse(
         payment_status="success",

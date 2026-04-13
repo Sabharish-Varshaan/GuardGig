@@ -34,7 +34,7 @@ def get_current_user(authorization: str = Header(default="", alias="Authorizatio
 
     response = (
         admin.table(settings.supabase_users_table)
-        .select("id,phone")
+        .select("id,phone,role,email,full_name")
         .eq("id", user_id)
         .limit(1)
         .execute()
@@ -48,9 +48,41 @@ def get_current_user(authorization: str = Header(default="", alias="Authorizatio
 
     return {
         "id": user["id"],
-        "phone": user.get("phone", "")
+        "phone": user.get("phone", ""),
+        "role": user.get("role", "user"),
+        "email": user.get("email"),
+        "full_name": user.get("full_name", "")
     }
 
 
 def require_current_user(user: dict = Depends(get_current_user)) -> dict:
     return user
+
+
+def require_admin_user(user: dict = Depends(get_current_user)) -> dict:
+    settings = get_settings()
+    admin = get_admin_client()
+
+    response = (
+        admin.table(settings.supabase_users_table)
+        .select("id,phone,role,email,full_name")
+        .eq("id", user["id"])
+        .limit(1)
+        .execute()
+    )
+
+    rows = response.data or []
+    if not rows:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+
+    db_user = rows[0]
+    if db_user.get("role", "user") != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
+
+    return {
+        "id": db_user["id"],
+        "phone": db_user.get("phone", ""),
+        "role": db_user.get("role", "user"),
+        "email": db_user.get("email"),
+        "full_name": db_user.get("full_name", "")
+    }
