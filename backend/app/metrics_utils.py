@@ -5,6 +5,8 @@ Actuarial metrics utilities for tracking system-wide premiums, payouts, and loss
 import logging
 from datetime import datetime, timezone
 
+from .config import get_settings
+
 logger = logging.getLogger(__name__)
 
 
@@ -40,6 +42,83 @@ def _calculate_loss_ratio(total_premium: float, total_payout: float) -> float:
     ratio = total_payout / total_premium
     # Clamp to [0, 1] range
     return min(1.0, max(0.0, round(ratio, 4)))
+
+
+def _compute_source_totals(admin) -> tuple[float, float, float]:
+    """Compute totals from source-of-truth transactional tables."""
+    settings = get_settings()
+
+    paid_policies = (
+        admin.table(settings.supabase_policies_table)
+        .select("premium")
+        .eq("payment_status", "success")
+        .execute()
+        .data
+        or []
+    )
+    paid_claims = (
+        admin.table(settings.supabase_claims_table)
+        .select("payout_amount")
+        .eq("payment_status", "paid")
+        .execute()
+        .data
+        or []
+    )
+
+    total_premium = round(sum(float(row.get("premium") or 0) for row in paid_policies), 2)
+    total_payout = round(sum(float(row.get("payout_amount") or 0) for row in paid_claims), 2)
+    loss_ratio = _calculate_loss_ratio(total_premium, total_payout)
+    return total_premium, total_payout, loss_ratio
+
+
+def _reconcile_metrics_if_needed(admin, metrics: dict, metrics_table: str) -> dict:
+    """Reconcile cached metrics row with transactional totals when drift is detected."""
+    source_premium, source_payout, source_ratio = _compute_source_totals(admin)
+
+    cached_premium = float(metrics.get("total_premium", 0) or 0)
+    cached_payout = float(metrics.get("total_payout", 0) or 0)
+    cached_ratio = float(metrics.get("loss_ratio", 0) or 0)
+
+    has_drift = (
+        abs(cached_premium - source_premium) > 0.01
+        or abs(cached_payout - source_payout) > 0.01
+        or abs(cached_ratio - source_ratio) > 0.0001
+    )
+
+    if not has_drift:
+        return {
+            "total_premium": cached_premium,
+            "total_payout": cached_payout,
+            "loss_ratio": cached_ratio,
+            "last_updated": metrics.get("last_updated", datetime.now(timezone.utc).isoformat()),
+        }
+
+    admin.table(metrics_table).update({
+        "total_premium": source_premium,
+        "total_payout": source_payout,
+        "loss_ratio": source_ratio,
+        "updated_by": "metrics_reconciler",
+        "last_updated": datetime.now(timezone.utc).isoformat(),
+    }).eq("id", 1).execute()
+
+    logger.warning(
+        "[METRICS] Reconciled drift: cached(premium=%s, payout=%s, ratio=%s) -> source(premium=%s, payout=%s, ratio=%s)",
+        cached_premium,
+        cached_payout,
+        cached_ratio,
+        source_premium,
+        source_payout,
+        source_ratio,
+    )
+
+    refreshed = admin.table(metrics_table).select("*").eq("id", 1).execute().data or []
+    row = refreshed[0] if refreshed else {}
+    return {
+        "total_premium": float(row.get("total_premium", source_premium) or source_premium),
+        "total_payout": float(row.get("total_payout", source_payout) or source_payout),
+        "loss_ratio": float(row.get("loss_ratio", source_ratio) or source_ratio),
+        "last_updated": row.get("last_updated", datetime.now(timezone.utc).isoformat()),
+    }
 
 
 def update_metrics_on_premium(admin, premium_amount: float, metrics_table: str = "system_metrics") -> dict:
@@ -130,12 +209,7 @@ def get_full_metrics(admin, metrics_table: str = "system_metrics") -> dict:
     """
     try:
         metrics = _get_or_init_metrics(admin, metrics_table)
-        return {
-            "total_premium": float(metrics.get("total_premium", 0)),
-            "total_payout": float(metrics.get("total_payout", 0)),
-            "loss_ratio": float(metrics.get("loss_ratio", 0)),
-            "last_updated": metrics.get("last_updated", datetime.now(timezone.utc).isoformat()),
-        }
+        return _reconcile_metrics_if_needed(admin, metrics, metrics_table)
     except Exception as exc:
         logger.error(f"[METRICS] Failed to fetch full metrics: {exc}")
         return {
