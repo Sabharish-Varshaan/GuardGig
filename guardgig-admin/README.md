@@ -44,3 +44,5 @@ VITE_API_BASE_URL=https://<your-backend-domain>
 ```
 
 Railway will build with `npm run build` and start with `npm run start`.
+
+The production start command serves the built `dist/` folder with `serve` and binds to Railway's `PORT`.
