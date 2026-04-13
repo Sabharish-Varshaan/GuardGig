@@ -102,6 +102,7 @@ function ClaimsScreen({ navigation }) {
                 title="Claims"
                 rightElement={<StatusBadge label="Realtime" variant="success" />}
               />
+              <Text style={styles.automationText}>Payouts are automatic when disruption occurs.</Text>
 
               <StatusCard
                 workflowState={workflowState}
@@ -220,6 +221,12 @@ const styles = StyleSheet.create({
     fontSize: 18,
     marginBottom: appTheme.spacing.md,
     marginTop: appTheme.spacing.xs
+  },
+  automationText: {
+    color: appTheme.colors.textSecondary,
+    fontFamily: "Rajdhani_600SemiBold",
+    fontSize: 14,
+    marginBottom: appTheme.spacing.sm
   },
   historyCard: {
     marginBottom: appTheme.spacing.md

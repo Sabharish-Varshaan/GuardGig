@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
-from datetime import datetime
+from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
 from .claim_rules import (
@@ -61,6 +61,16 @@ def _verify_migration_007_applied() -> None:
     if not is_applied:
         raise RuntimeError("Migration 007 not applied. System cannot start.")
 
+
+def _parse_iso_datetime(value: str | None) -> datetime | None:
+    if not value:
+        return None
+
+    parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
 async def automated_claim_check():
     """Automated task to check triggers and create claims for all active policies."""
     settings = get_settings()
@@ -77,10 +87,13 @@ async def automated_claim_check():
     for policy in (policies_response.data or []):
         user_id = policy["user_id"]
 
-        # Skip all downstream work for users who already have today's claim.
-        try:
-            enforce_max_one_claim_per_day(admin, settings.supabase_claims_table, user_id)
-        except ValueError:
+        # 1) Policy validity checks
+        if str(policy.get("payment_status") or "pending").lower() != "success":
+            continue
+
+        expires_at = _parse_iso_datetime(policy.get("expires_at"))
+        now_utc = datetime.now(timezone.utc)
+        if expires_at is None or now_utc > expires_at:
             continue
 
         onboarding_response = (
@@ -98,18 +111,23 @@ async def automated_claim_check():
         if not city:
             continue
 
+        # 2) Fetch trigger data
         try:
             rain = await fetch_rain_mm(city)
             aqi = await fetch_aqi(city)
         except Exception:
             continue
 
+        # 3) Trigger gate
         trigger_data = check_trigger(rain, aqi)
 
         if not trigger_data.get("trigger"):
             continue
 
-        if str(policy.get("payment_status") or "pending").lower() != "success":
+        # 4) Daily claim limit
+        try:
+            enforce_max_one_claim_per_day(admin, settings.supabase_claims_table, user_id)
+        except ValueError:
             continue
 
         trigger_type = trigger_data["type"]
@@ -122,15 +140,22 @@ async def automated_claim_check():
 
         coverage_amount = float(policy.get("coverage_amount", 700.0))
         mean_income = float(onboarding.get("mean_income") or 0)
+        if mean_income <= 0:
+            continue
+
         payout_base = min(mean_income, coverage_amount)
         if severity == "full":
             payout = payout_base
+            payout_percentage = 1.0
         elif severity == "severe":
             payout = payout_base * 0.70
+            payout_percentage = 0.70
         elif severity == "partial":
             payout = payout_base * 0.30
+            payout_percentage = 0.30
         else:
             payout = 0.0
+            payout_percentage = 0.0
         payout = round(min(payout, coverage_amount), 2)
         rule_decision_reason = f"approved_after_{trigger_type}_{severity}_checks"
         trigger_snapshot = {
@@ -138,6 +163,7 @@ async def automated_claim_check():
             "severity": severity,
             "rain": rain,
             "aqi": aqi,
+            "payout_percentage": payout_percentage,
             "payout_amount": payout,
             "fraud_score": None,
             "activity_status": "active",
@@ -152,6 +178,7 @@ async def automated_claim_check():
             user_id,
         )
 
+        # 5) Fraud check
         fraud_score = calculate_fraud_score(
             activity_status="active",
             location_valid=True,
@@ -168,6 +195,9 @@ async def automated_claim_check():
         except ValueError:
             continue
 
+        # 6) Payout is already computed above based on trigger severity and income.
+
+        # 7) Create approved claim
         claim_data = {
             "user_id": user_id,
             "policy_id": policy["id"],
@@ -195,6 +225,7 @@ async def automated_claim_check():
 
         claim = claim_rows[0]
 
+        # 8) Execute payout and persist payout fields
         try:
             payout_result = simulate_razorpay_payout(payout, user_id)
             payment_status = payout_result["status"]
@@ -223,7 +254,7 @@ async def startup_event():
     # Add automated job to run every hour
     scheduler.add_job(
         automated_claim_check,
-        trigger=IntervalTrigger(hours=1),
+        trigger=IntervalTrigger(minutes=5),
         id="automated_claim_check",
         name="Automated Claim Check"
     )

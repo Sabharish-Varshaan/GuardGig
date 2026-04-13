@@ -1,4 +1,4 @@
-import React, { memo, useEffect, useMemo, useRef } from "react";
+import React, { memo, useMemo } from "react";
 import { ScrollView, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
@@ -130,7 +130,6 @@ function DashboardScreen({ navigation }) {
     eligibilityMessage,
     requestLocation,
     refreshRisk,
-    startCoverageCheck,
     payPremium,
     paymentLoading,
     paymentError,
@@ -157,7 +156,6 @@ function DashboardScreen({ navigation }) {
     }),
     [isMobileLayout, tabBarHeight]
   );
-  const autoCheckStartedRef = useRef(false);
   const policyReady = !policyLoading && !!policy;
   const isCoverageEligible =
     policyReady && policy.status === "active" && policy.eligibilityStatus === "eligible" && policy.paymentStatus === "success";
@@ -183,27 +181,6 @@ function DashboardScreen({ navigation }) {
       };
     }, [refreshRisk, requestLocation])
   );
-
-  useEffect(() => {
-    if (autoCheckStartedRef.current) {
-      return;
-    }
-
-    if (!isCoverageEligible) {
-      return;
-    }
-
-    autoCheckStartedRef.current = true;
-
-    const runAutoFlow = async () => {
-      const result = await startCoverageCheck();
-      if (result?.approved) {
-        navigation.navigate("Payout");
-      }
-    };
-
-    runAutoFlow().catch(() => {});
-  }, [isCoverageEligible, navigation, startCoverageCheck]);
 
   const riskVariant = useMemo(() => getVariantFromRiskLevel(risk.level), [risk.level]);
   const compactRiskLabel = useMemo(() => resolveRiskHeadline(risk.severity), [risk.severity]);
@@ -293,6 +270,7 @@ function DashboardScreen({ navigation }) {
 
         <Card style={styles.messageCard}>
           <Text style={styles.messageHeading}>Automation Feed</Text>
+          <Text style={styles.feedItem}>Payouts are automatic when disruption occurs.</Text>
           {recentEvents.length === 0 ? (
             <Text style={styles.feedItem}>No activity yet</Text>
           ) : (

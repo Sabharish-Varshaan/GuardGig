@@ -68,6 +68,7 @@ class PolicyResponse(BaseModel):
     payment_status: Optional[str] = "pending"
     payment_id: Optional[str] = None
     activated_at: Optional[str] = None
+    expires_at: Optional[str] = None
     policy_start_date: str
     status: Literal["active", "inactive"]
     eligibility_status: str = "eligible"
@@ -113,6 +114,7 @@ class PaymentVerifyResponse(BaseModel):
     payment_status: Literal["success"]
     payment_id: str
     activated_at: str
+    expires_at: str
     order_id: str
 
 

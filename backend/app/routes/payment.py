@@ -1,5 +1,5 @@
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import razorpay
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -216,7 +216,10 @@ def verify_payment(request: PaymentVerifyRequest, current_user: dict = Depends(r
     if not payment_id:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing Razorpay payment id")
 
-    activated_at = datetime.now(timezone.utc).isoformat()
+    activated_at_dt = datetime.now(timezone.utc)
+    expires_at_dt = activated_at_dt + timedelta(days=7)
+    activated_at = activated_at_dt.isoformat()
+    expires_at = expires_at_dt.isoformat()
 
     try:
         response = (
@@ -226,6 +229,7 @@ def verify_payment(request: PaymentVerifyRequest, current_user: dict = Depends(r
                     "payment_status": "success",
                     "payment_id": payment_id,
                     "activated_at": activated_at,
+                    "expires_at": expires_at,
                     "updated_at": activated_at,
                 }
             )
@@ -234,7 +238,7 @@ def verify_payment(request: PaymentVerifyRequest, current_user: dict = Depends(r
         )
     except Exception as exc:
         message = str(exc)
-        if "activated_at" not in message.lower():
+        if "activated_at" not in message.lower() and "expires_at" not in message.lower():
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Failed to verify premium payment: {message}") from exc
 
         try:
@@ -272,5 +276,6 @@ def verify_payment(request: PaymentVerifyRequest, current_user: dict = Depends(r
         payment_status="success",
         payment_id=payment_id,
         activated_at=activated_at,
+        expires_at=expires_at,
         order_id=request.order_id,
     )

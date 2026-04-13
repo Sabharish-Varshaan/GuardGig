@@ -24,23 +24,6 @@ export async function checkTrigger({ lat, lon }) {
   });
 }
 
-export async function createClaim(token, payload) {
-  const body = {
-    lat: payload.lat,
-    lon: payload.lon
-  };
-
-  if (payload.activityStatus) {
-    body.activity_status = payload.activityStatus;
-  }
-
-  return apiRequest("/api/claim/create", {
-    method: "POST",
-    token,
-    body
-  });
-}
-
 export async function getMyClaims(token) {
   return apiRequest("/api/claims/me", {
     method: "GET",

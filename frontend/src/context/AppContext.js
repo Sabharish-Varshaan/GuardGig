@@ -12,7 +12,6 @@ import {
 } from "../services/authApi";
 import {
   checkTrigger,
-  createClaim,
   createPolicy,
   createPaymentOrder,
   getMyClaims,
@@ -176,8 +175,6 @@ const normalizeClaim = (claim) => {
       : ""
   };
 };
-
-const sleep = (delayMs) => new Promise((resolve) => setTimeout(resolve, delayMs));
 
 const resolveRiskLevel = (severity) => {
   if (severity === "full") {
@@ -748,127 +745,6 @@ export function AppProvider({ children }) {
     setIsAuthenticated(false);
   };
 
-  const startCoverageCheck = useCallback(async () => {
-    if (coverageLoading) {
-      return { success: false, approved: false };
-    }
-
-    if (!authToken) {
-      const message = "Session expired. Please login again.";
-      setWorkflowState(WORKFLOW_STATES.flagged);
-      setWorkflowMessage(message);
-      setDataError(message);
-      return { success: false, approved: false, error: message };
-    }
-
-    const coverageEligible = !!policy && policy.status === "active" && policy.eligibilityStatus === "eligible" && policy.paymentStatus === "success";
-    if (!coverageEligible) {
-      setWorkflowState(WORKFLOW_STATES.flagged);
-      setWorkflowMessage(policy?.paymentStatus === "success" ? INELIGIBLE_MESSAGE : "Premium payment required");
-      return { success: true, approved: false, reason: "ineligible" };
-    }
-
-    setCoverageLoading(true);
-    setDataError("");
-
-    try {
-      setWorkflowState(WORKFLOW_STATES.checking_conditions);
-      setWorkflowMessage("System evaluating...");
-
-      const snapshot = await refreshRisk();
-
-      if (!snapshot) {
-        setWorkflowState(WORKFLOW_STATES.flagged);
-        setWorkflowMessage("Unable to verify location");
-        return { success: false, approved: false, reason: "location_missing" };
-      }
-
-      if (!snapshot.detected) {
-        setWorkflowState(WORKFLOW_STATES.idle);
-        setWorkflowMessage("No disruption detected");
-        return { success: true, approved: false, reason: "no_trigger" };
-      }
-
-      setWorkflowState(WORKFLOW_STATES.validating);
-      setWorkflowMessage("Claim triggered automatically");
-      await sleep(250);
-
-      const claimResponse = await createClaim(authToken, {
-        lat: snapshot.lat,
-        lon: snapshot.lon
-      });
-
-      if ((claimResponse?.status || "").toLowerCase() === "rejected") {
-        const rejectionReason = (claimResponse?.reason || "").toLowerCase();
-
-        if (rejectionReason.includes("daily claim limit reached") || rejectionReason.includes("already")) {
-          setWorkflowState(WORKFLOW_STATES.flagged);
-          setWorkflowMessage("Claim is already done");
-          return { success: true, approved: false, reason: "already_done" };
-        }
-
-        setWorkflowState(WORKFLOW_STATES.flagged);
-        setWorkflowMessage(claimResponse?.reason || "Conditions not met");
-        return { success: true, approved: false, reason: "not_met" };
-      }
-
-      setWorkflowState(WORKFLOW_STATES.fraud_check);
-      setWorkflowMessage("Processing...");
-      await sleep(250);
-
-      const createdClaim = normalizeClaim(claimResponse?.claim);
-      setClaimsHistory((prev) => [createdClaim, ...prev.filter((item) => item.id !== createdClaim.id)]);
-
-      if ((claimResponse?.claim?.status || "").toLowerCase() === "approved") {
-        setWorkflowState(WORKFLOW_STATES.approved);
-        setWorkflowMessage("Approved");
-        setPayoutAmount(createdClaim.amount || 0);
-        await Promise.allSettled([refreshClaims(authToken), refreshPolicy(authToken)]);
-        return { success: true, approved: true, claim: createdClaim };
-      }
-
-      setWorkflowState(WORKFLOW_STATES.flagged);
-      setWorkflowMessage("Conditions not met");
-      return { success: true, approved: false, reason: "not_met", claim: createdClaim };
-    } catch (error) {
-      const message = toErrorMessage(error, "Claim processing failed");
-      const normalized = message.toLowerCase();
-
-      if (normalized.includes("no claim trigger")) {
-        setWorkflowState(WORKFLOW_STATES.idle);
-        setWorkflowMessage("No disruption detected");
-        return { success: true, approved: false, reason: "no_trigger" };
-      }
-
-      if (
-        normalized.includes("waiting") ||
-        normalized.includes("daily claim limit reached") ||
-        normalized.includes("max one claim") ||
-        normalized.includes("already") ||
-        normalized.includes("verification") ||
-        normalized.includes("excluded")
-      ) {
-        setWorkflowState(WORKFLOW_STATES.flagged);
-        if (normalized.includes("daily claim limit reached") || normalized.includes("already")) {
-          setWorkflowMessage("Claim is already done");
-          return { success: true, approved: false, reason: "already_done" };
-        }
-
-        setWorkflowMessage("Conditions not met");
-        return { success: true, approved: false, reason: "not_met" };
-      }
-
-      setWorkflowState(WORKFLOW_STATES.flagged);
-      setWorkflowMessage("Retrying...");
-      await sleep(250);
-      setWorkflowMessage(message);
-      setDataError(message);
-      return { success: false, approved: false, error: message };
-    } finally {
-      setCoverageLoading(false);
-    }
-  }, [authToken, coverageLoading, policy, refreshClaims, refreshPolicy, refreshRisk]);
-
   const payPremium = useCallback(async () => {
     if (!authToken) {
       const message = "Session expired. Please login again.";
@@ -1039,7 +915,6 @@ export function AppProvider({ children }) {
       completeOnboarding,
       updateProfile,
       logout,
-      startCoverageCheck,
       requestLocation,
       refreshRisk,
       refreshPolicy,
@@ -1080,7 +955,6 @@ export function AppProvider({ children }) {
       INELIGIBLE_MESSAGE,
       notificationsEnabled,
       themeEnabled,
-      startCoverageCheck,
       requestLocation,
       refreshRisk,
       refreshPolicy,
