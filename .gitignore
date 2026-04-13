@@ -3,6 +3,7 @@
 # dependencies
 node_modules/
 frontend/node_modules/
+backend/node_modules/
 
 # python
 __pycache__/
@@ -10,6 +11,8 @@ __pycache__/
 *.pyo
 *.pyd
 *.so
+.coverage
+.coverage.*
 .venv/
 venv/
 backend/.venv/
@@ -17,13 +20,26 @@ backend/venv/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+htmlcov/
+backend/htmlcov/
+backend/.pytest_cache/
+backend/.mypy_cache/
+backend/.ruff_cache/
+backend/.coverage
+backend/.coverage.*
 
 # Expo
 .expo/
 frontend/.expo/
+frontend/.expo-shared/
 dist/
 web-build/
 expo-env.d.ts
+
+# frontend build caches
+frontend/.cache/
+frontend/coverage/
+frontend/test-results/
 
 # Native
 .kotlin/
@@ -41,6 +57,7 @@ expo-env.d.ts
 npm-debug.*
 yarn-debug.*
 yarn-error.*
+.eslintcache
 
 # macOS
 .DS_Store
@@ -61,7 +78,21 @@ backend/.env
 *.seed
 *.out
 *.err
+*.trace
+
+# test and report artifacts
+coverage/
+test-results/
+test_results/
+reports/
+report.html
+backend/test_results/
+backend/report.html
 
 # generated native folders
 /ios
 /android
+
+# misc local files
+.DS_Store?
+Thumbs.db
