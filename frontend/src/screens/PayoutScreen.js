@@ -47,7 +47,7 @@ function formatRelativeTime(timestamp) {
 
 function PayoutScreen() {
   const tabBarHeight = useBottomTabBarHeight();
-  const { workflowState, payoutAmount, claimsHistory, policy, eligibilityMessage } = useAppContext();
+  const { workflowState, payoutAmount, claimsHistory, policy, eligibilityMessage, payoutDetails } = useAppContext();
   const contentStyle = useMemo(
     () => ({
       justifyContent: "center",
@@ -118,6 +118,9 @@ function PayoutScreen() {
           <Text style={styles.highlightValue}>{formatRupee(latestAmount)}</Text>
           <Text style={styles.highlightSub}>{payoutReason}</Text>
           <Text style={styles.highlightSubMuted}>{payoutTime}</Text>
+          {!payoutDetails?.hasPayoutMethod && (
+            <Text style={styles.warningText}>Please add payout details to receive compensation</Text>
+          )}
           <Text style={styles.stateMeta}>{payoutMeta.description}</Text>
         </NeonCard>
 
@@ -192,6 +195,13 @@ const styles = StyleSheet.create({
     fontSize: 14,
     textAlign: "center",
     marginTop: appTheme.spacing.xs
+  },
+  warningText: {
+    color: appTheme.colors.warning,
+    fontFamily: "Rajdhani_700Bold",
+    fontSize: 14,
+    marginTop: appTheme.spacing.sm,
+    textAlign: "center"
   },
   stateMeta: {
     color: appTheme.colors.textSecondary,

@@ -1,6 +1,8 @@
 from typing import Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator, model_validator
+
+from .payout_utils import is_valid_ifsc, is_valid_upi
 
 PHONE_PATTERN = r"^[0-9]{10}$"
 
@@ -103,6 +105,71 @@ class DemoModeToggleResponse(BaseModel):
     message: str
 
 
+class PayoutDetailsCreateRequest(BaseModel):
+    account_holder_name: str = Field(min_length=2, max_length=120)
+    bank_account_number: str | None = Field(default=None, min_length=6, max_length=30)
+    ifsc_code: str | None = Field(default=None, min_length=11, max_length=11)
+    upi_id: str | None = Field(default=None, min_length=3, max_length=100)
+
+    @field_validator("account_holder_name")
+    @classmethod
+    def normalize_holder_name(cls, value: str) -> str:
+        return value.strip()
+
+    @field_validator("bank_account_number")
+    @classmethod
+    def normalize_bank_account(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = value.strip().replace(" ", "")
+        return normalized or None
+
+    @field_validator("ifsc_code")
+    @classmethod
+    def normalize_ifsc(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = value.strip().upper()
+        return normalized or None
+
+    @field_validator("upi_id")
+    @classmethod
+    def normalize_upi(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = value.strip().lower()
+        return normalized or None
+
+    @model_validator(mode="after")
+    def validate_payout_inputs(self):
+        has_bank = bool(self.bank_account_number)
+        has_ifsc = bool(self.ifsc_code)
+        has_upi = bool(self.upi_id)
+
+        if not has_upi and not (has_bank and has_ifsc):
+            raise ValueError("Provide either bank account + IFSC or UPI ID")
+
+        if has_bank != has_ifsc:
+            raise ValueError("Bank account number and IFSC must be provided together")
+
+        if has_ifsc and not is_valid_ifsc(self.ifsc_code):
+            raise ValueError("Invalid IFSC code format")
+
+        if has_upi and not is_valid_upi(self.upi_id):
+            raise ValueError("Invalid UPI ID format")
+
+        return self
+
+
+class PayoutDetailsResponse(BaseModel):
+    account_holder_name: str
+    bank_account_number_masked: str | None = None
+    ifsc_code: str | None = None
+    upi_id: str | None = None
+    created_at: str | None = None
+    message: str
+
+
 class PremiumCalculateRequest(BaseModel):
     income: float = Field(gt=0)
     income_variance: Optional[float] = 0
@@ -158,6 +225,7 @@ class ClaimResponse(BaseModel):
     transaction_id: Optional[str] = None
     paid_at: Optional[str] = None
     payout_method: Optional[str] = None
+    masked_account: Optional[str] = None
     trigger_snapshot: Optional[dict] = None
     rule_decision_reason: Optional[str] = None
     created_at: str

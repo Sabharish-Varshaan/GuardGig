@@ -57,10 +57,25 @@ function getSeverityLabel(severity) {
   return "Moderate";
 }
 
+function getDestinationLabel(item) {
+  const method = String(item.payoutMethod || "").toLowerCase();
+  const destination = item.maskedAccount || "--";
+
+  if (method === "upi") {
+    return `UPI: ${destination}`;
+  }
+
+  if (method === "bank") {
+    return `Bank: ${destination}`;
+  }
+
+  return "Destination pending";
+}
+
 function ClaimsScreen() {
   const insets = useSafeAreaInsets();
   const tabBarHeight = useBottomTabBarHeight();
-  const { claimsHistory, claimsLoading, dataError, refreshClaims, policy, demoMode } = useAppContext();
+  const { claimsHistory, claimsLoading, dataError, refreshClaims, policy, demoMode, payoutDetails } = useAppContext();
 
   useFocusEffect(
     React.useCallback(() => {
@@ -93,6 +108,9 @@ function ClaimsScreen() {
           <Text style={styles.summaryTitle}>Automation Summary</Text>
           <Text style={styles.summaryText}>Payouts are created by backend trigger checks. There is no manual payout action in this app.</Text>
           <Text style={styles.summaryText}>{isPolicyActive ? "Your policy is active and monitoring is enabled." : "Activate your policy to begin automated coverage."}</Text>
+          {!payoutDetails?.hasPayoutMethod && (
+            <Text style={styles.warningText}>Please add payout details to receive compensation</Text>
+          )}
         </Card>
 
         <Card style={styles.summaryCard}>
@@ -123,6 +141,7 @@ function ClaimsScreen() {
                   />
                 </View>
                 <Text style={styles.payoutAmount}>{`${item.payoutPercentage ? `${item.payoutPercentage}%` : "--"} • ${formatRupee(item.amount)} credited`}</Text>
+                <Text style={styles.destinationText}>{`${formatRupee(item.amount)} credited to ${getDestinationLabel(item)}`}</Text>
                 <View style={styles.metaGrid}>
                   <Text style={styles.metaText}>Date: {formatDateTime(item.paidAt || item.createdAt)}</Text>
                   <Text style={styles.metaText}>Trigger: {getTriggerLabel(item)}</Text>
@@ -167,6 +186,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 20,
     marginTop: appTheme.spacing.xs
+  },
+  warningText: {
+    color: appTheme.colors.warning,
+    fontFamily: "Rajdhani_700Bold",
+    fontSize: 14,
+    marginTop: appTheme.spacing.sm
   },
   sectionHeader: {
     alignItems: "center",
@@ -226,6 +251,12 @@ const styles = StyleSheet.create({
     fontFamily: "Orbitron_700Bold",
     fontSize: 14,
     marginTop: appTheme.spacing.xs
+  },
+  destinationText: {
+    color: appTheme.colors.textSecondary,
+    fontFamily: "Rajdhani_700Bold",
+    fontSize: 14,
+    marginTop: 4
   },
   metaGrid: {
     marginTop: appTheme.spacing.sm

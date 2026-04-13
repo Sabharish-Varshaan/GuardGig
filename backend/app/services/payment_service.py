@@ -2,45 +2,17 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timezone
-
-import razorpay
-
-from ..config import get_settings
+from uuid import uuid4
 
 logger = logging.getLogger(__name__)
 
 
-def _build_client() -> razorpay.Client:
-    settings = get_settings()
-
-    if not settings.razorpay_key_id or not settings.razorpay_key_secret:
-        raise RuntimeError("Razorpay credentials are not configured")
-
-    return razorpay.Client(auth=(settings.razorpay_key_id, settings.razorpay_key_secret))
-
-
 def simulate_razorpay_payout(amount: float, user_id: str) -> dict[str, str]:
-    logger.info(f"  [PAYOUT] Creating Razorpay order: amount=₹{amount}, user_id={user_id}")
-    client = _build_client()
-    amount_paise = max(1, int(round(float(amount) * 100)))
-
-    order = client.order.create(
-        {
-            "amount": amount_paise,
-            "currency": "INR",
-            "payment_capture": 1,
-            "notes": {
-                "user_id": user_id,
-                "mode": "test",
-                "source": "guardgig_claim_payout",
-            },
-        }
-    )
-
-    transaction_id = str(order.get("id") or "")
+    logger.info(f"  [PAYOUT] Simulating payout: amount=₹{amount}, user_id={user_id}")
+    transaction_id = f"SIM_TXN_{uuid4().hex[:8].upper()}"
     paid_at = datetime.now(timezone.utc).isoformat()
-    
-    logger.info(f"  [PAYOUT] ✓ Order created: transaction_id={transaction_id}, amount_paise={amount_paise}")
+
+    logger.info(f"  [PAYOUT] ✓ Simulated transaction created: transaction_id={transaction_id}")
     return {
         "status": "paid",
         "transaction_id": transaction_id,
@@ -56,6 +28,7 @@ def persist_claim_payment(
     transaction_id: str | None,
     paid_at: str | None,
     payout_method: str,
+    masked_account: str | None,
     trigger_snapshot: dict,
 ) -> dict:
     logger.debug(f"  [PERSIST] Saving payout to claim {claim_id}: status={payment_status}, transaction_id={transaction_id}")
@@ -67,6 +40,7 @@ def persist_claim_payment(
                 "transaction_id": transaction_id,
                 "paid_at": paid_at,
                 "payout_method": payout_method,
+                "masked_account": masked_account,
                 "trigger_snapshot": trigger_snapshot,
             }
         )

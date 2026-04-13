@@ -31,6 +31,7 @@ from .routes.user import router as user_router
 from .routes.claim import router as claim_router
 from .routes.fraud import router as fraud_router
 from .routes.ml_demo import router as ml_demo_router
+from .services.payout_details_service import fetch_user_payout_details, resolve_claim_payout_destination
 from .services.payment_service import persist_claim_payment, simulate_razorpay_payout
 from .supabase_client import get_admin_client
 from .trigger_utils import check_trigger, fetch_aqi, fetch_rain_mm
@@ -263,18 +264,30 @@ async def automated_claim_check():
         print("Claim created successfully with ID:", claim_id)
         logger.info(f"  ✓ CLAIM CREATED: {claim_id}, amount=₹{payout}")
 
+        payout_details = fetch_user_payout_details(admin, settings.supabase_payout_details_table, user_id)
+        payout_destination = resolve_claim_payout_destination(payout_details)
+        payout_method = "pending"
+        masked_account = None
+
         # 8) Execute payout and persist payout fields
-        try:
-            payout_result = simulate_razorpay_payout(payout, user_id)
-            payment_status = payout_result["status"]
-            transaction_id = payout_result["transaction_id"]
-            paid_at = payout_result["paid_at"]
-            logger.info(f"  ✓ PAYOUT PROCESSED: {transaction_id}, status={payment_status}")
-        except Exception as exc:
-            logger.error(f"  ✗ Payout failed: {exc}")
-            payment_status = "failed"
+        if not payout_destination:
+            payment_status = "pending_payout_details"
             transaction_id = None
             paid_at = None
+            logger.info("  → Skipping payout: recipient payout details not configured")
+        else:
+            payout_method, masked_account = payout_destination
+            try:
+                payout_result = simulate_razorpay_payout(payout, user_id)
+                payment_status = payout_result["status"]
+                transaction_id = payout_result["transaction_id"]
+                paid_at = payout_result["paid_at"]
+                logger.info(f"  ✓ PAYOUT PROCESSED: {transaction_id}, status={payment_status}, method={payout_method}")
+            except Exception as exc:
+                logger.error(f"  ✗ Payout failed: {exc}")
+                payment_status = "failed"
+                transaction_id = None
+                paid_at = None
 
         persist_claim_payment(
             admin,
@@ -283,7 +296,8 @@ async def automated_claim_check():
             payment_status,
             transaction_id,
             paid_at,
-            "Razorpay",
+            payout_method,
+            masked_account,
             trigger_snapshot,
         )
         

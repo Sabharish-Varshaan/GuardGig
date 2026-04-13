@@ -55,6 +55,26 @@ export async function createDemoClaim(token) {
   });
 }
 
+export async function getUserPayoutDetails(token) {
+  return apiRequest("/api/user/payout-details", {
+    method: "GET",
+    token
+  });
+}
+
+export async function setUserPayoutDetails(token, payload) {
+  return apiRequest("/api/user/payout-details", {
+    method: "POST",
+    token,
+    body: {
+      account_holder_name: payload.accountHolderName,
+      bank_account_number: payload.bankAccountNumber || null,
+      ifsc_code: payload.ifscCode || null,
+      upi_id: payload.upiId || null
+    }
+  });
+}
+
 export async function createPaymentOrder(token) {
   return apiRequest("/api/payment/create-order", {
     method: "POST",

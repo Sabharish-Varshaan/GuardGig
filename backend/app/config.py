@@ -24,6 +24,7 @@ class Settings(BaseModel):
     supabase_users_table: str = Field(default="app_users")
     supabase_policies_table: str = Field(default="policies")
     supabase_claims_table: str = Field(default="claims")
+    supabase_payout_details_table: str = Field(default="user_payout_details")
     jwt_secret: str = Field(default="change-me")
     jwt_algorithm: str = Field(default="HS256")
     access_token_exp_minutes: int = Field(default=60)
@@ -53,6 +54,7 @@ def get_settings() -> Settings:
         supabase_users_table=os.getenv("SUPABASE_USERS_TABLE", "app_users"),
         supabase_policies_table=os.getenv("SUPABASE_POLICIES_TABLE", "policies"),
         supabase_claims_table=os.getenv("SUPABASE_CLAIMS_TABLE", "claims"),
+        supabase_payout_details_table=os.getenv("SUPABASE_PAYOUT_DETAILS_TABLE", "user_payout_details"),
         jwt_secret=os.getenv("JWT_SECRET", "change-me"),
         jwt_algorithm=os.getenv("JWT_ALGORITHM", "HS256"),
         access_token_exp_minutes=int(os.getenv("ACCESS_TOKEN_EXP_MINUTES", "60")),

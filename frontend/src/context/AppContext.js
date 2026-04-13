@@ -17,7 +17,9 @@ import {
   createPaymentOrder,
   getDemoModeSetting,
   getMyClaims,
+  getUserPayoutDetails,
   getMyPolicy,
+  setUserPayoutDetails,
   setDemoModeSetting,
   verifyPayment
 } from "../services/insuranceApi";
@@ -174,6 +176,7 @@ const normalizeClaim = (claim) => {
     transactionId: claim?.transaction_id || "",
     paidAt: claim?.paid_at || "",
     payoutMethod: claim?.payout_method || "",
+    maskedAccount: claim?.masked_account || "",
     reason,
     triggerSnapshot: snapshot,
     createdAt,
@@ -232,6 +235,21 @@ const toBooleanFlag = (value) => {
   return Boolean(value);
 };
 
+const normalizePayoutDetails = (details) => {
+  if (!details || typeof details !== "object") {
+    return null;
+  }
+
+  return {
+    accountHolderName: details.account_holder_name || "",
+    bankAccountMasked: details.bank_account_number_masked || "",
+    ifscCode: details.ifsc_code || "",
+    upiId: details.upi_id || "",
+    createdAt: details.created_at || "",
+    hasPayoutMethod: Boolean(details.upi_id || details.bank_account_number_masked)
+  };
+};
+
 const getSecureItem = async (key) => {
   if (typeof SecureStore?.getItemAsync !== "function") {
     return null;
@@ -284,6 +302,8 @@ export function AppProvider({ children }) {
   const [claimsLoading, setClaimsLoading] = useState(false);
   const [demoMode, setDemoMode] = useState(false);
   const [demoClaimsHistory, setDemoClaimsHistory] = useState([]);
+  const [payoutDetails, setPayoutDetails] = useState(null);
+  const [payoutDetailsLoading, setPayoutDetailsLoading] = useState(false);
   const [paymentLoading, setPaymentLoading] = useState(false);
   const [paymentError, setPaymentError] = useState("");
   const [paymentMessage, setPaymentMessage] = useState("");
@@ -448,6 +468,50 @@ export function AppProvider({ children }) {
       } finally {
         setClaimsLoading(false);
       }
+    },
+    [authToken]
+  );
+
+  const refreshPayoutDetails = useCallback(
+    async (tokenOverride) => {
+      const token = tokenOverride || authToken;
+
+      if (!token) {
+        return null;
+      }
+
+      setPayoutDetailsLoading(true);
+      try {
+        const response = await getUserPayoutDetails(token);
+        const normalized = normalizePayoutDetails(response);
+        setPayoutDetails(normalized);
+        return normalized;
+      } catch (error) {
+        const message = toErrorMessage(error, "Unable to fetch payout details").toLowerCase();
+
+        if (message.includes("please add payout details")) {
+          setPayoutDetails(null);
+          return null;
+        }
+
+        throw error;
+      } finally {
+        setPayoutDetailsLoading(false);
+      }
+    },
+    [authToken]
+  );
+
+  const savePayoutDetails = useCallback(
+    async (payload) => {
+      if (!authToken) {
+        throw new Error("Session expired. Please login again.");
+      }
+
+      const response = await setUserPayoutDetails(authToken, payload);
+      const normalized = normalizePayoutDetails(response);
+      setPayoutDetails(normalized);
+      return normalized;
     },
     [authToken]
   );
@@ -656,7 +720,8 @@ export function AppProvider({ children }) {
           setIsAuthenticated(true);
           await Promise.allSettled([
             refreshPolicy(accessToken),
-            refreshClaims(accessToken)
+            refreshClaims(accessToken),
+            refreshPayoutDetails(accessToken)
           ]);
           const demoState = await getDemoModeSetting(accessToken);
           if (mounted) {
@@ -742,7 +807,8 @@ export function AppProvider({ children }) {
 
         await Promise.allSettled([
           refreshPolicy(session.access_token),
-          refreshClaims(session.access_token)
+          refreshClaims(session.access_token),
+          refreshPayoutDetails(session.access_token)
         ]);
         const demoState = await getDemoModeSetting(session.access_token);
         setDemoMode(Boolean(demoState?.demo_mode_enabled));
@@ -816,6 +882,7 @@ export function AppProvider({ children }) {
     setRiskMessage("Awaiting live check");
     setClaimsHistory([]);
     setDemoClaimsHistory([]);
+    setPayoutDetails(null);
     setPayoutAmount(0);
     setWorkflowState(WORKFLOW_STATES.idle);
     setWorkflowMessage("No active claim check");
@@ -993,6 +1060,8 @@ export function AppProvider({ children }) {
       movementScore,
       claimsHistory: visibleClaimsHistory,
       claimsLoading,
+      payoutDetails,
+      payoutDetailsLoading,
       demoMode,
       setDemoModeEnabled,
       paymentLoading,
@@ -1012,6 +1081,8 @@ export function AppProvider({ children }) {
       refreshRisk,
       refreshPolicy,
       refreshClaims,
+      refreshPayoutDetails,
+      savePayoutDetails,
       payPremium,
       activatePolicyPayment: payPremium,
       setNotificationsEnabled,
@@ -1041,6 +1112,8 @@ export function AppProvider({ children }) {
       movementScore,
       visibleClaimsHistory,
       claimsLoading,
+      payoutDetails,
+      payoutDetailsLoading,
       demoMode,
       setDemoModeEnabled,
       paymentLoading,
@@ -1055,6 +1128,8 @@ export function AppProvider({ children }) {
       refreshRisk,
       refreshPolicy,
       refreshClaims,
+      refreshPayoutDetails,
+      savePayoutDetails,
       payPremium
     ]
   );

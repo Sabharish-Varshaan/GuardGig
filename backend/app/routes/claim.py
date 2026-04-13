@@ -13,6 +13,7 @@ from ..config import get_settings
 from ..dependencies import require_current_user
 from ..metrics_utils import update_metrics_on_payout
 from ..schemas import ClaimCreateResponse, ClaimsListResponse, ClaimResponse
+from ..services.payout_details_service import fetch_user_payout_details, resolve_claim_payout_destination
 from ..services.payment_service import persist_claim_payment, simulate_razorpay_payout
 from ..supabase_client import get_admin_client
 from ..trigger_utils import check_trigger
@@ -183,15 +184,26 @@ def create_demo_claim(current_user: dict = Depends(require_current_user)):
 
     claim = claim_rows[0]
 
-    try:
-        payout_result = simulate_razorpay_payout(payout, current_user["id"])
-        payment_status = payout_result["status"]
-        transaction_id = payout_result["transaction_id"]
-        paid_at = payout_result["paid_at"]
-    except Exception:
-        payment_status = "failed"
+    payout_details = fetch_user_payout_details(admin, settings.supabase_payout_details_table, current_user["id"])
+    payout_destination = resolve_claim_payout_destination(payout_details)
+    payout_method = "pending"
+    masked_account = None
+
+    if not payout_destination:
+        payment_status = "pending_payout_details"
         transaction_id = None
         paid_at = None
+    else:
+        payout_method, masked_account = payout_destination
+        try:
+            payout_result = simulate_razorpay_payout(payout, current_user["id"])
+            payment_status = payout_result["status"]
+            transaction_id = payout_result["transaction_id"]
+            paid_at = payout_result["paid_at"]
+        except Exception:
+            payment_status = "failed"
+            transaction_id = None
+            paid_at = None
 
     persist_claim_payment(
         admin,
@@ -200,7 +212,8 @@ def create_demo_claim(current_user: dict = Depends(require_current_user)):
         payment_status,
         transaction_id,
         paid_at,
-        "Razorpay",
+        payout_method,
+        masked_account,
         trigger_snapshot,
     )
 
