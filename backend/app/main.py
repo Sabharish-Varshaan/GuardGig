@@ -278,10 +278,12 @@ async def automated_claim_check():
         )
         
         # Track successful payout in system metrics (non-blocking)
-        if payment_status == "paid" and payout > 0:
+        # Run only for approved claims with a paid payout.
+        if claim.get("status") == "approved" and payment_status == "paid" and payout > 0:
             try:
-                update_metrics_on_payout(admin, payout)
-                print("Payout added:", payout)
+                updated_metrics = update_metrics_on_payout(admin, payout)
+                print("Payout added to metrics:", payout)
+                print("Updated total payout:", float(updated_metrics.get("total_payout", 0) or 0))
             except Exception as exc:
                 logger.error(f"[METRICS] Failed to update payout metrics: {exc}")
         
