@@ -147,6 +147,9 @@ async def automated_claim_check():
         # Standardized payout formula: (payout_percentage / 100) * min(mean_income, coverage_amount)
         payout_base = min(mean_income, coverage_amount)
         payout = round((payout_percentage_raw / 100.0) * payout_base, 2)
+        
+        # Safety checks: ensure payout is within valid range [0, coverage_amount]
+        payout = max(0.0, min(payout, coverage_amount))
         payout_percentage = payout_percentage_raw / 100.0
         
         rule_decision_reason = f"approved_after_{trigger_type}_{severity}_checks"
