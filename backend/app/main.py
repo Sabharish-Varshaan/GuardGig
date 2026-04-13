@@ -147,6 +147,12 @@ async def automated_claim_check():
         payout_percentage_raw = trigger_data["payout_percentage"]
         logger.info(f"  → TRIGGER DETECTED: type={trigger_type}, severity={severity}, payout%={payout_percentage_raw}")
 
+        # Debug trace for policy/trigger state right before claim eligibility checks.
+        print("Policy status:", policy.get("status"))
+        print("Payment status:", policy.get("payment_status"))
+        print("Expires at:", policy.get("expires_at"))
+        print("Trigger result:", trigger_data)
+
         # 4) Daily claim limit
         try:
             enforce_max_one_claim_per_day(admin, settings.supabase_claims_table, user_id)
@@ -235,22 +241,25 @@ async def automated_claim_check():
             "updated_at": datetime.now(IST).isoformat(),
         }
 
+        print("Creating claim for user:", user_id)
         try:
             claim_response = admin.table(settings.supabase_claims_table).insert(claim_data).execute()
         except Exception as exc:
             if "daily claim limit reached" in str(exc).lower():
                 logger.info(f"  → Skipping: daily claim limit DB constraint")
                 continue
+            print("ERROR creating claim:", str(exc))
             logger.error(f"  → Error creating claim: {exc}")
             raise
 
         claim_rows = claim_response.data or []
         if not claim_rows:
             logger.error(f"  → Claim creation failed (no rows returned)")
-            continue
+            raise RuntimeError("Claim insert returned no rows")
 
         claim = claim_rows[0]
         claim_id = claim.get("id")
+        print("Claim created successfully with ID:", claim_id)
         logger.info(f"  ✓ CLAIM CREATED: {claim_id}, amount=₹{payout}")
 
         # 8) Execute payout and persist payout fields
