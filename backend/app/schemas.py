@@ -93,6 +93,16 @@ class PolicyCreateResponse(BaseModel):
     message: str
 
 
+class DemoModeToggleRequest(BaseModel):
+    enabled: bool
+
+
+class DemoModeToggleResponse(BaseModel):
+    demo_mode_enabled: bool
+    updated_at: str | None = None
+    message: str
+
+
 class PremiumCalculateRequest(BaseModel):
     income: float = Field(gt=0)
     income_variance: Optional[float] = 0

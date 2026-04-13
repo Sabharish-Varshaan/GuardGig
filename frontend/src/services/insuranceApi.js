@@ -31,6 +31,30 @@ export async function getMyClaims(token) {
   });
 }
 
+export async function getDemoModeSetting(token) {
+  return apiRequest("/api/user/settings/demo-mode", {
+    method: "GET",
+    token
+  });
+}
+
+export async function setDemoModeSetting(token, enabled) {
+  return apiRequest("/api/user/settings/demo-mode", {
+    method: "POST",
+    token,
+    body: {
+      enabled: Boolean(enabled)
+    }
+  });
+}
+
+export async function createDemoClaim(token) {
+  return apiRequest("/api/claims/demo", {
+    method: "POST",
+    token
+  });
+}
+
 export async function createPaymentOrder(token) {
   return apiRequest("/api/payment/create-order", {
     method: "POST",

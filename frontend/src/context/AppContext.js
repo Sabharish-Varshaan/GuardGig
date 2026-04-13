@@ -12,10 +12,13 @@ import {
 } from "../services/authApi";
 import {
   checkTrigger,
+  createDemoClaim,
   createPolicy,
   createPaymentOrder,
+  getDemoModeSetting,
   getMyClaims,
   getMyPolicy,
+  setDemoModeSetting,
   verifyPayment
 } from "../services/insuranceApi";
 
@@ -183,34 +186,6 @@ const normalizeClaim = (claim) => {
         })
       : ""
   };
-};
-
-const createDemoClaim = ({ triggerType, severity, payoutPercentage, payoutAmount }) => {
-  const now = new Date().toISOString();
-
-  return normalizeClaim({
-    id: `demo-${Date.now()}`,
-    trigger_type: triggerType,
-    severity,
-    payout_amount: payoutAmount,
-    payout_percentage: payoutPercentage,
-    trigger_value: triggerType === "aqi" ? 420 : 88,
-    status: "approved",
-    payment_status: "paid",
-    transaction_id: `demo-${triggerType}-${Date.now()}`,
-    paid_at: now,
-    payout_method: "demo",
-    created_at: now,
-    trigger_snapshot: {
-      trigger_type: triggerType,
-      severity,
-      payout_percentage: payoutPercentage,
-      payout_amount: payoutAmount,
-      trigger_value: triggerType === "aqi" ? 420 : 88,
-      rule_decision_reason: `demo_mode_${triggerType}_${severity}`
-    },
-    rule_decision_reason: `demo_mode_${triggerType}_${severity}`
-  });
 };
 
 const resolveRiskLevel = (severity) => {
@@ -478,9 +453,25 @@ export function AppProvider({ children }) {
   );
 
   const setDemoModeEnabled = useCallback(
-    (enabled) => {
+    async (enabled) => {
+      if (!authToken) {
+        const message = "Session expired. Please login again.";
+        setPaymentError(message);
+        setDataError(message);
+        return { success: false, error: message };
+      }
+
       const nextEnabled = Boolean(enabled);
-      setDemoMode(nextEnabled);
+
+      try {
+        const toggleResponse = await setDemoModeSetting(authToken, nextEnabled);
+        setDemoMode(Boolean(toggleResponse?.demo_mode_enabled));
+      } catch (error) {
+        const message = toErrorMessage(error, "Unable to update demo mode");
+        setPaymentError(message);
+        setDataError(message);
+        return { success: false, error: message };
+      }
 
       if (!nextEnabled) {
         setDemoClaimsHistory([]);
@@ -488,34 +479,31 @@ export function AppProvider({ children }) {
         setWorkflowMessage("No active automated payout");
         setPaymentMessage("");
         setPaymentError("");
-        return;
+        return { success: true, enabled: false };
       }
 
-      const triggerType = risk.triggerType === "aqi" ? "aqi" : "rain";
-      const severity = (risk.severity || (triggerType === "aqi" ? "high" : "high")).toLowerCase();
-      const coverageBase = Number(policy?.meanIncome || user.meanIncome || 0);
-      const coverageLimit = Number(policy?.coverageAmount || 0);
-      const payoutPercentage = triggerType === "aqi" ? 100 : severity === "high" ? 60 : 30;
-      const payoutBase = coverageBase > 0 ? Math.min(coverageBase, coverageLimit > 0 ? coverageLimit : coverageBase) : 300;
-      const payoutAmountValue = Math.max(300, Math.round((payoutPercentage / 100) * payoutBase));
-      const demoClaim = createDemoClaim({
-        triggerType,
-        severity,
-        payoutPercentage,
-        payoutAmount: payoutAmountValue
-      });
-
-      setDemoClaimsHistory([demoClaim]);
-      setWorkflowState(WORKFLOW_STATES.approved);
-      setWorkflowMessage("Demo payout simulated");
-      setPayoutAmount(demoClaim.amount);
-      setPaymentOutcome("success");
-      setPaymentMessage("Demo payout credited instantly");
-      setPaymentError("");
-      setRiskMessage(triggerType === "aqi" ? "Demo AQI disruption" : "Demo rainfall disruption");
-      setLastRiskCheckAt(new Date().toISOString());
+      try {
+        const response = await createDemoClaim(authToken);
+        await Promise.allSettled([refreshClaims(authToken), refreshPolicy(authToken)]);
+        setDemoClaimsHistory([]);
+        setWorkflowState(WORKFLOW_STATES.approved);
+        setWorkflowMessage("Demo payout processed by backend");
+        setPaymentOutcome("success");
+        setPaymentMessage(response?.message || "Demo claim created and payout processed");
+        setPaymentError("");
+        setDataError("");
+        setLastRiskCheckAt(new Date().toISOString());
+        return { success: true, enabled: true };
+      } catch (error) {
+        const message = toErrorMessage(error, "Unable to create demo claim");
+        setPaymentOutcome("failure");
+        setPaymentMessage("Demo payout failed");
+        setPaymentError(message);
+        setDataError(message);
+        return { success: false, error: message };
+      }
     },
-    [policy?.coverageAmount, policy?.meanIncome, risk.severity, risk.triggerType, user.meanIncome]
+    [authToken, refreshClaims, refreshPolicy]
   );
 
   const requestLocation = useCallback(async () => {
@@ -670,6 +658,10 @@ export function AppProvider({ children }) {
             refreshPolicy(accessToken),
             refreshClaims(accessToken)
           ]);
+          const demoState = await getDemoModeSetting(accessToken);
+          if (mounted) {
+            setDemoMode(Boolean(demoState?.demo_mode_enabled));
+          }
         } else {
           setPendingOnboardingUser({
             phone: initialUser.phone,
@@ -752,6 +744,8 @@ export function AppProvider({ children }) {
           refreshPolicy(session.access_token),
           refreshClaims(session.access_token)
         ]);
+        const demoState = await getDemoModeSetting(session.access_token);
+        setDemoMode(Boolean(demoState?.demo_mode_enabled));
 
         setIsAuthenticated(true);
         setPendingOnboardingUser(null);

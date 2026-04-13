@@ -34,7 +34,7 @@ def get_current_user(authorization: str = Header(default="", alias="Authorizatio
 
     response = (
         admin.table(settings.supabase_users_table)
-        .select("id,phone,role,email,full_name")
+        .select("id,phone,role,email,full_name,demo_mode_enabled")
         .eq("id", user_id)
         .limit(1)
         .execute()
@@ -51,7 +51,8 @@ def get_current_user(authorization: str = Header(default="", alias="Authorizatio
         "phone": user.get("phone", ""),
         "role": user.get("role", "user"),
         "email": user.get("email"),
-        "full_name": user.get("full_name", "")
+        "full_name": user.get("full_name", ""),
+        "demo_mode_enabled": bool(user.get("demo_mode_enabled", False)),
     }
 
 

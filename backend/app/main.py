@@ -27,6 +27,7 @@ from .routes.policy import router as policy_router
 from .routes.premium import router as premium_router
 from .routes.payment import router as payment_router
 from .routes.trigger import router as trigger_router
+from .routes.user import router as user_router
 from .routes.claim import router as claim_router
 from .routes.fraud import router as fraud_router
 from .routes.ml_demo import router as ml_demo_router
@@ -346,6 +347,7 @@ app.include_router(policy_router)
 app.include_router(premium_router)
 app.include_router(payment_router)
 app.include_router(trigger_router)
+app.include_router(user_router)
 app.include_router(claim_router)
 app.include_router(fraud_router)
 app.include_router(ml_demo_router)
