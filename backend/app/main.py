@@ -34,7 +34,7 @@ from .routes.ml_demo import router as ml_demo_router
 from .services.payout_details_service import fetch_user_payout_details, resolve_claim_payout_destination
 from .services.payment_service import persist_claim_payment, simulate_razorpay_payout
 from .supabase_client import get_admin_client
-from .trigger_utils import check_trigger, fetch_aqi, fetch_rain_mm
+from .trigger_utils import check_trigger, fetch_trigger_snapshot
 
 settings = get_settings()
 IST = ZoneInfo("Asia/Kolkata")
@@ -130,15 +130,14 @@ async def automated_claim_check():
 
         # 2) Fetch trigger data
         try:
-            rain = await fetch_rain_mm(city)
-            aqi = await fetch_aqi(city)
-            logger.info(f"  → Trigger data fetched: rain={rain}mm, aqi={aqi}")
+            rain, aqi, temperature = await fetch_trigger_snapshot(city)
+            logger.info(f"  → Trigger data fetched: rain={rain}mm, aqi={aqi}, temperature={temperature}C")
         except Exception as exc:
             logger.warning(f"  → Failed to fetch trigger data: {exc}")
             continue
 
         # 3) Trigger gate
-        trigger_data = check_trigger(rain, aqi)
+        trigger_data = check_trigger(rain, aqi, temperature)
 
         if not trigger_data.get("triggered"):
             logger.info(f"  → No trigger detected (rain={rain}, aqi={aqi})")
@@ -147,6 +146,8 @@ async def automated_claim_check():
         trigger_type = trigger_data["trigger_type"]
         severity = trigger_data["severity"]
         payout_percentage_raw = trigger_data["payout_percentage"]
+        trigger_value = trigger_data["trigger_value"]
+        trigger_reason = trigger_data["trigger_reason"]
         logger.info(f"  → TRIGGER DETECTED: type={trigger_type}, severity={severity}, payout%={payout_percentage_raw}")
 
         # Debug trace for policy/trigger state right before claim eligibility checks.
@@ -190,12 +191,15 @@ async def automated_claim_check():
             "severity": severity,
             "rain": rain,
             "aqi": aqi,
-            "payout_percentage": payout_percentage,
+            "temperature": temperature,
+            "heat_percentage": trigger_data.get("heat_percentage", 0),
+            "payout_percentage": payout_percentage_raw,
             "payout_amount": payout,
             "fraud_score": None,
             "activity_status": "active",
             "location_valid": True,
             "rule_decision_reason": rule_decision_reason,
+            "trigger_reason": trigger_reason,
             "city": city,
         }
 
@@ -233,7 +237,9 @@ async def automated_claim_check():
             "user_id": user_id,
             "policy_id": policy["id"],
             "trigger_type": trigger_type,
-            "trigger_value": rain if trigger_type == "rain" else aqi,
+            "trigger_value": trigger_value,
+            "trigger_reason": trigger_reason,
+            "payout_percentage": payout_percentage_raw,
             "payout_amount": payout,
             "status": "approved",
             "fraud_score": fraud_score,

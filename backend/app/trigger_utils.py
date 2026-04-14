@@ -21,16 +21,19 @@ _RAIN_URL = "https://api.open-meteo.com/v1/forecast"
 _GEOCODE_URL = "https://geocoding-api.open-meteo.com/v1/search"
 _REVERSE_GEOCODE_URL = "https://nominatim.openstreetmap.org/reverse"
 _AQI_URL = "http://api.openweathermap.org/data/2.5/air_pollution"
+_WEATHER_URL = "https://api.openweathermap.org/data/2.5/weather"
 _AQI_IN_URL = "https://www.aqi.in/in/dashboard/{country}/{state}/{city}"
 
 _CACHE_TTL_COORDS_SECONDS = 600.0
 _CACHE_TTL_RAIN_SECONDS = 45.0
 _CACHE_TTL_AQI_SECONDS = 90.0
+_CACHE_TTL_TEMPERATURE_SECONDS = 90.0
 _CACHE_TTL_AQI_IN_URL_SECONDS = 21600.0
 
 _coords_cache: dict[str, tuple[float, tuple[float, float]]] = {}
 _rain_cache: dict[str, tuple[float, float]] = {}
 _aqi_cache: dict[str, tuple[float, float]] = {}
+_temperature_cache: dict[str, tuple[float, float]] = {}
 _aqi_in_url_cache: dict[str, tuple[float, str]] = {}
 
 
@@ -267,7 +270,36 @@ def get_aqi(location: str | None = None, lat: float | None = None, lon: float | 
     return aqi_value
 
 
-def check_trigger(rain: float, aqi: float) -> dict:
+def get_temperature(location: str | None = None, lat: float | None = None, lon: float | None = None) -> float:
+    if lat is not None and lon is not None:
+        cache_key = _lat_lon_cache_key(lat, lon)
+        cached_temperature = _cache_get(_temperature_cache, cache_key)
+        if isinstance(cached_temperature, float):
+            return cached_temperature
+
+    api_key = os.getenv("OPENWEATHER_API_KEY")
+    if not api_key:
+        return 0.0
+
+    if lat is None or lon is None:
+        return 0.0
+
+    url = f"{_WEATHER_URL}?lat={lat}&lon={lon}&appid={api_key}"
+
+    try:
+        res = requests.get(url, timeout=5)
+        res.raise_for_status()
+        data = res.json()
+        temperature_kelvin = _safe_float(data.get("main", {}).get("temp"), 0.0)
+        temperature_celsius = round(temperature_kelvin - 273.15, 1)
+    except Exception:
+        return 0.0
+
+    _cache_set(_temperature_cache, _lat_lon_cache_key(lat, lon), temperature_celsius, _CACHE_TTL_TEMPERATURE_SECONDS)
+    return temperature_celsius
+
+
+def check_trigger(rain: float, aqi: float, temperature: float | None = None) -> dict:
     """
     Evaluate rain and AQI against industry-standard parametric insurance thresholds.
     Returns tiered payout percentages based on severity.
@@ -276,13 +308,19 @@ def check_trigger(rain: float, aqi: float) -> dict:
     Returns:
         {
             "triggered": bool,
-            "trigger_type": "rain" | "aqi",
+            "trigger_type": "rain" | "aqi" | "HEAT",
             "severity": "moderate" | "high" | "extreme",
             "payout_percentage": int (0, 30, 60, 100),
+            "trigger_value": float,
+            "trigger_reason": str,
             "rain": float,
-            "aqi": float
+            "aqi": float,
+            "temperature": float,
+            "heat_percentage": int,
         }
     """
+    temperature = _safe_float(temperature, 0.0)
+
     rain_trigger = None
     rain_payout = 0
     
@@ -310,39 +348,69 @@ def check_trigger(rain: float, aqi: float) -> dict:
     elif aqi >= 300:
         aqi_trigger = {"trigger_type": "aqi", "severity": "moderate", "payout_percentage": 30}
         aqi_payout = 30
+
+    heat_trigger = None
+    heat_payout = 0
+
+    if temperature >= 47:
+        heat_trigger = {"trigger_type": "HEAT", "severity": "extreme", "payout_percentage": 100}
+        heat_payout = 100
+    elif temperature >= 44:
+        heat_trigger = {"trigger_type": "HEAT", "severity": "high", "payout_percentage": 60}
+        heat_payout = 60
+    elif temperature >= 40:
+        heat_trigger = {"trigger_type": "HEAT", "severity": "moderate", "payout_percentage": 30}
+        heat_payout = 30
     
     # No trigger
-    if not rain_trigger and not aqi_trigger:
-        logger.debug(f"  [TRIGGER] No trigger detected (rain={rain}mm, aqi={aqi})")
+    if not rain_trigger and not aqi_trigger and not heat_trigger:
+        logger.debug(f"  [TRIGGER] No trigger detected (rain={rain}mm, aqi={aqi}, temperature={temperature}C)")
         return {
             "triggered": False,
+            "trigger_type": None,
+            "severity": None,
+            "payout_percentage": 0,
+            "trigger_value": None,
+            "trigger_reason": None,
             "rain": rain,
-            "aqi": aqi
+            "aqi": aqi,
+            "temperature": temperature,
+            "heat_percentage": 0,
         }
     
-    # Multiple triggers: choose higher payout percentage
-    if rain_trigger and aqi_trigger:
-        if rain_payout >= aqi_payout:
-            selected = rain_trigger
-            logger.debug(f"  [TRIGGER] Multi-trigger: rain={rain_payout}% >= aqi={aqi_payout}%, selecting rain")
-        else:
-            selected = aqi_trigger
-            logger.debug(f"  [TRIGGER] Multi-trigger: aqi={aqi_payout}% > rain={rain_payout}%, selecting aqi")
-    elif rain_trigger:
+    payout_percentage = max(rain_payout, aqi_payout, heat_payout)
+
+    # Multiple triggers: choose higher payout percentage, preferring HEAT, then rain, then AQI on ties.
+    if heat_trigger and heat_payout == payout_percentage and heat_payout > 0:
+        selected = heat_trigger
+        selected_value = temperature
+        trigger_reason = f"Temperature reached {temperature}°C (unsafe working conditions)"
+        logger.debug(f"  [TRIGGER] Multi-trigger: selecting heat at {heat_payout}%")
+    elif rain_trigger and rain_payout == payout_percentage and rain_payout > 0:
         selected = rain_trigger
-        logger.debug(f"  [TRIGGER] Rain trigger only: {rain_payout}% payout")
+        selected_value = rain
+        trigger_reason = f"Rainfall reached {rain}mm (unsafe working conditions)"
+        logger.debug(f"  [TRIGGER] Multi-trigger: selecting rain at {rain_payout}%")
     else:
         selected = aqi_trigger
-        logger.debug(f"  [TRIGGER] AQI trigger only: {aqi_payout}% payout")
-    
-    logger.info(f"  → TRIGGER DETECTED: type={selected['trigger_type']}, severity={selected['severity']}, payout%={selected['payout_percentage']} (rain={rain}mm, aqi={aqi})")
+        selected_value = aqi
+        trigger_reason = f"AQI reached {aqi} (unsafe air quality)"
+        logger.debug(f"  [TRIGGER] Multi-trigger: selecting aqi at {aqi_payout}%")
+
+    logger.info(
+        f"  → TRIGGER DETECTED: type={selected['trigger_type']}, severity={selected['severity']}, payout%={selected['payout_percentage']} (rain={rain}mm, aqi={aqi}, temperature={temperature}C)"
+    )
     return {
         "triggered": True,
         "trigger_type": selected["trigger_type"],
         "severity": selected["severity"],
         "payout_percentage": selected["payout_percentage"],
+        "trigger_value": selected_value,
+        "trigger_reason": trigger_reason,
         "rain": rain,
-        "aqi": aqi
+        "aqi": aqi,
+        "temperature": temperature,
+        "heat_percentage": heat_payout,
     }
 
 
@@ -380,17 +448,35 @@ async def fetch_aqi(
     return await asyncio.to_thread(get_aqi, location, coordinates[0], coordinates[1])
 
 
+async def fetch_temperature(
+    location: str | None = None,
+    lat: float | None = None,
+    lon: float | None = None,
+    timeout: float = 5.0,
+) -> float:
+    settings = get_settings()
+    if settings.demo_mode:
+        return 45.0
+
+    coordinates = resolve_coordinates(location=location, lat=lat, lon=lon, timeout=timeout)
+    if coordinates is None:
+        return 0.0
+
+    return await asyncio.to_thread(get_temperature, location, coordinates[0], coordinates[1])
+
+
 async def fetch_trigger_snapshot(
     location: str | None = None,
     lat: float | None = None,
     lon: float | None = None,
     timeout: float = 5.0,
-) -> tuple[float, float]:
-    rain, aqi = await asyncio.gather(
+) -> tuple[float, float, float]:
+    rain, aqi, temperature = await asyncio.gather(
         fetch_rain_mm(location=location, lat=lat, lon=lon, timeout=timeout),
         fetch_aqi(location=location, lat=lat, lon=lon, timeout=timeout),
+        fetch_temperature(location=location, lat=lat, lon=lon, timeout=timeout),
     )
-    return rain, aqi
+    return rain, aqi, temperature
 
 
 def evaluate_rain_trigger(rain_mm: float) -> Literal["none", "partial", "full"]:

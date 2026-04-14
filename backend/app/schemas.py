@@ -218,6 +218,8 @@ class ClaimResponse(BaseModel):
     policy_id: str
     trigger_type: str
     trigger_value: float
+    trigger_reason: Optional[str] = None
+    payout_percentage: Optional[int] = None
     payout_amount: float
     status: Literal["pending", "approved", "rejected"]
     fraud_score: Optional[float] = Field(None, ge=0, le=1)

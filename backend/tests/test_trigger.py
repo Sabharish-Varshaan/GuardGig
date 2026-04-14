@@ -11,6 +11,8 @@ import pytest
 from unittest.mock import patch, MagicMock
 import json
 
+from app.trigger_utils import check_trigger
+
 
 class TestTriggerLogic:
     """Test weather trigger logic"""
@@ -293,3 +295,45 @@ class TestEdgeCaseTriggers:
         print(f"Expected: Status 400 (validation error)")
         print(f"Actual: Status 400")
         print("Result: PASS (validation enforced)")
+
+
+class TestHeatTriggerLogic:
+    @pytest.mark.parametrize(
+        "temperature,expected_triggered,expected_payout_pct,expected_trigger_type",
+        [
+            (39.0, False, 0, None),
+            (41.0, True, 30, "HEAT"),
+            (45.0, True, 60, "HEAT"),
+            (48.0, True, 100, "HEAT"),
+        ],
+    )
+    def test_heat_thresholds(self, temperature, expected_triggered, expected_payout_pct, expected_trigger_type):
+        trigger = check_trigger(0.0, 0.0, temperature)
+
+        assert trigger["triggered"] is expected_triggered
+        assert trigger["payout_percentage"] == expected_payout_pct
+        assert trigger.get("trigger_type") == expected_trigger_type
+
+    def test_heat_reason_and_value(self):
+        trigger = check_trigger(0.0, 0.0, 45.0)
+
+        assert trigger["triggered"] is True
+        assert trigger["trigger_type"] == "HEAT"
+        assert trigger["trigger_value"] == 45.0
+        assert trigger["trigger_reason"] == "Temperature reached 45.0°C (unsafe working conditions)"
+
+    def test_heat_wins_tie_against_rain(self):
+        trigger = check_trigger(120.0, 250.0, 45.0)
+
+        assert trigger["triggered"] is True
+        assert trigger["payout_percentage"] == 60
+        assert trigger["trigger_type"] == "HEAT"
+        assert trigger["trigger_value"] == 45.0
+
+    def test_rain_and_heat_highest_wins(self):
+        trigger = check_trigger(160.0, 320.0, 45.0)
+
+        assert trigger["triggered"] is True
+        assert trigger["payout_percentage"] == 100
+        assert trigger["trigger_type"] == "rain"
+        assert trigger["trigger_value"] == 160.0

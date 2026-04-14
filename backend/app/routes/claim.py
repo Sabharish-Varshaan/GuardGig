@@ -110,19 +110,20 @@ def create_demo_claim(current_user: dict = Depends(require_current_user)):
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
-    trigger_data = check_trigger(120.0, 50.0)
+    trigger_data = check_trigger(120.0, 50.0, 45.0)
     if not trigger_data.get("triggered"):
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Demo trigger failed")
 
     trigger_type = trigger_data["trigger_type"]
     severity = trigger_data["severity"]
     payout_percentage_raw = trigger_data["payout_percentage"]
+    trigger_value = trigger_data["trigger_value"]
+    trigger_reason = trigger_data["trigger_reason"]
 
     coverage_amount = float(policy.get("coverage_amount", 700.0))
     payout_base = min(mean_income, coverage_amount)
     payout = round((payout_percentage_raw / 100.0) * payout_base, 2)
     payout = max(0.0, min(payout, coverage_amount))
-    payout_percentage = payout_percentage_raw / 100.0
 
     claim_count = fetch_recent_claim_count(admin, settings.supabase_claims_table, current_user["id"])
     fraud_score = calculate_fraud_score(
@@ -147,12 +148,15 @@ def create_demo_claim(current_user: dict = Depends(require_current_user)):
         "severity": severity,
         "rain": 120.0,
         "aqi": 50.0,
-        "payout_percentage": payout_percentage,
+        "temperature": 45.0,
+        "heat_percentage": trigger_data.get("heat_percentage", 0),
+        "payout_percentage": payout_percentage_raw,
         "payout_amount": payout,
         "fraud_score": fraud_score,
         "activity_status": "active",
         "location_valid": True,
         "rule_decision_reason": rule_decision_reason,
+        "trigger_reason": trigger_reason,
         "city": city,
     }
 
@@ -160,7 +164,9 @@ def create_demo_claim(current_user: dict = Depends(require_current_user)):
         "user_id": current_user["id"],
         "policy_id": policy["id"],
         "trigger_type": trigger_type,
-        "trigger_value": 120.0 if trigger_type == "rain" else 50.0,
+        "trigger_value": trigger_value,
+        "trigger_reason": trigger_reason,
+        "payout_percentage": payout_percentage_raw,
         "payout_amount": payout,
         "status": "approved",
         "fraud_score": fraud_score,
