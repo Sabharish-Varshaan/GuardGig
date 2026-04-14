@@ -5,6 +5,7 @@ Tests:
 - Create policy (inactive before payment)
 - Policy without onboarding → reject
 - Policy when loss_ratio > threshold → reject
+- Policy high risk reduces coverage
 - Expired policy → cannot claim
 - Policy status transitions
 """
@@ -237,4 +238,24 @@ class TestPolicyStatus:
         print(f"Expected: Duration = 7 days")
         print(f"Actual: Duration = {days} days")
         assert days == 7
+        print("Result: PASS")
+
+
+class TestPolicyRiskUnderwriting:
+    """Test risk model underwriting behavior beyond premium."""
+
+    def test_high_risk_reduces_coverage_amount(self):
+        """Coverage should be reduced by 20% when risk_score > 0.7"""
+        base_coverage = 700.0
+        risk_score = 0.75
+
+        coverage_amount = base_coverage
+        if risk_score > 0.7:
+            coverage_amount = round(coverage_amount * 0.8, 2)
+
+        print("\n[TEST] Policy Risk - Coverage Reduction")
+        print(f"Input: risk_score={risk_score}, base_coverage={base_coverage}")
+        print("Expected: coverage_amount=560.0")
+        print(f"Actual: coverage_amount={coverage_amount}")
+        assert coverage_amount == 560.0
         print("Result: PASS")

@@ -75,6 +75,7 @@ class PolicyResponse(BaseModel):
     max_income: Optional[float] = None
     mean_income: Optional[float] = None
     income_variance: Optional[float] = None
+    risk_score: Optional[float] = Field(None, ge=0, le=1)
     premium: float
     coverage_amount: float
     payment_status: Optional[str] = "pending"
@@ -223,6 +224,7 @@ class ClaimResponse(BaseModel):
     payout_amount: float
     status: Literal["pending", "approved", "rejected"]
     fraud_score: Optional[float] = Field(None, ge=0, le=1)
+    risk_score: Optional[float] = Field(None, ge=0, le=1)
     payment_status: Optional[str] = None
     transaction_id: Optional[str] = None
     paid_at: Optional[str] = None

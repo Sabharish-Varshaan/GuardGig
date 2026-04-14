@@ -30,7 +30,7 @@ class Settings(BaseModel):
     jwt_algorithm: str = Field(default="HS256")
     access_token_exp_minutes: int = Field(default=60)
     refresh_token_exp_days: int = Field(default=7)
-    claim_fraud_threshold: float = Field(default=0.7)
+    claim_fraud_threshold: float = Field(default=0.8)
     razorpay_key_id: str = Field(default="")
     razorpay_key_secret: str = Field(default="")
     razorpay_currency: str = Field(default="INR")
@@ -61,7 +61,7 @@ def get_settings() -> Settings:
         jwt_algorithm=os.getenv("JWT_ALGORITHM", "HS256"),
         access_token_exp_minutes=int(os.getenv("ACCESS_TOKEN_EXP_MINUTES", "60")),
         refresh_token_exp_days=int(os.getenv("REFRESH_TOKEN_EXP_DAYS", "7")),
-        claim_fraud_threshold=float(os.getenv("CLAIM_FRAUD_THRESHOLD", "0.7")),
+        claim_fraud_threshold=float(os.getenv("CLAIM_FRAUD_THRESHOLD", "0.8")),
         razorpay_key_id=os.getenv("RAZORPAY_KEY_ID", ""),
         razorpay_key_secret=os.getenv("RAZORPAY_KEY_SECRET", ""),
         razorpay_currency=os.getenv("RAZORPAY_CURRENCY", "INR"),

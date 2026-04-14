@@ -5,6 +5,7 @@ Tests:
 - Trigger fires → auto claim created
 - No trigger → no claim
 - Payout calculation correctness
+- Medium fraud payout adjustment
 - Daily limit enforcement (max 1 per IST day)
 - Waiting period enforcement (24h from policy creation)
 - Zero income handling
@@ -147,6 +148,25 @@ class TestPayoutCalculation:
         print(f"Expected: {expected_payout}")
         print(f"Actual: {actual_payout}")
         assert actual_payout == expected_payout
+        print("Result: PASS")
+
+    def test_medium_fraud_halves_payout(self):
+        """Test payout is halved when 0.6 < fraud_score <= 0.8"""
+        fraud_score = 0.7
+        payout_before_adjustment = 9000
+
+        if fraud_score > 0.8:
+            payout_after_adjustment = 0
+        elif fraud_score > 0.6:
+            payout_after_adjustment = payout_before_adjustment * 0.5
+        else:
+            payout_after_adjustment = payout_before_adjustment
+
+        print("\n[TEST] Payout Calculation - Medium Fraud Halving")
+        print(f"Input: fraud_score={fraud_score}, payout={payout_before_adjustment}")
+        print("Expected: payout halved to 4500")
+        print(f"Actual: payout={payout_after_adjustment}")
+        assert payout_after_adjustment == 4500
         print("Result: PASS")
 
 

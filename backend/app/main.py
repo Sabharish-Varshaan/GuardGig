@@ -172,6 +172,7 @@ async def automated_claim_check():
             continue
 
         coverage_amount = float(policy.get("coverage_amount", 700.0))
+        risk_score = float(policy.get("risk_score") or 0.0)
         mean_income = float(onboarding.get("mean_income") or 0)
         if mean_income <= 0:
             logger.info(f"  → Skipping: invalid mean_income={mean_income}")
@@ -198,6 +199,7 @@ async def automated_claim_check():
             "payout_percentage": payout_percentage_raw,
             "payout_amount": payout,
             "fraud_score": None,
+            "risk_score": risk_score,
             "activity_status": "active",
             "location_valid": True,
             "rule_decision_reason": rule_decision_reason,
@@ -217,7 +219,7 @@ async def automated_claim_check():
             location_valid=True,
             claim_frequency=claim_count,
         )
-        logger.info(f"  → Fraud check: score={fraud_score:.2f}")
+        logger.info(f"  → ML scores: fraud_score={fraud_score:.2f}, risk_score={risk_score:.2f}")
 
         try:
             enforce_exclusions(
@@ -230,6 +232,26 @@ async def automated_claim_check():
             logger.info(f"  → Skipping: exclusion rule triggered - {exc}")
             continue
 
+        if fraud_score > 0.6:
+            original_payout_percentage = payout_percentage_raw
+            payout_percentage_raw = int(round(payout_percentage_raw * 0.5))
+            payout = round((payout_percentage_raw / 100.0) * payout_base, 2)
+            payout = max(0.0, min(payout, coverage_amount))
+            rule_decision_reason = f"{rule_decision_reason}_medium_fraud_adjusted"
+            logger.info(
+                "  → Medium fraud tier applied: fraud_score=%.2f, payout_percentage %s%% -> %s%%, payout=₹%.2f",
+                fraud_score,
+                original_payout_percentage,
+                payout_percentage_raw,
+                payout,
+            )
+
+        logger.info(
+            "  → Decision finalized: fraud_score=%.2f, risk_score=%.2f, final_payout=₹%.2f",
+            fraud_score,
+            risk_score,
+            payout,
+        )
         logger.info(f"  → All validations passed. Creating claim...")
 
         # 6) Payout is already computed above based on trigger severity and income.
@@ -245,11 +267,18 @@ async def automated_claim_check():
             "payout_amount": payout,
             "status": "approved",
             "fraud_score": fraud_score,
+            "risk_score": risk_score,
             "activity_status": "active",
             "location_valid": True,
             "rule_decision_reason": rule_decision_reason,
             "updated_at": datetime.now(IST).isoformat(),
         }
+
+        trigger_snapshot["fraud_score"] = fraud_score
+        trigger_snapshot["risk_score"] = risk_score
+        trigger_snapshot["payout_percentage"] = payout_percentage_raw
+        trigger_snapshot["payout_amount"] = payout
+        trigger_snapshot["rule_decision_reason"] = rule_decision_reason
 
         print("Creating claim for user:", user_id)
         try:

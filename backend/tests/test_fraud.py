@@ -3,9 +3,10 @@ Fraud Detection Tests
 
 Tests:
 - Fraud score calculation
-- Threshold enforcement (0.7)
+- Threshold enforcement (0.8)
 - High fraud → claim rejected
 - Low fraud → claim approved
+- Medium fraud → payout reduced
 - Exclusion rules (activity status, location)
 """
 import pytest
@@ -35,7 +36,7 @@ class TestFraudDetectionHeuristic:
             base_score += 0.3
         fraud_score = min(1.0, base_score)
         
-        is_approved = fraud_score <= 0.7
+        is_approved = fraud_score <= 0.8
         
         print(f"\n[TEST] Fraud Detection - claims={claims_today}, activity={activity_status}, location_valid={location_valid}")
         print(f"Input: claims_today={claims_today}, activity_status={activity_status}, location_valid={location_valid}")
@@ -121,9 +122,9 @@ class TestFraudThreshold:
     """Test fraud score threshold enforcement"""
 
     def test_fraud_threshold_approved(self):
-        """Test claim approved when fraud_score <= 0.7"""
+        """Test claim approved when fraud_score <= 0.8"""
         fraud_score = 0.6
-        threshold = 0.7
+        threshold = 0.8
         is_approved = fraud_score <= threshold
         
         print("\n[TEST] Fraud Threshold - Approved (score=0.6)")
@@ -134,12 +135,12 @@ class TestFraudThreshold:
         print("Result: PASS")
 
     def test_fraud_threshold_rejected(self):
-        """Test claim rejected when fraud_score > 0.7"""
-        fraud_score = 0.8
-        threshold = 0.7
+        """Test claim rejected when fraud_score > 0.8"""
+        fraud_score = 0.81
+        threshold = 0.8
         is_approved = fraud_score <= threshold
         
-        print("\n[TEST] Fraud Threshold - Rejected (score=0.8)")
+        print("\n[TEST] Fraud Threshold - Rejected (score=0.81)")
         print(f"Input: fraud_score={fraud_score}, threshold={threshold}")
         print(f"Expected: approved=False")
         print(f"Actual: approved={is_approved}")
@@ -148,11 +149,11 @@ class TestFraudThreshold:
 
     def test_fraud_threshold_boundary(self):
         """Test fraud score at exactly threshold"""
-        fraud_score = 0.7
-        threshold = 0.7
+        fraud_score = 0.8
+        threshold = 0.8
         is_approved = fraud_score <= threshold
         
-        print("\n[TEST] Fraud Threshold - Boundary (score=0.7)")
+        print("\n[TEST] Fraud Threshold - Boundary (score=0.8)")
         print(f"Input: fraud_score={fraud_score}, threshold={threshold}")
         print(f"Expected: approved=True (<=, not <)")
         print(f"Actual: approved={is_approved}")
@@ -161,11 +162,11 @@ class TestFraudThreshold:
 
     def test_fraud_threshold_just_above(self):
         """Test fraud score just above threshold"""
-        fraud_score = 0.71
-        threshold = 0.7
+        fraud_score = 0.81
+        threshold = 0.8
         is_approved = fraud_score <= threshold
         
-        print("\n[TEST] Fraud Threshold - Just Above (score=0.71)")
+        print("\n[TEST] Fraud Threshold - Just Above (score=0.81)")
         print(f"Input: fraud_score={fraud_score}, threshold={threshold}")
         print(f"Expected: approved=False")
         print(f"Actual: approved={is_approved}")
@@ -260,7 +261,7 @@ class TestFraudWithClaims:
             "payout_amount": 9000
         }
         
-        threshold = 0.7
+        threshold = 0.8
         is_rejected = claim["fraud_score"] > threshold
         final_status = "rejected" if is_rejected else "approved"
         final_payout = 0 if is_rejected else claim["payout_amount"]
@@ -280,7 +281,7 @@ class TestFraudWithClaims:
             "payout_amount": 9000
         }
         
-        threshold = 0.7
+        threshold = 0.8
         is_approved = claim["fraud_score"] <= threshold
         final_status = "approved" if is_approved else "rejected"
         final_payout = claim["payout_amount"] if is_approved else 0
@@ -290,4 +291,29 @@ class TestFraudWithClaims:
         print(f"Expected: status=approved, payout={claim['payout_amount']}")
         print(f"Actual: status={final_status}, payout={final_payout}")
         assert is_approved and final_payout == 9000
+        print("Result: PASS")
+
+    def test_medium_fraud_claim_payout_halved(self):
+        """Test medium fraud score reduces payout by 50%"""
+        claim = {
+            "fraud_score": 0.7,
+            "payout_amount": 9000,
+        }
+
+        reject_threshold = 0.8
+        medium_threshold = 0.6
+
+        is_rejected = claim["fraud_score"] > reject_threshold
+        if is_rejected:
+            final_payout = 0
+        elif claim["fraud_score"] > medium_threshold:
+            final_payout = claim["payout_amount"] * 0.5
+        else:
+            final_payout = claim["payout_amount"]
+
+        print("\n[TEST] Fraud With Claims - Medium Fraud Payout Halved")
+        print(f"Input: fraud_score={claim['fraud_score']}, payout={claim['payout_amount']}")
+        print("Expected: status=approved, payout halved to 4500")
+        print(f"Actual: rejected={is_rejected}, payout={final_payout}")
+        assert not is_rejected and final_payout == 4500
         print("Result: PASS")

@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+import logging
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
@@ -20,6 +21,7 @@ from ..supabase_client import get_admin_client
 from ..trigger_utils import check_trigger
 
 router = APIRouter(prefix="/api", tags=["claim"])
+logger = logging.getLogger(__name__)
 
 
 def _parse_iso_datetime(value: str | None) -> datetime | None:
@@ -122,6 +124,7 @@ def create_demo_claim(current_user: dict = Depends(require_current_user)):
     trigger_reason = trigger_data["trigger_reason"]
 
     coverage_amount = float(policy.get("coverage_amount", 700.0))
+    risk_score = float(policy.get("risk_score") or 0.0)
     payout_base = min(mean_income, coverage_amount)
     payout = round((payout_percentage_raw / 100.0) * payout_base, 2)
     payout = max(0.0, min(payout, coverage_amount))
@@ -132,6 +135,7 @@ def create_demo_claim(current_user: dict = Depends(require_current_user)):
         location_valid=True,
         claim_frequency=claim_count,
     )
+    original_payout_percentage = payout_percentage_raw
     try:
         enforce_exclusions(
             activity_status="active",
@@ -142,8 +146,25 @@ def create_demo_claim(current_user: dict = Depends(require_current_user)):
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
+    if fraud_score > 0.6:
+        payout_percentage_raw = int(round(payout_percentage_raw * 0.5))
+        payout = round((payout_percentage_raw / 100.0) * payout_base, 2)
+        payout = max(0.0, min(payout, coverage_amount))
+
+    decision_reason = f"demo_mode_{trigger_type}_{severity}_manual"
+    if fraud_score > 0.6:
+        decision_reason = f"{decision_reason}_medium_fraud_adjusted"
+
+    logger.info(
+        "ML decision finalized: fraud_score=%.2f, risk_score=%.2f, payout=%.2f, payout_percentage=%s%%",
+        fraud_score,
+        risk_score,
+        payout,
+        payout_percentage_raw,
+    )
+
     now_iso = datetime.now(timezone.utc).isoformat()
-    rule_decision_reason = f"demo_mode_{trigger_type}_{severity}_manual"
+    rule_decision_reason = decision_reason
     trigger_snapshot = {
         "trigger_type": trigger_type,
         "severity": severity,
@@ -154,11 +175,13 @@ def create_demo_claim(current_user: dict = Depends(require_current_user)):
         "payout_percentage": payout_percentage_raw,
         "payout_amount": payout,
         "fraud_score": fraud_score,
+        "risk_score": risk_score,
         "activity_status": "active",
         "location_valid": True,
         "rule_decision_reason": rule_decision_reason,
         "trigger_reason": trigger_reason,
         "city": city,
+        "original_payout_percentage": original_payout_percentage,
     }
 
     claim_data = {
@@ -171,6 +194,7 @@ def create_demo_claim(current_user: dict = Depends(require_current_user)):
         "payout_amount": payout,
         "status": "approved",
         "fraud_score": fraud_score,
+        "risk_score": risk_score,
         "activity_status": "active",
         "location_valid": True,
         "rule_decision_reason": rule_decision_reason,

@@ -9,7 +9,7 @@ from ..config import (
 )
 from ..dependencies import require_current_user
 from ..metrics_utils import check_loss_ratio_threshold
-from ..premium_utils import calculate_premium
+from ..premium_utils import calculate_policy_risk_score, calculate_premium
 from ..schemas import PolicyCreateResponse, PolicyResponse
 from ..supabase_client import get_admin_client
 
@@ -131,8 +131,15 @@ def create_policy(current_user: dict = Depends(require_current_user)):
             detail="Policy already exists for this user"
         )
 
+    # Evaluate policy risk once and reuse in pricing + underwriting decisions.
+    risk_score = calculate_policy_risk_score(float(weekly_income), income_variance=income_variance)
+
     # Calculate premium
     premium = calculate_premium(float(weekly_income), str(risk_preference), income_variance=income_variance)
+
+    coverage_amount = 700.00
+    if risk_score > 0.7:
+        coverage_amount = round(coverage_amount * 0.8, 2)
 
     # Create policy
     now = datetime.now(timezone.utc)
@@ -143,8 +150,9 @@ def create_policy(current_user: dict = Depends(require_current_user)):
         "max_income": round(max_income, 2),
         "mean_income": round(mean_income, 2),
         "income_variance": round(income_variance, 4),
+        "risk_score": round(risk_score, 4),
         "premium": premium,
-        "coverage_amount": 700.00,
+        "coverage_amount": coverage_amount,
         "policy_start_date": now.date().isoformat(),
         "status": "inactive",
         "payment_status": "pending",
