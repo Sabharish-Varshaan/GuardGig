@@ -114,7 +114,49 @@ function getTriggerLabel(item) {
     return item.triggerLabel;
   }
 
-  return item.triggerType === "aqi" ? "AQI" : "Rain";
+  const triggerType = String(item.triggerType || "").toLowerCase();
+  if (triggerType === "aqi") {
+    return "AQI";
+  }
+  if (triggerType === "heat") {
+    return "HEAT";
+  }
+  return "Rain";
+}
+
+function getTriggerIcon(item) {
+  const triggerType = String(item.triggerType || "").toLowerCase();
+  if (triggerType === "aqi") {
+    return "🌫️";
+  }
+  if (triggerType === "heat") {
+    return "🔥";
+  }
+  return "🌧️";
+}
+
+function getPayoutStatusLabel(item) {
+  const paymentStatus = String(item.paymentStatus || "").toLowerCase();
+  if (paymentStatus === "credited" || paymentStatus === "paid") {
+    return "Credited";
+  }
+  if (paymentStatus === "pending_payout_details") {
+    return "Pending Details";
+  }
+  if (paymentStatus === "failed") {
+    return "Failed";
+  }
+  return "Pending";
+}
+
+function maskTransactionId(transactionId) {
+  if (!transactionId) {
+    return "--";
+  }
+  if (transactionId.length <= 5) {
+    return transactionId;
+  }
+  return `${transactionId.slice(0, 5)}***`;
 }
 
 function getPillColor(policyState) {
@@ -129,7 +171,7 @@ function getPillColor(policyState) {
   return appTheme.colors.dangerSoft;
 }
 
-function DashboardScreen() {
+function DashboardScreen({ navigation }) {
   const {
     user,
     policy,
@@ -239,7 +281,12 @@ function DashboardScreen() {
             <Text style={styles.sectionTitle}>Automation</Text>
             <StatusBadge label={demoMode ? "Demo Mode" : "Live"} variant={demoMode ? "warning" : "info"} />
           </View>
-          <Text style={styles.automationText}>✔ Payouts are automatically triggered when disruptions occur. No manual claims needed.</Text>
+          {demoMode && (
+            <View style={styles.demoBanner}>
+              <Text style={styles.demoBannerText}>Demo Mode Active</Text>
+            </View>
+          )}
+          <Text style={styles.automationText}>✔ Payouts are automatically triggered. No action needed.</Text>
           <View style={styles.toggleRow}>
             <View style={styles.toggleCopy}>
               <Text style={styles.toggleTitle}>Demo Mode</Text>
@@ -259,9 +306,10 @@ function DashboardScreen() {
         <Card style={styles.sectionCard}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>System Status</Text>
-            <StatusBadge label={riskLoading ? "Monitoring" : "Stable"} variant={riskLoading ? "warning" : "success"} />
+            <Button onPress={() => Promise.allSettled([refreshPolicy(), refreshClaims(), refreshRisk()])} title="Retry" variant="secondary" />
           </View>
           <Text style={styles.statusText}>{monitoringMessage}</Text>
+          <Text style={styles.statusMeta}>💸 Live settlement feed is syncing in the background.</Text>
           <Text style={styles.statusMeta}>{lastRiskCheckAt ? `Last check: ${formatDateTime(lastRiskCheckAt)}` : "Last check: pending"}</Text>
           {!!riskMessage && <Text style={styles.statusMeta}>{riskMessage}</Text>}
           {(policyLoading || claimsLoading || riskLoading) && (
@@ -296,27 +344,29 @@ function DashboardScreen() {
             <StatusBadge label={recentPayouts.length > 0 ? `${recentPayouts.length} recorded` : "Empty"} variant={recentPayouts.length > 0 ? "success" : "info"} />
           </View>
           {recentPayouts.length === 0 ? (
-            <Text style={styles.emptyText}>No payouts yet. You are protected when disruptions occur.</Text>
+            <Text style={styles.emptyText}>You are protected. Payouts will be automatic.</Text>
           ) : (
             recentPayouts.map((item) => (
               <View key={String(item.id)} style={styles.payoutItem}>
                 <View style={styles.payoutTopRow}>
                   <Text style={styles.payoutTitle} numberOfLines={1}>
-                    {`${getTriggerLabel(item)} (${getSeverityLabel(item.severity)})`}
+                    {`${getTriggerIcon(item)} ${getTriggerLabel(item)} (${getSeverityLabel(item.severity)})`}
                   </Text>
-                  <Text style={styles.payoutAmount}>{formatRupee(item.amount)} credited</Text>
+                  <Text style={styles.payoutAmount}>{`💸 ${formatRupee(item.amount)} credited`}</Text>
                 </View>
                 <View style={styles.payoutMetaGrid}>
                   <KeyValueRow label="Date" value={formatDateTime(item.paidAt || item.createdAt)} />
                   <KeyValueRow label="Trigger" value={getTriggerLabel(item)} />
-                  <KeyValueRow label="Severity" value={getSeverityLabel(item.severity)} />
+                  <KeyValueRow label="Status" value={getPayoutStatusLabel(item)} />
+                  <KeyValueRow label="Txn" value={maskTransactionId(item.transactionId)} />
                   <KeyValueRow label="Payout %" value={item.payoutPercentage ? `${item.payoutPercentage}%` : "--"} />
-                  <KeyValueRow label="Amount" value={formatRupee(item.amount)} />
+                  <KeyValueRow label="Method" value={String(item.payoutMethod || "pending").toUpperCase()} />
                 </View>
                 {!!item.reason && <Text style={styles.payoutReason}>{item.reason}</Text>}
               </View>
             ))
           )}
+          <Button onPress={() => navigation.navigate("Notifications")} title="View Notifications" variant="secondary" />
         </Card>
       </ScrollView>
     </SafeAreaView>
@@ -433,6 +483,20 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 22
   },
+  demoBanner: {
+    backgroundColor: appTheme.colors.warningSoft,
+    borderColor: appTheme.colors.warningBorder,
+    borderRadius: appTheme.radius.soft,
+    borderWidth: 1,
+    marginBottom: appTheme.spacing.sm,
+    paddingHorizontal: appTheme.spacing.xs,
+    paddingVertical: appTheme.spacing.xs
+  },
+  demoBannerText: {
+    color: appTheme.colors.warningText,
+    fontFamily: "Rajdhani_700Bold",
+    fontSize: 14
+  },
   toggleRow: {
     alignItems: "center",
     flexDirection: "row",
@@ -540,7 +604,7 @@ const styles = StyleSheet.create({
   payoutAmount: {
     color: appTheme.colors.accentSuccess,
     fontFamily: "Orbitron_700Bold",
-    fontSize: 15,
+    fontSize: 18,
     textAlign: "right"
   },
   payoutMetaGrid: {

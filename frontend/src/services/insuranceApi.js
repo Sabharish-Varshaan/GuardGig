@@ -93,3 +93,17 @@ export async function verifyPayment(token, payload) {
     }
   });
 }
+
+export async function getMyNotifications(token) {
+  return apiRequest("/api/notifications/me", {
+    method: "GET",
+    token
+  });
+}
+
+export async function markNotificationRead(token, notificationId) {
+  return apiRequest(`/api/notifications/${notificationId}/read`, {
+    method: "PATCH",
+    token
+  });
+}

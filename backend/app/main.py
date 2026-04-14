@@ -23,6 +23,7 @@ from .metrics_utils import update_metrics_on_payout
 from .routes.admin import router as admin_router
 from .routes.auth import router as auth_router
 from .routes.onboarding import router as onboarding_router
+from .routes.notification import router as notification_router
 from .routes.policy import router as policy_router
 from .routes.premium import router as premium_router
 from .routes.payment import router as payment_router
@@ -31,6 +32,7 @@ from .routes.user import router as user_router
 from .routes.claim import router as claim_router
 from .routes.fraud import router as fraud_router
 from .routes.ml_demo import router as ml_demo_router
+from .services.notification_service import create_notification
 from .services.payout_details_service import fetch_user_payout_details, resolve_claim_payout_destination
 from .services.payment_service import persist_claim_payment, simulate_razorpay_payout
 from .supabase_client import get_admin_client
@@ -309,13 +311,32 @@ async def automated_claim_check():
         
         # Track successful payout in system metrics (non-blocking)
         # Run only for approved claims with a paid payout.
-        if claim.get("status") == "approved" and payment_status == "paid" and payout > 0:
+        if claim.get("status") == "approved" and payment_status in {"paid", "credited"} and payout > 0:
             try:
                 updated_metrics = update_metrics_on_payout(admin, payout)
                 print("Payout added to metrics:", payout)
                 print("Updated total payout:", float(updated_metrics.get("total_payout", 0) or 0))
             except Exception as exc:
                 logger.error(f"[METRICS] Failed to update payout metrics: {exc}")
+
+            try:
+                create_notification(
+                    admin,
+                    settings.supabase_notifications_table,
+                    user_id=user_id,
+                    title="Payout Credited 💸",
+                    message=f"₹{payout:.2f} credited due to {trigger_type}",
+                    notification_type="payout_credited",
+                    claim_id=claim["id"],
+                    metadata={
+                        "trigger_type": trigger_type,
+                        "trigger_reason": trigger_reason,
+                        "payout_amount": payout,
+                        "transaction_id": transaction_id,
+                    },
+                )
+            except Exception as exc:
+                logger.error(f"[NOTIFY] Failed to create payout notification: {exc}")
         
         logger.info(f"  ✓ AUTOMATION COMPLETE for user {user_id}")
     
@@ -369,6 +390,7 @@ app.include_router(payment_router)
 app.include_router(trigger_router)
 app.include_router(user_router)
 app.include_router(claim_router)
+app.include_router(notification_router)
 app.include_router(fraud_router)
 app.include_router(ml_demo_router)
 app.include_router(admin_router)

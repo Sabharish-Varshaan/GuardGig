@@ -13,6 +13,7 @@ from ..config import get_settings
 from ..dependencies import require_current_user
 from ..metrics_utils import update_metrics_on_payout
 from ..schemas import ClaimCreateResponse, ClaimsListResponse, ClaimResponse
+from ..services.notification_service import create_notification
 from ..services.payout_details_service import fetch_user_payout_details, resolve_claim_payout_destination
 from ..services.payment_service import persist_claim_payment, simulate_razorpay_payout
 from ..supabase_client import get_admin_client
@@ -223,8 +224,25 @@ def create_demo_claim(current_user: dict = Depends(require_current_user)):
         trigger_snapshot,
     )
 
-    if claim.get("status") == "approved" and payment_status == "paid" and payout > 0:
+    latest_notification = None
+    if claim.get("status") == "approved" and payment_status in {"paid", "credited"} and payout > 0:
         update_metrics_on_payout(admin, payout)
+
+        latest_notification = create_notification(
+            admin,
+            settings.supabase_notifications_table,
+            user_id=current_user["id"],
+            title="Payout Credited 💸",
+            message=f"₹{payout:.2f} credited due to {trigger_type}",
+            notification_type="payout_credited",
+            claim_id=claim["id"],
+            metadata={
+                "trigger_type": trigger_type,
+                "trigger_reason": trigger_reason,
+                "payout_amount": payout,
+                "transaction_id": transaction_id,
+            },
+        )
 
     refreshed_claim_response = (
         admin.table(settings.supabase_claims_table)
@@ -240,4 +258,5 @@ def create_demo_claim(current_user: dict = Depends(require_current_user)):
     return ClaimCreateResponse(
         claim=ClaimResponse(**refreshed_rows[0]),
         message="Demo claim created and payout processed",
+        notification=latest_notification,
     )

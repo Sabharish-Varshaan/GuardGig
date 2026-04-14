@@ -4,6 +4,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
+import Button from "../components/Button";
 import Card from "../components/Card";
 import Header from "../components/Header";
 import StatusBadge from "../components/StatusBadge";
@@ -40,7 +41,25 @@ function getTriggerLabel(item) {
     return item.triggerLabel;
   }
 
-  return item.triggerType === "aqi" ? "AQI" : "Rain";
+  const triggerType = String(item.triggerType || "").toLowerCase();
+  if (triggerType === "aqi") {
+    return "AQI";
+  }
+  if (triggerType === "heat") {
+    return "HEAT";
+  }
+  return "Rain";
+}
+
+function getTriggerEmoji(item) {
+  const triggerType = String(item.triggerType || "").toLowerCase();
+  if (triggerType === "aqi") {
+    return "🌫️";
+  }
+  if (triggerType === "heat") {
+    return "🔥";
+  }
+  return "🌧️";
 }
 
 function getSeverityLabel(severity) {
@@ -70,6 +89,16 @@ function getDestinationLabel(item) {
   }
 
   return "Destination pending";
+}
+
+function maskTransactionId(transactionId) {
+  if (!transactionId) {
+    return "--";
+  }
+  if (transactionId.length <= 5) {
+    return transactionId;
+  }
+  return `${transactionId.slice(0, 5)}***`;
 }
 
 function ClaimsScreen() {
@@ -106,6 +135,11 @@ function ClaimsScreen() {
 
         <Card style={styles.summaryCard}>
           <Text style={styles.summaryTitle}>Automation Summary</Text>
+          {demoMode && (
+            <View style={styles.demoBanner}>
+              <Text style={styles.demoBannerText}>Demo Mode Active</Text>
+            </View>
+          )}
           <Text style={styles.summaryText}>Payouts are created by backend trigger checks. There is no manual payout action in this app.</Text>
           <Text style={styles.summaryText}>{isPolicyActive ? "Your policy is active and monitoring is enabled." : "Activate your policy to begin automated coverage."}</Text>
           {!payoutDetails?.hasPayoutMethod && (
@@ -116,7 +150,7 @@ function ClaimsScreen() {
         <Card style={styles.summaryCard}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Payout History</Text>
-            <StatusBadge label={claimsHistory.length > 0 ? `${claimsHistory.length} records` : "Empty"} variant={claimsHistory.length > 0 ? "success" : "info"} />
+            <Button onPress={() => refreshClaims().catch(() => {})} title="Retry" variant="secondary" />
           </View>
 
           {claimsLoading && (
@@ -129,25 +163,26 @@ function ClaimsScreen() {
           {!!dataError && <Text style={styles.errorText}>{dataError}</Text>}
 
           {claimsHistory.length === 0 ? (
-            <Text style={styles.emptyText}>No payouts yet. You are protected when disruptions occur.</Text>
+            <Text style={styles.emptyText}>You are protected. Payouts will be automatic.</Text>
           ) : (
             claimsHistory.map((item) => (
               <View key={String(item.id)} style={styles.payoutItem}>
                 <View style={styles.payoutTopRow}>
-                  <Text style={styles.payoutTitle}>{`${getTriggerLabel(item)} (${getSeverityLabel(item.severity)})`}</Text>
+                  <Text style={styles.payoutTitle}>{`${getTriggerEmoji(item)} ${getTriggerLabel(item)} (${getSeverityLabel(item.severity)})`}</Text>
                   <StatusBadge
-                    label={item.status === "approved" || item.paymentStatus === "paid" ? "Credited" : item.status}
-                    variant={item.status === "approved" || item.paymentStatus === "paid" ? "success" : "warning"}
+                    label={item.status === "approved" || ["paid", "credited"].includes(item.paymentStatus) ? "Credited" : item.status}
+                    variant={item.status === "approved" || ["paid", "credited"].includes(item.paymentStatus) ? "success" : "warning"}
                   />
                 </View>
-                <Text style={styles.payoutAmount}>{`${item.payoutPercentage ? `${item.payoutPercentage}%` : "--"} • ${formatRupee(item.amount)} credited`}</Text>
+                <Text style={styles.payoutAmount}>{`💸 ${item.payoutPercentage ? `${item.payoutPercentage}%` : "--"} • ${formatRupee(item.amount)} credited`}</Text>
                 <Text style={styles.destinationText}>{`${formatRupee(item.amount)} credited to ${getDestinationLabel(item)}`}</Text>
                 <View style={styles.metaGrid}>
                   <Text style={styles.metaText}>Date: {formatDateTime(item.paidAt || item.createdAt)}</Text>
                   <Text style={styles.metaText}>Trigger: {getTriggerLabel(item)}</Text>
                   <Text style={styles.metaText}>Severity: {getSeverityLabel(item.severity)}</Text>
                   <Text style={styles.metaText}>Payout %: {item.payoutPercentage ? `${item.payoutPercentage}%` : "--"}</Text>
-                  <Text style={styles.metaText}>Amount: {formatRupee(item.amount)}</Text>
+                  <Text style={styles.metaText}>Status: {item.paymentStatus || "pending"}</Text>
+                  <Text style={styles.metaText}>Transaction: {maskTransactionId(item.transactionId)}</Text>
                 </View>
                 {!!item.reason && <Text style={styles.reasonText}>{item.reason}</Text>}
               </View>
@@ -186,6 +221,21 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 20,
     marginTop: appTheme.spacing.xs
+  },
+  demoBanner: {
+    backgroundColor: appTheme.colors.warningSoft,
+    borderColor: appTheme.colors.warningBorder,
+    borderRadius: appTheme.radius.soft,
+    borderWidth: 1,
+    marginBottom: appTheme.spacing.xs,
+    marginTop: appTheme.spacing.xs,
+    paddingHorizontal: appTheme.spacing.xs,
+    paddingVertical: appTheme.spacing.xs
+  },
+  demoBannerText: {
+    color: appTheme.colors.warningText,
+    fontFamily: "Rajdhani_700Bold",
+    fontSize: 14
   },
   warningText: {
     color: appTheme.colors.warning,
@@ -249,7 +299,7 @@ const styles = StyleSheet.create({
   payoutAmount: {
     color: appTheme.colors.accentSuccess,
     fontFamily: "Orbitron_700Bold",
-    fontSize: 14,
+    fontSize: 18,
     marginTop: appTheme.spacing.xs
   },
   destinationText: {

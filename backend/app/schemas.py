@@ -237,6 +237,7 @@ class ClaimResponse(BaseModel):
 class ClaimCreateResponse(BaseModel):
     claim: ClaimResponse
     message: str
+    notification: Optional["NotificationResponse"] = None
 
 
 class ClaimRejectedResponse(BaseModel):
@@ -246,6 +247,27 @@ class ClaimRejectedResponse(BaseModel):
 
 class ClaimsListResponse(BaseModel):
     claims: list[ClaimResponse]
+
+
+class NotificationResponse(BaseModel):
+    id: str
+    user_id: str
+    title: str
+    message: str
+    notification_type: str
+    claim_id: Optional[str] = None
+    metadata: Optional[dict] = None
+    read_status: bool = False
+    created_at: str
+
+
+class NotificationsListResponse(BaseModel):
+    notifications: list[NotificationResponse]
+
+
+class NotificationMarkReadResponse(BaseModel):
+    notification: NotificationResponse
+    message: str
 
 
 class FraudCheckRequest(BaseModel):

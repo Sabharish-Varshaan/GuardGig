@@ -17,7 +17,9 @@ import {
   createPaymentOrder,
   getDemoModeSetting,
   getMyClaims,
+  getMyNotifications,
   getUserPayoutDetails,
+  markNotificationRead,
   getMyPolicy,
   setUserPayoutDetails,
   setDemoModeSetting,
@@ -156,11 +158,12 @@ const normalizePolicy = (policy) => {
 const normalizeClaim = (claim) => {
   const createdAt = claim?.created_at || "";
   const snapshot = claim?.trigger_snapshot && typeof claim.trigger_snapshot === "object" ? claim.trigger_snapshot : {};
-  const reason = claim?.rule_decision_reason || snapshot.rule_decision_reason || "";
+  const reason = claim?.trigger_reason || snapshot.trigger_reason || claim?.rule_decision_reason || snapshot.rule_decision_reason || "";
   const triggerType = claim?.trigger_type || snapshot.trigger_type || "rain";
   const severity = (claim?.severity || snapshot.severity || "moderate").toLowerCase();
   const payoutPercentage = Number(claim?.payout_percentage ?? snapshot.payout_percentage ?? 0);
   const triggerValue = Number(claim?.trigger_value ?? snapshot.trigger_value ?? 0);
+  const normalizedTriggerType = String(triggerType).toLowerCase();
 
   return {
     id: claim?.id || String(Date.now()),
@@ -171,7 +174,7 @@ const normalizeClaim = (claim) => {
     status: (claim?.status || "pending").toLowerCase(),
     amount: Number(claim?.payout_amount || 0),
     triggerValue,
-    triggerLabel: triggerType === "aqi" ? "AQI" : "Rain",
+    triggerLabel: normalizedTriggerType === "aqi" ? "AQI" : normalizedTriggerType === "heat" ? "HEAT" : "Rain",
     paymentStatus: (claim?.payment_status || "pending").toLowerCase(),
     transactionId: claim?.transaction_id || "",
     paidAt: claim?.paid_at || "",
@@ -188,6 +191,24 @@ const normalizeClaim = (claim) => {
           month: "short"
         })
       : ""
+  };
+};
+
+const normalizeNotification = (item) => {
+  if (!item || typeof item !== "object") {
+    return null;
+  }
+
+  return {
+    id: item.id || String(Date.now()),
+    userId: item.user_id || "",
+    title: item.title || "Notification",
+    message: item.message || "",
+    type: item.notification_type || "general",
+    read: Boolean(item.read_status),
+    createdAt: item.created_at || new Date().toISOString(),
+    claimId: item.claim_id || "",
+    metadata: item.metadata && typeof item.metadata === "object" ? item.metadata : {}
   };
 };
 
@@ -300,6 +321,9 @@ export function AppProvider({ children }) {
   const [policyLoading, setPolicyLoading] = useState(false);
   const [claimsHistory, setClaimsHistory] = useState([]);
   const [claimsLoading, setClaimsLoading] = useState(false);
+  const [notifications, setNotifications] = useState([]);
+  const [notificationsLoading, setNotificationsLoading] = useState(false);
+  const [notificationsError, setNotificationsError] = useState("");
   const [demoMode, setDemoMode] = useState(false);
   const [demoClaimsHistory, setDemoClaimsHistory] = useState([]);
   const [payoutDetails, setPayoutDetails] = useState(null);
@@ -321,11 +345,26 @@ export function AppProvider({ children }) {
   const [movementScore] = useState(null);
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [themeEnabled, setThemeEnabled] = useState(false);
+  const [toast, setToast] = useState(null);
+  const lastNotifiedClaimRef = useRef("");
 
   // Keep location ref in sync with location state to avoid circular dependencies
   useEffect(() => {
     locationRef.current = location;
   }, [location]);
+
+  const showToast = useCallback((message, type = "info") => {
+    if (!message) {
+      return;
+    }
+
+    const id = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    setToast({ id, message, type });
+  }, []);
+
+  const dismissToast = useCallback(() => {
+    setToast(null);
+  }, []);
 
   const applyAuthSession = useCallback((session) => {
     setAuthToken(session.access_token || "");
@@ -458,7 +497,15 @@ export function AppProvider({ children }) {
         setClaimsHistory(claims);
 
         if (claims.length > 0) {
-          setPayoutAmount(claims[0].amount || 0);
+          const latestClaim = claims[0];
+          setPayoutAmount(latestClaim.amount || 0);
+
+          const isCredited = ["paid", "credited"].includes(String(latestClaim.paymentStatus || "").toLowerCase());
+          if (isCredited && latestClaim.id && lastNotifiedClaimRef.current !== latestClaim.id && notificationsEnabled) {
+            const reasonText = latestClaim.reason || latestClaim.triggerLabel || "trigger conditions";
+            showToast(`₹${Number(latestClaim.amount || 0).toLocaleString("en-IN")} credited due to ${reasonText}`, "success");
+            lastNotifiedClaimRef.current = latestClaim.id;
+          }
         }
 
         return claims;
@@ -468,6 +515,55 @@ export function AppProvider({ children }) {
       } finally {
         setClaimsLoading(false);
       }
+    },
+    [authToken, notificationsEnabled, showToast]
+  );
+
+  const refreshNotifications = useCallback(
+    async (tokenOverride) => {
+      const token = tokenOverride || authToken;
+      if (!token) {
+        return [];
+      }
+
+      setNotificationsLoading(true);
+      setNotificationsError("");
+
+      try {
+        const response = await getMyNotifications(token);
+        const rows = Array.isArray(response?.notifications) ? response.notifications : [];
+        const normalized = rows.map(normalizeNotification).filter(Boolean);
+        setNotifications(normalized);
+        return normalized;
+      } catch (error) {
+        const message = toErrorMessage(error, "Unable to fetch notifications");
+        setNotificationsError(message);
+        throw error;
+      } finally {
+        setNotificationsLoading(false);
+      }
+    },
+    [authToken]
+  );
+
+  const markNotificationAsRead = useCallback(
+    async (notificationId) => {
+      if (!authToken || !notificationId) {
+        return null;
+      }
+
+      const response = await markNotificationRead(authToken, notificationId);
+      const updatedNotification = normalizeNotification(response?.notification);
+      setNotifications((prev) =>
+        prev.map((item) => {
+          if (item.id !== notificationId) {
+            return item;
+          }
+
+          return updatedNotification || { ...item, read: true };
+        })
+      );
+      return updatedNotification;
     },
     [authToken]
   );
@@ -548,7 +644,7 @@ export function AppProvider({ children }) {
 
       try {
         const response = await createDemoClaim(authToken);
-        await Promise.allSettled([refreshClaims(authToken), refreshPolicy(authToken)]);
+        await Promise.allSettled([refreshClaims(authToken), refreshPolicy(authToken), refreshNotifications(authToken)]);
         setDemoClaimsHistory([]);
         setWorkflowState(WORKFLOW_STATES.approved);
         setWorkflowMessage("Demo payout processed by backend");
@@ -557,6 +653,15 @@ export function AppProvider({ children }) {
         setPaymentError("");
         setDataError("");
         setLastRiskCheckAt(new Date().toISOString());
+
+        const notification = normalizeNotification(response?.notification);
+        if (notification) {
+          setNotifications((prev) => [notification, ...prev.filter((item) => item.id !== notification.id)]);
+          if (notificationsEnabled) {
+            showToast(notification.message, "success");
+          }
+        }
+
         return { success: true, enabled: true };
       } catch (error) {
         const message = toErrorMessage(error, "Unable to create demo claim");
@@ -567,7 +672,7 @@ export function AppProvider({ children }) {
         return { success: false, error: message };
       }
     },
-    [authToken, refreshClaims, refreshPolicy]
+    [authToken, notificationsEnabled, refreshClaims, refreshNotifications, refreshPolicy, showToast]
   );
 
   const requestLocation = useCallback(async () => {
@@ -721,6 +826,7 @@ export function AppProvider({ children }) {
           await Promise.allSettled([
             refreshPolicy(accessToken),
             refreshClaims(accessToken),
+            refreshNotifications(accessToken),
             refreshPayoutDetails(accessToken)
           ]);
           const demoState = await getDemoModeSetting(accessToken);
@@ -808,6 +914,7 @@ export function AppProvider({ children }) {
         await Promise.allSettled([
           refreshPolicy(session.access_token),
           refreshClaims(session.access_token),
+          refreshNotifications(session.access_token),
           refreshPayoutDetails(session.access_token)
         ]);
         const demoState = await getDemoModeSetting(session.access_token);
@@ -889,12 +996,16 @@ export function AppProvider({ children }) {
     setLocation(initialLocation);
     setRiskMessage("Awaiting live check");
     setClaimsHistory([]);
+    setNotifications([]);
+    setNotificationsError("");
     setDemoClaimsHistory([]);
     setPayoutDetails(null);
     setPayoutAmount(0);
     setWorkflowState(WORKFLOW_STATES.idle);
     setWorkflowMessage("No active claim check");
     setDemoMode(false);
+    setToast(null);
+    lastNotifiedClaimRef.current = "";
     setLastRiskCheckAt("");
     setIsAuthenticated(false);
   };
@@ -1068,6 +1179,9 @@ export function AppProvider({ children }) {
       movementScore,
       claimsHistory: visibleClaimsHistory,
       claimsLoading,
+      notifications,
+      notificationsLoading,
+      notificationsError,
       payoutDetails,
       payoutDetailsLoading,
       demoMode,
@@ -1089,13 +1203,18 @@ export function AppProvider({ children }) {
       refreshRisk,
       refreshPolicy,
       refreshClaims,
+      refreshNotifications,
+      markNotificationAsRead,
       refreshPayoutDetails,
       savePayoutDetails,
       payPremium,
       activatePolicyPayment: payPremium,
       setNotificationsEnabled,
       setThemeEnabled,
-      setAuthError
+      setAuthError,
+      toast,
+      showToast,
+      dismissToast
     }),
     [
       isAuthenticated,
@@ -1120,6 +1239,9 @@ export function AppProvider({ children }) {
       movementScore,
       visibleClaimsHistory,
       claimsLoading,
+      notifications,
+      notificationsLoading,
+      notificationsError,
       payoutDetails,
       payoutDetailsLoading,
       demoMode,
@@ -1136,9 +1258,14 @@ export function AppProvider({ children }) {
       refreshRisk,
       refreshPolicy,
       refreshClaims,
+      refreshNotifications,
+      markNotificationAsRead,
       refreshPayoutDetails,
       savePayoutDetails,
-      payPremium
+      payPremium,
+      toast,
+      showToast,
+      dismissToast
     ]
   );
 

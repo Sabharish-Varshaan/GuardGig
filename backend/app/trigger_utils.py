@@ -384,17 +384,17 @@ def check_trigger(rain: float, aqi: float, temperature: float | None = None) -> 
     if heat_trigger and heat_payout == payout_percentage and heat_payout > 0:
         selected = heat_trigger
         selected_value = temperature
-        trigger_reason = f"Temperature reached {temperature}°C (unsafe working conditions)"
+        trigger_reason = f"Temperature reached {temperature}°C (unsafe)"
         logger.debug(f"  [TRIGGER] Multi-trigger: selecting heat at {heat_payout}%")
     elif rain_trigger and rain_payout == payout_percentage and rain_payout > 0:
         selected = rain_trigger
         selected_value = rain
-        trigger_reason = f"Rainfall reached {rain}mm (unsafe working conditions)"
+        trigger_reason = f"Rainfall reached {rain}mm"
         logger.debug(f"  [TRIGGER] Multi-trigger: selecting rain at {rain_payout}%")
     else:
         selected = aqi_trigger
         selected_value = aqi
-        trigger_reason = f"AQI reached {aqi} (unsafe air quality)"
+        trigger_reason = f"AQI reached {aqi} (hazardous)"
         logger.debug(f"  [TRIGGER] Multi-trigger: selecting aqi at {aqi_payout}%")
 
     logger.info(

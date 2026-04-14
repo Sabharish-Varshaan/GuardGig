@@ -2,22 +2,31 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timezone
-from uuid import uuid4
+import random
 
 logger = logging.getLogger(__name__)
 
 
 def simulate_razorpay_payout(amount: float, user_id: str) -> dict[str, str]:
     logger.info(f"  [PAYOUT] Simulating payout: amount=₹{amount}, user_id={user_id}")
-    transaction_id = f"SIM_TXN_{uuid4().hex[:8].upper()}"
+    transaction_id = f"TXN_{random.randint(100000, 999999)}"
     paid_at = datetime.now(timezone.utc).isoformat()
 
     logger.info(f"  [PAYOUT] ✓ Simulated transaction created: transaction_id={transaction_id}")
     return {
-        "status": "paid",
+        "status": "credited",
         "transaction_id": transaction_id,
         "paid_at": paid_at,
     }
+
+
+def normalize_payout_method(payout_method: str | None) -> str:
+    method = str(payout_method or "pending").strip().lower()
+    if method == "upi":
+        return "UPI"
+    if method == "bank":
+        return "BANK"
+    return "pending"
 
 
 def persist_claim_payment(
@@ -31,6 +40,7 @@ def persist_claim_payment(
     masked_account: str | None,
     trigger_snapshot: dict,
 ) -> dict:
+    normalized_method = normalize_payout_method(payout_method)
     logger.debug(f"  [PERSIST] Saving payout to claim {claim_id}: status={payment_status}, transaction_id={transaction_id}")
     response = (
         admin.table(claims_table)
@@ -39,7 +49,7 @@ def persist_claim_payment(
                 "payment_status": payment_status,
                 "transaction_id": transaction_id,
                 "paid_at": paid_at,
-                "payout_method": payout_method,
+                "payout_method": normalized_method,
                 "masked_account": masked_account,
                 "trigger_snapshot": trigger_snapshot,
             }

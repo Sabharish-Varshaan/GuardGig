@@ -137,6 +137,12 @@ function ProfileScreen({ navigation }) {
             title="Payout Setup"
             variant="secondary"
           />
+          <Button
+            onPress={() => navigation.navigate("Notifications")}
+            style={styles.buttonSpacing}
+            title="Notifications"
+            variant="secondary"
+          />
           <Button onPress={logout} title="Logout" variant="ghost" />
         </Card>
       </ScrollView>

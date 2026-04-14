@@ -59,7 +59,7 @@ def _compute_source_totals(admin) -> tuple[float, float, float]:
     paid_claims = (
         admin.table(settings.supabase_claims_table)
         .select("payout_amount")
-        .eq("payment_status", "paid")
+        .in_("payment_status", ["paid", "credited"])
         .execute()
         .data
         or []
