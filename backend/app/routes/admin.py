@@ -10,7 +10,7 @@ from ..auth_utils import create_access_token, verify_password
 from ..config import get_settings
 from ..dependencies import require_admin_user
 from ..metrics_utils import get_full_metrics
-from ..schemas import AdminLoginRequest, AdminLoginResponse, AdminMetricsResponse, AdminPredictionResponse
+from ..schemas import AdminLoginRequest, AdminLoginResponse, AdminMetricsResponse
 from ..supabase_client import get_admin_client
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
@@ -75,41 +75,5 @@ def get_metrics(current_admin: dict = Depends(require_admin_user)):
         loss_ratio=metrics["loss_ratio"],
         loss_ratio_percentage=round(metrics["loss_ratio"] * 100, 2),
         status=status,
-        last_updated=metrics["last_updated"],
-    )
-
-
-@router.get("/predictions", response_model=AdminPredictionResponse)
-def get_predictions(current_admin: dict = Depends(require_admin_user)):
-    """
-    Provide a simple risk prediction derived from existing dashboard metrics.
-    """
-    admin = get_admin_client()
-    metrics = get_full_metrics(admin)
-
-    total_premium = float(metrics.get("total_premium", 0) or 0)
-    total_payout = float(metrics.get("total_payout", 0) or 0)
-    loss_ratio = float(metrics.get("loss_ratio", 0) or 0)
-
-    risk_score = (loss_ratio * 5) + (total_payout / (total_premium + 1))
-
-    if risk_score > 5:
-        next_week_risk = "HIGH"
-    elif risk_score > 2:
-        next_week_risk = "MEDIUM"
-    else:
-        next_week_risk = "LOW"
-
-    if loss_ratio > 0.85:
-        expected_disruption = "High claim payouts may affect system stability"
-    elif loss_ratio > 0.7:
-        expected_disruption = "Moderate financial risk, monitor closely"
-    else:
-        expected_disruption = "System stable, no major disruption expected"
-
-    return AdminPredictionResponse(
-        next_week_risk=next_week_risk,
-        risk_score=round(risk_score, 2),
-        expected_disruption=expected_disruption,
         last_updated=metrics["last_updated"],
     )

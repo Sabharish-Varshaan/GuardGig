@@ -292,10 +292,3 @@ class AdminMetricsResponse(BaseModel):
     loss_ratio_percentage: float  # For UI: loss_ratio * 100
     status: str  # "healthy", "warning", "critical"
     last_updated: str
-
-
-class AdminPredictionResponse(BaseModel):
-    next_week_risk: str
-    risk_score: float
-    expected_disruption: str
-    last_updated: str
