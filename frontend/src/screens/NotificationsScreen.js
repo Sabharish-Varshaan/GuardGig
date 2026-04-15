@@ -1,7 +1,6 @@
 import React, { useMemo } from "react";
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 
 import Button from "../components/Button";
@@ -41,7 +40,7 @@ function iconForType(type) {
 }
 
 export default function NotificationsScreen() {
-  const tabBarHeight = useBottomTabBarHeight();
+  const insets = useSafeAreaInsets();
   const {
     notifications,
     notificationsLoading,
@@ -54,9 +53,9 @@ export default function NotificationsScreen() {
     () => ({
       paddingHorizontal: appTheme.spacing.sm,
       paddingTop: appTheme.spacing.sm,
-      paddingBottom: tabBarHeight + 20
+      paddingBottom: Math.max(insets.bottom, appTheme.spacing.md) + 12
     }),
-    [tabBarHeight]
+    [insets.bottom]
   );
 
   return (

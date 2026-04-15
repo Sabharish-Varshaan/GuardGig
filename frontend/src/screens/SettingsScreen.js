@@ -1,7 +1,6 @@
 import React from "react";
 import { ScrollView, StyleSheet, Switch, Text, View } from "react-native";
-import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
 import Card from "../components/Card";
 import Header from "../components/Header";
@@ -26,7 +25,7 @@ function ToggleRow({ label, value, onValueChange, description }) {
 }
 
 export default function SettingsScreen() {
-  const tabBarHeight = useBottomTabBarHeight();
+  const insets = useSafeAreaInsets();
   const {
     notificationsEnabled,
     setNotificationsEnabled,
@@ -37,9 +36,9 @@ export default function SettingsScreen() {
     () => ({
       paddingHorizontal: appTheme.spacing.lg,
       paddingTop: appTheme.spacing.lg,
-      paddingBottom: tabBarHeight + 18
+      paddingBottom: Math.max(insets.bottom, appTheme.spacing.md) + 12
     }),
-    [tabBarHeight]
+    [insets.bottom]
   );
 
   return (
