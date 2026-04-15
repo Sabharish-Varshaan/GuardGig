@@ -14,6 +14,7 @@ const initialStats = {
 export default function DashboardPage() {
   const auth = useAuth();
   const [metrics, setMetrics] = useState(initialStats);
+  const [prediction, setPrediction] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [lastUpdated, setLastUpdated] = useState('');
@@ -50,6 +51,19 @@ export default function DashboardPage() {
       mounted = false;
       window.clearInterval(intervalId);
     };
+  }, []);
+
+  useEffect(() => {
+    const fetchPrediction = async () => {
+      try {
+        const res = await api.get('/api/admin/predictions');
+        setPrediction(res.data);
+      } catch (err) {
+        console.error(err);
+      }
+    };
+
+    fetchPrediction();
   }, []);
 
   const cards = [
@@ -91,6 +105,30 @@ export default function DashboardPage() {
           </article>
         ))}
       </section>
+
+      <div className="prediction-panel">
+        <h2>🔮 AI Predictions</h2>
+
+        {prediction && (
+          <>
+            <p>
+              <strong>Next Week Risk:</strong>{' '}
+              <span className={`prediction-${prediction.next_week_risk.toLowerCase()}`}>
+                {prediction.next_week_risk}
+              </span>
+            </p>
+
+            <p>
+              <strong>Risk Score:</strong> {prediction.risk_score}
+            </p>
+
+            <p>
+              <strong>Expected Disruption:</strong>{' '}
+              {prediction.expected_disruption}
+            </p>
+          </>
+        )}
+      </div>
     </div>
   );
 }

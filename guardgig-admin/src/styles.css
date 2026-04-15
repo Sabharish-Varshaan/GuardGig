@@ -281,3 +281,14 @@ input:focus {
     justify-content: space-between;
   }
 }
+
+.prediction-panel {
+  margin-top: 20px;
+  padding: 16px;
+  border-radius: 10px;
+  background: #0f172a;
+}
+
+.prediction-high { color: red; }
+.prediction-medium { color: orange; }
+.prediction-low { color: green; }

@@ -77,3 +77,36 @@ def get_metrics(current_admin: dict = Depends(require_admin_user)):
         status=status,
         last_updated=metrics["last_updated"],
     )
+
+
+@router.get("/predictions")
+def get_predictions(current_admin: dict = Depends(require_admin_user)):
+    admin = get_admin_client()
+    metrics = get_full_metrics(admin)
+
+    total_premium = metrics["total_premium"]
+    total_payout = metrics["total_payout"]
+    loss_ratio = metrics["loss_ratio"]
+
+    risk_score = (loss_ratio * 5) + (total_payout / (total_premium + 1))
+
+    if risk_score > 5:
+        risk = "HIGH"
+    elif risk_score > 2:
+        risk = "MEDIUM"
+    else:
+        risk = "LOW"
+
+    if loss_ratio > 0.85:
+        disruption = "High claim payouts may affect system stability"
+    elif loss_ratio > 0.7:
+        disruption = "Moderate financial risk, monitor closely"
+    else:
+        disruption = "System stable, no major disruption expected"
+
+    return {
+        "next_week_risk": risk,
+        "risk_score": round(risk_score, 2),
+        "expected_disruption": disruption,
+        "last_updated": metrics["last_updated"],
+    }
