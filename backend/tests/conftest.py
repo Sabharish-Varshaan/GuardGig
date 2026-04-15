@@ -17,7 +17,7 @@ if not os.getenv('SUPABASE_URL'):
 
 
 from app.main import app
-from app.dependencies import require_current_user
+from app.dependencies import require_current_user, require_admin_user
 from app.supabase_client import get_admin_client
 from fastapi.testclient import TestClient
 import asyncio
@@ -41,8 +41,16 @@ def override_authenticated_user():
         "id": "test-user-123",
         "phone": "9876543210",
     }
+    app.dependency_overrides[require_admin_user] = lambda: {
+        "id": "test-admin-123",
+        "phone": "9999999999",
+        "role": "admin",
+        "email": "admin@guardgig.com",
+        "full_name": "Test Admin",
+    }
     yield
     app.dependency_overrides.pop(require_current_user, None)
+    app.dependency_overrides.pop(require_admin_user, None)
 
 
 # Mock Database

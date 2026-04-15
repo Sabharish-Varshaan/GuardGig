@@ -292,3 +292,39 @@ class AdminMetricsResponse(BaseModel):
     loss_ratio_percentage: float  # For UI: loss_ratio * 100
     status: str  # "healthy", "warning", "critical"
     last_updated: str
+
+
+class DayForecastSummary(BaseModel):
+    day: str  # e.g., "Mon", "Tue"
+    date: str  # e.g., "2026-04-20"
+    rain: float  # mm
+    temperature: float  # °C
+    payout_pct: int  # 0, 30, 60, or 100
+    triggers: list[str]  # ["RAIN"], ["HEAT"], ["RAIN", "HEAT"], etc.
+
+
+class CityRiskBreakdown(BaseModel):
+    city: str
+    num_policies: int
+    num_users: int
+    max_payout_pct: int  # highest payout percentage across 7 days
+    affected_ratio: float  # dynamic based on max_payout_pct: 0.7 (>=100%), 0.5 (>=60%), 0.3 (>=30%), 0.1 (<30%)
+    expected_claims: int  # num_users * affected_ratio * (max_payout_pct / 100)
+    avg_coverage_amount: float
+    projected_payout: float  # expected_claims * avg_coverage_amount * (max_payout_pct / 100)
+    risk_level: Literal["LOW", "MEDIUM", "HIGH"]
+    risk_score: float  # 0.0 to 1.0, multi-factor: 0.5*severity + 0.3*frequency + 0.2*temperature
+    expected_triggers: list[str]
+
+
+class AdminNextWeekRiskResponse(BaseModel):
+    risk_level: Literal["LOW", "MEDIUM", "HIGH"]
+    risk_score: float  # 0.0 to 1.0, lightweight ML-style aggregate
+    total_expected_claims: int
+    projected_payout: float
+    high_risk_cities: list[str]  # list of city names with HIGH risk
+    max_payout_tier: int  # highest payout_pct across all cities and days
+    days_with_triggers: int  # count of days with at least one trigger
+    city_breakdown: list[CityRiskBreakdown]
+    forecast_summary: list[DayForecastSummary]
+    last_updated: str

@@ -299,6 +299,46 @@ def get_temperature(location: str | None = None, lat: float | None = None, lon: 
     return temperature_celsius
 
 
+def compute_trigger_payouts(rain: float, aqi: float, temperature: float | None = None) -> tuple[int, int, int]:
+    """
+    Compute payout percentages for rain, AQI, and heat triggers.
+    Shared logic for trigger evaluation and forecast simulation.
+    
+    Returns:
+        (rain_payout_pct, aqi_payout_pct, heat_payout_pct) — each 0, 30, 60, or 100
+    """
+    temperature = _safe_float(temperature, 0.0)
+    
+    # Rain thresholds (mm)
+    rain_payout = 0
+    if rain >= 150:
+        rain_payout = 100
+    elif rain >= 100:
+        rain_payout = 60
+    elif rain >= 50:
+        rain_payout = 30
+    
+    # AQI thresholds
+    aqi_payout = 0
+    if aqi >= 500:
+        aqi_payout = 100
+    elif aqi >= 400:
+        aqi_payout = 60
+    elif aqi >= 300:
+        aqi_payout = 30
+
+    # Heat thresholds (°C)
+    heat_payout = 0
+    if temperature >= 47:
+        heat_payout = 100
+    elif temperature >= 44:
+        heat_payout = 60
+    elif temperature >= 40:
+        heat_payout = 30
+    
+    return rain_payout, aqi_payout, heat_payout
+
+
 def check_trigger(rain: float, aqi: float, temperature: float | None = None) -> dict:
     """
     Evaluate rain and AQI against industry-standard parametric insurance thresholds.
@@ -321,46 +361,19 @@ def check_trigger(rain: float, aqi: float, temperature: float | None = None) -> 
     """
     temperature = _safe_float(temperature, 0.0)
 
+    rain_payout, aqi_payout, heat_payout = compute_trigger_payouts(rain, aqi, temperature)
+
     rain_trigger = None
-    rain_payout = 0
-    
-    # Rain thresholds (mm)
-    if rain >= 150:
-        rain_trigger = {"trigger_type": "rain", "severity": "extreme", "payout_percentage": 100}
-        rain_payout = 100
-    elif rain >= 100:
-        rain_trigger = {"trigger_type": "rain", "severity": "high", "payout_percentage": 60}
-        rain_payout = 60
-    elif rain >= 50:
-        rain_trigger = {"trigger_type": "rain", "severity": "moderate", "payout_percentage": 30}
-        rain_payout = 30
+    if rain_payout > 0:
+        rain_trigger = {"trigger_type": "rain", "payout_percentage": rain_payout}
     
     aqi_trigger = None
-    aqi_payout = 0
-    
-    # AQI thresholds
-    if aqi >= 500:
-        aqi_trigger = {"trigger_type": "aqi", "severity": "extreme", "payout_percentage": 100}
-        aqi_payout = 100
-    elif aqi >= 400:
-        aqi_trigger = {"trigger_type": "aqi", "severity": "high", "payout_percentage": 60}
-        aqi_payout = 60
-    elif aqi >= 300:
-        aqi_trigger = {"trigger_type": "aqi", "severity": "moderate", "payout_percentage": 30}
-        aqi_payout = 30
+    if aqi_payout > 0:
+        aqi_trigger = {"trigger_type": "aqi", "payout_percentage": aqi_payout}
 
     heat_trigger = None
-    heat_payout = 0
-
-    if temperature >= 47:
-        heat_trigger = {"trigger_type": "HEAT", "severity": "extreme", "payout_percentage": 100}
-        heat_payout = 100
-    elif temperature >= 44:
-        heat_trigger = {"trigger_type": "HEAT", "severity": "high", "payout_percentage": 60}
-        heat_payout = 60
-    elif temperature >= 40:
-        heat_trigger = {"trigger_type": "HEAT", "severity": "moderate", "payout_percentage": 30}
-        heat_payout = 30
+    if heat_payout > 0:
+        heat_trigger = {"trigger_type": "HEAT", "payout_percentage": heat_payout}
     
     # No trigger
     if not rain_trigger and not aqi_trigger and not heat_trigger:
@@ -380,6 +393,16 @@ def check_trigger(rain: float, aqi: float, temperature: float | None = None) -> 
     
     payout_percentage = max(rain_payout, aqi_payout, heat_payout)
 
+    # Determine severity from payout percentage
+    if payout_percentage >= 100:
+        severity = "extreme"
+    elif payout_percentage >= 60:
+        severity = "high"
+    elif payout_percentage >= 30:
+        severity = "moderate"
+    else:
+        severity = "low"
+
     # Multiple triggers: choose higher payout percentage, preferring HEAT, then rain, then AQI on ties.
     if heat_trigger and heat_payout == payout_percentage and heat_payout > 0:
         selected = heat_trigger
@@ -398,13 +421,13 @@ def check_trigger(rain: float, aqi: float, temperature: float | None = None) -> 
         logger.debug(f"  [TRIGGER] Multi-trigger: selecting aqi at {aqi_payout}%")
 
     logger.info(
-        f"  → TRIGGER DETECTED: type={selected['trigger_type']}, severity={selected['severity']}, payout%={selected['payout_percentage']} (rain={rain}mm, aqi={aqi}, temperature={temperature}C)"
+        f"  → TRIGGER DETECTED: type={selected['trigger_type']}, severity={severity}, payout%={payout_percentage} (rain={rain}mm, aqi={aqi}, temperature={temperature}C)"
     )
     return {
         "triggered": True,
         "trigger_type": selected["trigger_type"],
-        "severity": selected["severity"],
-        "payout_percentage": selected["payout_percentage"],
+        "severity": severity,
+        "payout_percentage": payout_percentage,
         "trigger_value": selected_value,
         "trigger_reason": trigger_reason,
         "rain": rain,
@@ -477,6 +500,52 @@ async def fetch_trigger_snapshot(
         fetch_temperature(location=location, lat=lat, lon=lon, timeout=timeout),
     )
     return rain, aqi, temperature
+
+
+def get_7day_forecast(lat: float, lon: float) -> list[dict]:
+    """
+    Fetch 7-day forecast from Open-Meteo API.
+    
+    Returns list of 7 dicts with keys: date, rain, temperature
+    Falls back to empty list on error.
+    """
+    try:
+        url = f"{_RAIN_URL}?latitude={lat}&longitude={lon}&daily=rain_sum,temperature_2m_max&timezone=auto"
+        response = requests.get(url, timeout=5)
+        response.raise_for_status()
+        data = response.json()
+        
+        daily = data.get("daily", {})
+        dates = daily.get("time", [])
+        rains = daily.get("rain_sum", [])
+        temps = daily.get("temperature_2m_max", [])
+        
+        forecast = []
+        for i in range(min(7, len(dates))):
+            forecast.append({
+                "date": dates[i] if i < len(dates) else None,
+                "rain": _safe_float(rains[i] if i < len(rains) else 0, 0.0),
+                "temperature": _safe_float(temps[i] if i < len(temps) else 0, 0.0),
+            })
+        
+        return forecast
+    except Exception as exc:
+        logger.warning(f"Failed to fetch 7-day forecast: {exc}")
+        return []
+
+
+async def fetch_7day_forecast_async(city: str) -> list[dict]:
+    """
+    Async wrapper to resolve city and fetch 7-day forecast.
+    
+    Returns list of 7 day forecasts with rain (mm) and temperature (°C).
+    """
+    coordinates = resolve_coordinates(location=city)
+    if coordinates is None:
+        logger.warning(f"Could not resolve coordinates for city: {city}")
+        return []
+    
+    return await asyncio.to_thread(get_7day_forecast, coordinates[0], coordinates[1])
 
 
 def evaluate_rain_trigger(rain_mm: float) -> Literal["none", "partial", "full"]:
