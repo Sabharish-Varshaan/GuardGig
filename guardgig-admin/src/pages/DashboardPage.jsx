@@ -93,6 +93,38 @@ export default function DashboardPage() {
     { label: 'Max trigger tier', value: `${risk.max_payout_tier}%` },
   ];
 
+  const sortedCities = [...(risk.city_breakdown || [])].sort(
+    (a, b) => b.max_payout_pct - a.max_payout_pct || b.risk_score - a.risk_score,
+  );
+
+  const totalPortfolioUsers = (risk.city_breakdown || []).reduce(
+    (sum, city) => sum + Number(city.num_users || 0),
+    0,
+  );
+  const portfolioRiskPct = totalPortfolioUsers
+    ? (Number(risk.total_expected_claims || 0) / totalPortfolioUsers) * 100
+    : 0;
+
+  const insightByRisk = {
+    LOW: 'No major disruptions expected',
+    MEDIUM: 'Moderate disruptions expected in some cities',
+    HIGH: 'High risk of claims across multiple cities',
+  };
+
+  const getPayoutClass = (payoutPct) => {
+    if (payoutPct >= 100) return 'payout-red';
+    if (payoutPct >= 60) return 'payout-orange';
+    if (payoutPct >= 30) return 'payout-yellow';
+    return 'payout-green';
+  };
+
+  const getDisruptionLabel = (payoutPct) => {
+    if (payoutPct >= 100) return 'Severe Disruption';
+    if (payoutPct >= 60) return 'Moderate Disruption';
+    if (payoutPct >= 30) return 'Mild Disruption';
+    return 'No Trigger';
+  };
+
   return (
     <div className="dashboard-shell">
       <header className="dashboard-header">
@@ -127,10 +159,15 @@ export default function DashboardPage() {
       </section>
 
       <div className="prediction-panel">
-        <h2>🔮 Next Week Risk Forecast</h2>
+        <h2>Next Week Risk Forecast</h2>
 
         {risk && (
           <>
+            <section className="ai-insight-card">
+              <div className="insight-title">AI Insight</div>
+              <p>{insightByRisk[risk.risk_level] || insightByRisk.LOW}</p>
+            </section>
+
             <section className="risk-grid">
               {riskCards.map((card) => (
                 <article key={card.label} className="risk-card">
@@ -140,13 +177,55 @@ export default function DashboardPage() {
               ))}
             </section>
 
+            <section className="portfolio-insights-grid">
+              <article className="risk-card">
+                <span>Total affected users (estimated)</span>
+                <strong>{risk.total_expected_claims}</strong>
+              </article>
+              <article className="risk-card">
+                <span>% of portfolio at risk</span>
+                <strong>{portfolioRiskPct.toFixed(1)}%</strong>
+              </article>
+            </section>
+
+            <section className="trigger-legend">
+              <h3>Trigger to Payout Guide</h3>
+              <div className="legend-items">
+                <span className="legend-chip payout-green">0% - No Trigger</span>
+                <span className="legend-chip payout-yellow">30% - Mild Disruption</span>
+                <span className="legend-chip payout-orange">60% - Moderate Disruption</span>
+                <span className="legend-chip payout-red">100% - Severe Disruption</span>
+              </div>
+            </section>
+
             {risk.high_risk_cities && risk.high_risk_cities.length > 0 && (
               <div className="high-risk-alert">
-                <strong>⚠️ High Risk Cities:</strong> {risk.high_risk_cities.join(', ')}
+                <strong>High Risk Cities:</strong> {risk.high_risk_cities.join(', ')}
               </div>
             )}
 
-            {risk.city_breakdown && risk.city_breakdown.length > 0 && (
+            {sortedCities.length > 0 && (
+              <section className="top-risk-cities">
+                <h3>Top Risk Cities</h3>
+                <div className="top-city-list">
+                  {sortedCities.map((city) => (
+                    <article key={`priority-${city.city}`} className="top-city-item">
+                      <div>
+                        <strong>{city.city}</strong>
+                        <div className="top-city-meta">
+                          {city.max_payout_pct}% max payout · {city.risk_level}
+                        </div>
+                      </div>
+                      <span className={`city-risk-pill risk-${city.risk_level.toLowerCase()}`}>
+                        {city.risk_level}
+                      </span>
+                    </article>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {sortedCities.length > 0 && (
               <div className="city-breakdown">
                 <h3>City Breakdown</h3>
                 <table className="breakdown-table">
@@ -161,7 +240,7 @@ export default function DashboardPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {risk.city_breakdown.map((city) => (
+                    {sortedCities.map((city) => (
                       <tr key={city.city}>
                         <td>{city.city}</td>
                         <td>{city.num_policies}</td>
@@ -176,170 +255,42 @@ export default function DashboardPage() {
               </div>
             )}
 
-            {risk.forecast_summary && risk.forecast_summary.length > 0 && (
-              <div className="forecast-summary">
-                <h3>7-Day Weather Forecast</h3>
-                <div className="forecast-days">
-                  {risk.forecast_summary.map((day) => (
-                    <div key={day.date} className="forecast-day">
-                      <div className="day-name">{day.day}</div>
-                      <div className="day-date">{day.date}</div>
-                      <div className="day-rain">🌧️ {Number(day.rain).toFixed(1)}mm</div>
-                      <div className="day-temp">🌡️ {Number(day.temperature).toFixed(1)}°C</div>
-                      <div className={`day-payout payout-${day.payout_pct}`}>{day.payout_pct}%</div>
-                      {day.triggers && day.triggers.length > 0 && (
-                        <div className="day-triggers">{day.triggers.join(', ')}</div>
-                      )}
+            {sortedCities.length > 0 && (
+              <section className="city-forecast-section">
+                <h3>City-wise 7-Day Forecast</h3>
+                {sortedCities.map((city) => (
+                  <article key={`forecast-${city.city}`} className="city-forecast-block">
+                    <div className="city-forecast-header">
+                      <h4>{city.city}</h4>
+                      <span className={`city-risk-pill risk-${city.risk_level.toLowerCase()}`}>
+                        {city.max_payout_pct}% max payout
+                      </span>
                     </div>
-                  ))}
-                </div>
-              </div>
+
+                    <div className="forecast-days">
+                      {(city.forecast_days || []).map((day) => {
+                        const payout = Number(day.payout_percentage || 0);
+                        const triggerType = day.trigger_type || 'NONE';
+                        return (
+                          <div key={`${city.city}-${day.date}`} className="forecast-day">
+                            <div className="day-date">{day.date}</div>
+                            <div className="day-temp">Temp: {Number(day.temperature).toFixed(1)}°C</div>
+                            <div className="day-rain">Rain: {Number(day.rain).toFixed(1)} mm</div>
+                            <div className="day-trigger">Trigger: {triggerType}</div>
+                            <div className={`day-payout ${getPayoutClass(payout)}`}>
+                              {payout}% · {getDisruptionLabel(payout)}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </article>
+                ))}
+              </section>
             )}
           </>
         )}
       </div>
-
-      <style jsx>{`
-        .risk-grid {
-          display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-          gap: 1rem;
-          margin: 1rem 0;
-        }
-
-        .risk-card {
-          padding: 1rem;
-          background: #f5f5f5;
-          border-radius: 8px;
-          display: flex;
-          flex-direction: column;
-        }
-
-        .risk-card span {
-          font-size: 0.85rem;
-          color: #666;
-        }
-
-        .risk-card strong {
-          font-size: 1.5rem;
-          margin-top: 0.5rem;
-        }
-
-        .risk-high {
-          color: #d32f2f;
-        }
-
-        .risk-medium {
-          color: #f57c00;
-        }
-
-        .risk-low {
-          color: #388e3c;
-        }
-
-        .high-risk-alert {
-          padding: 1rem;
-          background: #ffebee;
-          border-left: 4px solid #d32f2f;
-          margin: 1rem 0;
-          border-radius: 4px;
-        }
-
-        .city-breakdown {
-          margin: 2rem 0;
-        }
-
-        .breakdown-table {
-          width: 100%;
-          border-collapse: collapse;
-          font-size: 0.9rem;
-        }
-
-        .breakdown-table th,
-        .breakdown-table td {
-          padding: 0.75rem;
-          text-align: left;
-          border-bottom: 1px solid #ddd;
-        }
-
-        .breakdown-table th {
-          background: #f5f5f5;
-          font-weight: 600;
-        }
-
-        .breakdown-table tbody tr:hover {
-          background: #fafafa;
-        }
-
-        .forecast-summary {
-          margin: 2rem 0;
-        }
-
-        .forecast-days {
-          display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
-          gap: 1rem;
-          margin-top: 1rem;
-        }
-
-        .forecast-day {
-          padding: 1rem;
-          background: #f9f9f9;
-          border: 1px solid #ddd;
-          border-radius: 8px;
-          text-align: center;
-          font-size: 0.85rem;
-        }
-
-        .day-name {
-          font-weight: 600;
-          margin-bottom: 0.25rem;
-        }
-
-        .day-date {
-          color: #999;
-          font-size: 0.75rem;
-          margin-bottom: 0.5rem;
-        }
-
-        .day-rain,
-        .day-temp {
-          margin: 0.25rem 0;
-        }
-
-        .day-payout {
-          font-weight: 600;
-          padding: 0.5rem;
-          border-radius: 4px;
-          margin: 0.5rem 0;
-        }
-
-        .payout-100 {
-          background: #ffcdd2;
-          color: #b71c1c;
-        }
-
-        .payout-60 {
-          background: #ffe0b2;
-          color: #e65100;
-        }
-
-        .payout-30 {
-          background: #c8e6c9;
-          color: #2e7d32;
-        }
-
-        .payout-0 {
-          background: #e8f5e9;
-          color: #558b2f;
-        }
-
-        .day-triggers {
-          font-size: 0.7rem;
-          color: #666;
-          margin-top: 0.25rem;
-        }
-      `}</style>
     </div>
   );
 }

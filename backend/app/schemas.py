@@ -303,6 +303,14 @@ class DayForecastSummary(BaseModel):
     triggers: list[str]  # ["RAIN"], ["HEAT"], ["RAIN", "HEAT"], etc.
 
 
+class CityForecastDay(BaseModel):
+    date: str
+    temperature: float
+    rain: float
+    trigger_type: Literal["RAIN", "HEAT", "AQI", "NONE"]
+    payout_percentage: int  # 0, 30, 60, or 100
+
+
 class CityRiskBreakdown(BaseModel):
     city: str
     num_policies: int
@@ -315,6 +323,7 @@ class CityRiskBreakdown(BaseModel):
     risk_level: Literal["LOW", "MEDIUM", "HIGH"]
     risk_score: float  # 0.0 to 1.0, multi-factor: 0.5*severity + 0.3*frequency + 0.2*temperature
     expected_triggers: list[str]
+    forecast_days: list[CityForecastDay]
 
 
 class AdminNextWeekRiskResponse(BaseModel):

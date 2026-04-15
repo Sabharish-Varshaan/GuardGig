@@ -16,6 +16,7 @@ from ..schemas import (
     AdminLoginResponse,
     AdminMetricsResponse,
     AdminNextWeekRiskResponse,
+    CityForecastDay,
     CityRiskBreakdown,
     DayForecastSummary,
 )
@@ -42,6 +43,19 @@ def calculate_affected_ratio(max_payout_pct: int) -> float:
         return 0.3  # 30% affected - light severity
     else:
         return 0.1  # 10% affected - minimal impact
+
+
+def determine_trigger_type(rain_pct: int, aqi_pct: int, heat_pct: int) -> str:
+    if rain_pct == 0 and aqi_pct == 0 and heat_pct == 0:
+        return "NONE"
+
+    if rain_pct >= heat_pct and rain_pct >= aqi_pct and rain_pct > 0:
+        return "RAIN"
+    if heat_pct >= rain_pct and heat_pct >= aqi_pct and heat_pct > 0:
+        return "HEAT"
+    if aqi_pct > 0:
+        return "AQI"
+    return "NONE"
 
 
 @router.post("/login", response_model=AdminLoginResponse)
@@ -188,6 +202,7 @@ async def get_next_week_risk(current_admin: dict = Depends(require_admin_user)):
     # 4. Fetch 7-day forecast for each city and compute risk
     city_results = {}
     all_days_results = {}  # Track all days across all cities
+    system_temperatures = []
     
     for city, policy_records in city_groups.items():
         forecast = await fetch_7day_forecast_async(city)
@@ -201,6 +216,7 @@ async def get_next_week_risk(current_admin: dict = Depends(require_admin_user)):
         # Compute max payout and triggers for this city
         max_payout_pct = 0
         expected_triggers_set = set()
+        city_forecast_days = []
         
         for day_idx, day_data in enumerate(forecast[:7]):
             rain = day_data.get("rain", 0.0)
@@ -209,6 +225,7 @@ async def get_next_week_risk(current_admin: dict = Depends(require_admin_user)):
             
             rain_pct, aqi_pct, heat_pct = compute_trigger_payouts(rain, aqi, temp)
             day_max_pct = max(rain_pct, aqi_pct, heat_pct)
+            trigger_type = determine_trigger_type(rain_pct, aqi_pct, heat_pct)
             
             if day_max_pct > max_payout_pct:
                 max_payout_pct = day_max_pct
@@ -220,6 +237,16 @@ async def get_next_week_risk(current_admin: dict = Depends(require_admin_user)):
                 expected_triggers_set.add("HEAT")
             if aqi_pct > 0:
                 expected_triggers_set.add("AQI")
+
+            city_forecast_days.append(
+                CityForecastDay(
+                    date=day_data.get("date", ""),
+                    temperature=float(temp),
+                    rain=float(rain),
+                    trigger_type=trigger_type,
+                    payout_percentage=day_max_pct,
+                )
+            )
             
             # Store day result keyed by date
             date_str = day_data.get("date", "")
@@ -263,6 +290,7 @@ async def get_next_week_risk(current_admin: dict = Depends(require_admin_user)):
         # Calculate average temperature for this city
         city_temps = [day_data.get("temperature", 20.0) for day_data in forecast[:7]]
         city_avg_temp = sum(city_temps) / len(city_temps) if city_temps else 20.0
+        system_temperatures.extend(city_temps)
         
         # New multi-factor risk scoring per city
         city_risk_score = (
@@ -296,6 +324,7 @@ async def get_next_week_risk(current_admin: dict = Depends(require_admin_user)):
             "trigger_days": city_trigger_days,
             "avg_temp": city_avg_temp,
             "expected_triggers": sorted(list(expected_triggers_set)),
+            "forecast_days": city_forecast_days,
         }
     
     # 5. Aggregate system-wide results
@@ -307,13 +336,7 @@ async def get_next_week_risk(current_admin: dict = Depends(require_admin_user)):
     num_trigger_days = sum(1 for d in all_days_results.values() if d["payout_pct"] > 0)
     
     # Calculate system-wide average temperature from all city forecasts
-    all_temps = []
-    for city, policy_records in city_groups.items():
-        forecast = await fetch_7day_forecast_async(city)
-        if forecast:
-            all_temps.extend([day_data.get("temperature", 20.0) for day_data in forecast[:7]])
-    
-    avg_temperature = (sum(all_temps) / len(all_temps)) if all_temps else 20.0
+    avg_temperature = (sum(system_temperatures) / len(system_temperatures)) if system_temperatures else 20.0
     
     # New multi-factor risk scoring formula (system-wide)
     system_risk_score = (
@@ -358,6 +381,7 @@ async def get_next_week_risk(current_admin: dict = Depends(require_admin_user)):
             risk_level=r["risk_level"],
             risk_score=r["risk_score"],
             expected_triggers=r["expected_triggers"],
+            forecast_days=r["forecast_days"],
         )
         for city, r in city_results.items()
     ]
