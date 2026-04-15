@@ -155,3 +155,79 @@ class TestAdminRoutes:
             )
 
             assert user_response.status_code == 403
+
+    def test_admin_predictions_admin_only(self, client, mock_admin):
+        admin_token = create_access_token(
+            user_id="admin-123",
+            phone="9999999999",
+            role="admin",
+            email="admin@guardgig.com",
+        )
+        user_token = create_access_token(
+            user_id="user-123",
+            phone="8888888888",
+            role="user",
+            email="user@guardgig.com",
+        )
+
+        admin_row = {
+            "id": "admin-123",
+            "full_name": "GuardGig Admin",
+            "email": "admin@guardgig.com",
+            "phone": "9999999999",
+            "role": "admin",
+        }
+        user_row = {
+            "id": "user-123",
+            "full_name": "Normal User",
+            "email": "user@guardgig.com",
+            "phone": "8888888888",
+            "role": "user",
+        }
+        metrics_row = {
+            "id": 1,
+            "total_premium": 12000.0,
+            "total_payout": 3000.0,
+            "loss_ratio": 0.25,
+            "last_updated": "2024-01-01T12:00:00Z",
+        }
+
+        with patch("app.dependencies.get_admin_client") as mock_dep_admin, patch(
+            "app.routes.admin.get_admin_client"
+        ) as mock_route_admin:
+            mock_dep_admin.return_value = mock_admin
+            mock_route_admin.return_value = mock_admin
+
+            mock_admin.table.return_value.select.return_value.eq.return_value.limit.return_value.execute.side_effect = [
+                MagicMock(data=[admin_row]),
+                MagicMock(data=[admin_row]),
+                MagicMock(data=[metrics_row]),
+            ]
+
+            admin_response = client.get(
+                "/api/admin/predictions",
+                headers={"Authorization": f"Bearer {admin_token}"},
+            )
+
+            assert admin_response.status_code == 200
+            admin_body = admin_response.json()
+            assert admin_body["next_week_risk"] == "LOW"
+            assert admin_body["risk_score"] == 0.5
+
+        with patch("app.dependencies.get_admin_client") as mock_dep_admin, patch(
+            "app.routes.admin.get_admin_client"
+        ) as mock_route_admin:
+            mock_dep_admin.return_value = mock_admin
+            mock_route_admin.return_value = mock_admin
+
+            mock_admin.table.return_value.select.return_value.eq.return_value.limit.return_value.execute.side_effect = [
+                MagicMock(data=[user_row]),
+                MagicMock(data=[user_row]),
+            ]
+
+            user_response = client.get(
+                "/api/admin/predictions",
+                headers={"Authorization": f"Bearer {user_token}"},
+            )
+
+            assert user_response.status_code == 403

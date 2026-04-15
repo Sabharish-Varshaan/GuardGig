@@ -11,9 +11,17 @@ const initialStats = {
   last_updated: '',
 };
 
+const initialPrediction = {
+  next_week_risk: 'LOW',
+  risk_score: 0,
+  expected_disruption: '',
+  last_updated: '',
+};
+
 export default function DashboardPage() {
   const auth = useAuth();
   const [metrics, setMetrics] = useState(initialStats);
+  const [prediction, setPrediction] = useState(initialPrediction);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [lastUpdated, setLastUpdated] = useState('');
@@ -24,7 +32,6 @@ export default function DashboardPage() {
     const loadMetrics = async () => {
       try {
         const response = await api.get('/api/admin/metrics');
-        console.log(response.data);
         if (!mounted) {
           return;
         }
@@ -36,6 +43,23 @@ export default function DashboardPage() {
           return;
         }
         setError(err?.response?.data?.detail || 'Unable to load metrics');
+      }
+    };
+
+    const loadPrediction = async () => {
+      try {
+        const response = await api.get('/api/admin/predictions', {
+          headers: auth.token ? { Authorization: `Bearer ${auth.token}` } : {},
+        });
+        if (!mounted) {
+          return;
+        }
+        setPrediction(response.data);
+      } catch (err) {
+        if (!mounted) {
+          return;
+        }
+        setError(err?.response?.data?.detail || 'Unable to load predictions');
       } finally {
         if (mounted) {
           setLoading(false);
@@ -44,6 +68,7 @@ export default function DashboardPage() {
     };
 
     loadMetrics();
+    loadPrediction();
     const intervalId = window.setInterval(loadMetrics, 10000);
 
     return () => {
@@ -58,6 +83,8 @@ export default function DashboardPage() {
     { label: 'Loss ratio', value: `${Number(metrics.loss_ratio_percentage).toFixed(2)}%` },
     { label: 'Risk status', value: metrics.status },
   ];
+
+  const predictionTone = String(prediction.next_week_risk || 'LOW').toLowerCase();
 
   return (
     <div className="dashboard-shell">
@@ -90,6 +117,30 @@ export default function DashboardPage() {
             <strong>{card.value}</strong>
           </article>
         ))}
+      </section>
+
+      <section className="prediction-panel">
+        <div className="section-heading">
+          <div className="eyebrow">AI Predictions</div>
+          <h2>Next week outlook</h2>
+        </div>
+
+        <div className="prediction-grid">
+          <article className={`prediction-card prediction-${predictionTone}`}>
+            <span>Next Week Risk</span>
+            <strong>{prediction.next_week_risk}</strong>
+          </article>
+
+          <article className="prediction-card">
+            <span>Risk Score</span>
+            <strong>{Number(prediction.risk_score).toFixed(2)}</strong>
+          </article>
+
+          <article className="prediction-card prediction-wide">
+            <span>Expected Disruption</span>
+            <strong>{prediction.expected_disruption || 'Waiting for prediction...'}</strong>
+          </article>
+        </div>
       </section>
     </div>
   );
