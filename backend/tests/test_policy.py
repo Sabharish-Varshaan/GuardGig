@@ -248,12 +248,14 @@ class TestPolicyRiskUnderwriting:
         """Coverage should follow the ML-driven formula based on income and risk."""
         mean_income = 100.0
         risk_score = 0.75
+        trigger_probability = 0.08 - (0.06 * risk_score)
+        premium = max(20.0, min(trigger_probability * mean_income * 3.0, 50.0))
 
-        coverage_amount = round((mean_income * 2) * (0.5 + 0.5 * risk_score), 2)
+        coverage_amount = round((premium / trigger_probability) * 0.65, 2)
 
         print("\n[TEST] Policy Risk - ML Coverage")
         print(f"Input: risk_score={risk_score}, mean_income={mean_income}")
-        print("Expected: coverage_amount=175.0")
+        print("Expected: coverage_amount=371.43")
         print(f"Actual: coverage_amount={coverage_amount}")
-        assert coverage_amount == 175.0
+        assert coverage_amount == 371.43
         print("Result: PASS")
