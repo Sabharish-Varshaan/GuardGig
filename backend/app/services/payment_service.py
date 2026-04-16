@@ -40,6 +40,9 @@ def persist_claim_payment(
     payout_method: str,
     masked_account: str | None,
     trigger_snapshot: dict,
+    order_id: str | None = None,
+    payment_id: str | None = None,
+    payment_signature: str | None = None,
 ) -> dict:
     normalized_method = normalize_payout_method(payout_method)
     logger.debug(f"  [PERSIST] Saving payout to claim {claim_id}: status={payment_status}, transaction_id={transaction_id}")
@@ -53,6 +56,12 @@ def persist_claim_payment(
     }
     if payout_status is not None:
         update_payload["payout_status"] = payout_status
+    if order_id is not None:
+        update_payload["order_id"] = order_id
+    if payment_id is not None:
+        update_payload["payment_id"] = payment_id
+    if payment_signature is not None:
+        update_payload["payment_signature"] = payment_signature
 
     response = (
         admin.table(claims_table)

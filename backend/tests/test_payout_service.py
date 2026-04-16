@@ -35,6 +35,9 @@ def test_process_payout_upi_credited(mock_admin):
     assert result["payment_status"] == "credited"
     assert result["payout_status"] == "credited"
     assert result["payout_method"] == "upi"
+    assert result["order_id"].startswith("order_")
+    assert result["payment_id"].startswith("pay_")
+    assert result["payment_signature"].startswith("sig_")
     assert result["transaction_id"].startswith("RZP_")
     assert len(result["transaction_id"]) == 14
 

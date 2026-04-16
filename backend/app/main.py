@@ -33,9 +33,10 @@ from .routes.claim import router as claim_router
 from .routes.fraud import router as fraud_router
 from .routes.ml_demo import router as ml_demo_router
 from .services.notification_service import create_notification
+from .services.policy_lifecycle_service import update_policy_status
 from .services.payout_service import process_payout
 from .supabase_client import get_admin_client
-from .trigger_utils import check_trigger, fetch_trigger_snapshot
+from .trigger_utils import TRIGGERS, check_trigger, fetch_trigger_snapshot
 
 settings = get_settings()
 IST = ZoneInfo("Asia/Kolkata")
@@ -98,6 +99,7 @@ async def automated_claim_check():
     logger.info(f"Found {len(policies)} active policies to process")
 
     for policy in policies:
+        policy = update_policy_status(admin, settings.supabase_policies_table, policy)
         user_id = policy["user_id"]
         policy_id = policy["id"]
         logger.info(f"Processing policy {policy_id} for user {user_id}")
@@ -107,7 +109,7 @@ async def automated_claim_check():
             logger.info(f"  → Skipping: payment_status is not 'success'")
             continue
 
-        expires_at = _parse_iso_datetime(policy.get("expires_at"))
+        expires_at = _parse_iso_datetime(policy.get("end_date") or policy.get("expires_at"))
         now_utc = datetime.now(timezone.utc)
         if expires_at is None or now_utc > expires_at:
             logger.info(f"  → Skipping: policy expired or no expiry set")
@@ -145,6 +147,9 @@ async def automated_claim_check():
             continue
         
         trigger_type = trigger_data["trigger_type"]
+        if trigger_type not in TRIGGERS:
+            logger.warning("  → Skipping: invalid trigger type '%s'", trigger_type)
+            continue
         severity = trigger_data["severity"]
         payout_percentage_raw = trigger_data["payout_percentage"]
         trigger_value = trigger_data["trigger_value"]

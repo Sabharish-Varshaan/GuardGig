@@ -241,6 +241,7 @@ def verify_payment(request: PaymentVerifyRequest, current_user: dict = Depends(r
     expires_at_dt = activated_at_dt + timedelta(days=7)
     activated_at = activated_at_dt.isoformat()
     expires_at = expires_at_dt.isoformat()
+    end_date = expires_at
 
     try:
         response = (
@@ -252,6 +253,7 @@ def verify_payment(request: PaymentVerifyRequest, current_user: dict = Depends(r
                     "payment_id": payment_id,
                     "activated_at": activated_at,
                     "expires_at": expires_at,
+                    "end_date": end_date,
                     "updated_at": activated_at,
                 }
             )

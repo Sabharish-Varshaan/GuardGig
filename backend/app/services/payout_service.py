@@ -60,6 +60,9 @@ def process_payout(
             }
 
         payout_method, masked_account = payout_destination
+        order_id = f"order_{random.randint(1000000000, 9999999999)}"
+        payment_id = f"pay_{random.randint(1000000000, 9999999999)}"
+        payment_signature = f"sig_{random.randint(1000000000, 9999999999)}"
         transaction_id = f"RZP_{random.randint(1000000000, 9999999999)}"
         paid_at = datetime.now(timezone.utc).isoformat()
 
@@ -74,7 +77,11 @@ def process_payout(
             payout_method,
             masked_account,
             trigger_snapshot,
+            order_id,
+            payment_id,
+            payment_signature,
         )
+        logger.info("[PAYMENT STORED] order_id=%s payment_id=%s", order_id, payment_id)
 
         logger.info(
             "[PAYOUT SUCCESS] claim_id=%s transaction_id=%s method=%s",
@@ -90,6 +97,9 @@ def process_payout(
             "paid_at": paid_at,
             "payout_method": payout_method,
             "masked_account": masked_account,
+            "order_id": order_id,
+            "payment_id": payment_id,
+            "payment_signature": payment_signature,
         }
     except Exception as exc:
         logger.exception("[PAYOUT FAILED] claim_id=%s reason=unexpected_error error=%s", claim_id, str(exc))
@@ -117,4 +127,7 @@ def process_payout(
             "paid_at": None,
             "payout_method": "pending",
             "masked_account": None,
+            "order_id": None,
+            "payment_id": None,
+            "payment_signature": None,
         }

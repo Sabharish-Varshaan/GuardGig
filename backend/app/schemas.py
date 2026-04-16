@@ -82,8 +82,10 @@ class PolicyResponse(BaseModel):
     payment_id: Optional[str] = None
     activated_at: Optional[str] = None
     expires_at: Optional[str] = None
+    end_date: Optional[str] = None
     policy_start_date: str
     status: Literal["active", "inactive"]
+    is_active: Optional[bool] = None
     eligibility_status: str = "eligible"
     worker_tier: str = "medium"
     created_at: str
@@ -227,6 +229,9 @@ class ClaimResponse(BaseModel):
     risk_score: Optional[float] = Field(None, ge=0, le=1)
     payout_status: Optional[str] = None
     payment_status: Optional[str] = None
+    order_id: Optional[str] = None
+    payment_id: Optional[str] = None
+    payment_signature: Optional[str] = None
     transaction_id: Optional[str] = None
     paid_at: Optional[str] = None
     payout_method: Optional[str] = None
@@ -235,6 +240,14 @@ class ClaimResponse(BaseModel):
     rule_decision_reason: Optional[str] = None
     created_at: str
     updated_at: str
+
+    @field_validator("trigger_type")
+    @classmethod
+    def normalize_trigger_type_value(cls, value: str) -> str:
+        normalized = str(value or "").strip().upper()
+        if normalized in {"RAIN", "AQI", "HEAT"}:
+            return normalized
+        return normalized
 
 
 class ClaimCreateResponse(BaseModel):

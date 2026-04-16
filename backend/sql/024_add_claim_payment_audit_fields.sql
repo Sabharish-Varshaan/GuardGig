@@ -1,0 +1,4 @@
+ALTER TABLE IF EXISTS public.claims
+  ADD COLUMN IF NOT EXISTS order_id TEXT,
+  ADD COLUMN IF NOT EXISTS payment_id TEXT,
+  ADD COLUMN IF NOT EXISTS payment_signature TEXT;

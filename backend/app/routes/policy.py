@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
@@ -10,6 +10,7 @@ from ..config import (
 from ..dependencies import require_current_user
 from ..metrics_utils import check_loss_ratio_threshold
 from ..premium_utils import calculate_policy_risk_score, calculate_premium
+from ..services.policy_lifecycle_service import update_policy_status
 from ..schemas import PolicyCreateResponse, PolicyResponse
 from ..supabase_client import get_admin_client
 
@@ -143,6 +144,7 @@ def create_policy(current_user: dict = Depends(require_current_user)):
 
     # Create policy
     now = datetime.now(timezone.utc)
+    end_date = (now + timedelta(days=7)).isoformat()
     policy_data = {
         "user_id": current_user["id"],
         "weekly_income": weekly_income,
@@ -154,6 +156,7 @@ def create_policy(current_user: dict = Depends(require_current_user)):
         "premium": premium,
         "coverage_amount": coverage_amount,
         "policy_start_date": now.date().isoformat(),
+        "end_date": end_date,
         "status": "inactive",
         "payment_status": "pending",
         "eligibility_status": eligibility_status,
@@ -182,7 +185,7 @@ def create_policy(current_user: dict = Depends(require_current_user)):
             detail="Policy creation completed but no policy returned"
         )
 
-    policy = rows[0]
+    policy = update_policy_status(admin, settings.supabase_policies_table, rows[0])
     return PolicyCreateResponse(
         status="created",
         policy=PolicyResponse(**policy),
@@ -216,5 +219,5 @@ def get_my_policy(current_user: dict = Depends(require_current_user)):
             detail="No policy found for this user"
         )
 
-    policy = rows[0]
+    policy = update_policy_status(admin, settings.supabase_policies_table, rows[0])
     return PolicyResponse(**policy)

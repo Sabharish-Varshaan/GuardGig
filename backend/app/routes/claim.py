@@ -15,9 +15,10 @@ from ..dependencies import require_current_user
 from ..metrics_utils import update_metrics_on_payout
 from ..schemas import ClaimCreateResponse, ClaimsListResponse, ClaimResponse
 from ..services.notification_service import create_notification
+from ..services.policy_lifecycle_service import update_policy_status
 from ..services.payout_service import process_payout
 from ..supabase_client import get_admin_client
-from ..trigger_utils import check_trigger
+from ..trigger_utils import TRIGGERS, check_trigger
 
 router = APIRouter(prefix="/api", tags=["claim"])
 logger = logging.getLogger(__name__)
@@ -77,9 +78,9 @@ def create_demo_claim(current_user: dict = Depends(require_current_user)):
             detail="No active paid policy found. Complete payment to activate policy first.",
         )
 
-    policy = policy_rows[0]
-    expires_at = _parse_iso_datetime(policy.get("expires_at"))
-    if expires_at is None or datetime.now(timezone.utc) > expires_at:
+    policy = update_policy_status(admin, settings.supabase_policies_table, policy_rows[0])
+    expires_at = _parse_iso_datetime(policy.get("end_date") or policy.get("expires_at"))
+    if str(policy.get("status") or "").lower() != "active" or expires_at is None or datetime.now(timezone.utc) > expires_at:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Policy expired or invalid expiry. Renew policy first.",
@@ -117,6 +118,8 @@ def create_demo_claim(current_user: dict = Depends(require_current_user)):
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Demo trigger failed")
 
     trigger_type = trigger_data["trigger_type"]
+    if trigger_type not in TRIGGERS:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid trigger type")
     severity = trigger_data["severity"]
     payout_percentage_raw = trigger_data["payout_percentage"]
     trigger_value = trigger_data["trigger_value"]

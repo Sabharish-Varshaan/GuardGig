@@ -16,6 +16,15 @@ from .utils.cache_utils import get_cache, set_cache
 
 logger = logging.getLogger(__name__)
 
+TRIGGERS = ("RAIN", "AQI", "HEAT")
+
+
+def normalize_trigger_type(trigger_type: str) -> str:
+    normalized = str(trigger_type or "").strip().upper()
+    if normalized not in TRIGGERS:
+        raise ValueError(f"Invalid trigger_type: {trigger_type}")
+    return normalized
+
 load_dotenv()
 
 _RAIN_URL = "https://api.open-meteo.com/v1/forecast"
@@ -349,7 +358,7 @@ def check_trigger(rain: float, aqi: float, temperature: float | None = None) -> 
     Returns:
         {
             "triggered": bool,
-            "trigger_type": "rain" | "aqi" | "HEAT",
+            "trigger_type": "RAIN" | "AQI" | "HEAT",
             "severity": "moderate" | "high" | "extreme",
             "payout_percentage": int (0, 30, 60, 100),
             "trigger_value": float,
@@ -366,11 +375,11 @@ def check_trigger(rain: float, aqi: float, temperature: float | None = None) -> 
 
     rain_trigger = None
     if rain_payout > 0:
-        rain_trigger = {"trigger_type": "rain", "payout_percentage": rain_payout}
+        rain_trigger = {"trigger_type": "RAIN", "payout_percentage": rain_payout}
     
     aqi_trigger = None
     if aqi_payout > 0:
-        aqi_trigger = {"trigger_type": "aqi", "payout_percentage": aqi_payout}
+        aqi_trigger = {"trigger_type": "AQI", "payout_percentage": aqi_payout}
 
     heat_trigger = None
     if heat_payout > 0:
@@ -408,7 +417,7 @@ def check_trigger(rain: float, aqi: float, temperature: float | None = None) -> 
     if heat_trigger and heat_payout == payout_percentage and heat_payout > 0:
         selected = heat_trigger
         selected_value = temperature
-        trigger_reason = f"Temperature reached {temperature}°C (unsafe)"
+        trigger_reason = f"Temperature reached {temperature}°C (unsafe working conditions)"
         logger.debug(f"  [TRIGGER] Multi-trigger: selecting heat at {heat_payout}%")
     elif rain_trigger and rain_payout == payout_percentage and rain_payout > 0:
         selected = rain_trigger

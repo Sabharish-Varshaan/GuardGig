@@ -336,7 +336,7 @@ class TestHeatTriggerLogic:
 
         assert trigger["triggered"] is True
         assert trigger["payout_percentage"] == 100
-        assert trigger["trigger_type"] == "rain"
+        assert trigger["trigger_type"] == "RAIN"
         assert trigger["trigger_value"] == 160.0
 
 
