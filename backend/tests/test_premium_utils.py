@@ -1,6 +1,11 @@
 from unittest.mock import patch
 
-from app.premium_utils import calculate_coverage_amount, calculate_premium, _calculate_bcr_pricing_from_probability
+from app.premium_utils import (
+    _calculate_bcr_pricing_from_probability,
+    calculate_coverage_amount,
+    calculate_policy_risk_score,
+    calculate_premium,
+)
 
 
 def test_same_income_different_risk_changes_coverage():
@@ -98,4 +103,40 @@ def test_trigger_probability_edge_case_fallback():
     assert 20.0 <= premium <= 50.0
     assert coverage <= 600.0
     assert 0.60 <= ratio <= 0.70
+
+
+def test_forecast_driven_risk_score_varies_low_vs_high_weather():
+    low_forecast = [
+        {"temperature": 27.0, "rain": 0.0, "aqi": 30.0},
+        {"temperature": 28.0, "rain": 0.0, "aqi": 35.0},
+        {"temperature": 29.0, "rain": 1.0, "aqi": 40.0},
+        {"temperature": 28.0, "rain": 0.0, "aqi": 38.0},
+        {"temperature": 27.0, "rain": 0.0, "aqi": 32.0},
+        {"temperature": 29.0, "rain": 0.5, "aqi": 34.0},
+        {"temperature": 28.0, "rain": 0.0, "aqi": 33.0},
+    ]
+    high_forecast = [
+        {"temperature": 45.0, "rain": 80.0, "aqi": 180.0},
+        {"temperature": 46.0, "rain": 95.0, "aqi": 190.0},
+        {"temperature": 44.0, "rain": 70.0, "aqi": 175.0},
+        {"temperature": 47.0, "rain": 110.0, "aqi": 210.0},
+        {"temperature": 45.0, "rain": 90.0, "aqi": 195.0},
+        {"temperature": 46.0, "rain": 85.0, "aqi": 200.0},
+        {"temperature": 44.0, "rain": 100.0, "aqi": 188.0},
+    ]
+
+    low_risk = calculate_policy_risk_score(400.0, forecast_data=low_forecast)
+    high_risk = calculate_policy_risk_score(400.0, forecast_data=high_forecast)
+
+    assert high_risk > low_risk
+
+
+def test_forecast_driven_risk_changes_premium_for_same_income():
+    low_forecast = [{"temperature": 27.0, "rain": 0.0, "aqi": 30.0} for _ in range(7)]
+    high_forecast = [{"temperature": 46.0, "rain": 90.0, "aqi": 200.0} for _ in range(7)]
+
+    low_premium = calculate_premium(250.0, forecast_data=low_forecast)
+    high_premium = calculate_premium(250.0, forecast_data=high_forecast)
+
+    assert low_premium != high_premium
 

@@ -7,5 +7,13 @@ router = APIRouter(prefix="/api/premium", tags=["premium"])
 
 @router.post("/calculate", response_model=PremiumCalculateResponse)
 def calculate_premium(request: PremiumCalculateRequest):
-    premium = compute_premium(request.income, request.risk_preference, request.income_variance or 0)
+    premium = compute_premium(
+        request.income,
+        request.risk_preference,
+        request.income_variance or 0,
+        city=request.city,
+        lat=request.lat,
+        lon=request.lon,
+        forecast_data=request.forecast_data,
+    )
     return PremiumCalculateResponse(premium=premium)

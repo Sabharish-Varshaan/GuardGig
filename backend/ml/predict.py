@@ -40,20 +40,22 @@ _risk_model = _load_model(_RISK_MODEL_PATH)
 _fraud_model = _load_model(_FRAUD_MODEL_PATH)
 
 
+def _coerce_forecast_rows(payload: Dict[str, Any]) -> list[dict[str, float]]:
+    forecast_data = payload.get("forecast_data")
+    if isinstance(forecast_data, list):
+        return [row for row in forecast_data if isinstance(row, dict)]
+
+    row = {
+        "temperature": float(payload.get("temperature") or payload.get("temp") or 0.0),
+        "rain": float(payload.get("rain") or payload.get("rain_mm") or 0.0),
+        "aqi": float(payload.get("aqi") or 0.0),
+    }
+    return [row]
+
+
 def _features_for_risk(payload: Dict[str, Any]) -> list[float]:
-    # Expecting keys: mean_income, income_variance, rain, aqi, lat, lon
-    mean_income = float(payload.get("mean_income") or 0.0)
-    income_variance = float(payload.get("income_variance") or 0.0)
-    rain = float(payload.get("rain") or 0.0)
-    aqi = float(payload.get("aqi") or 0.0)
-
-    # Feature engineering per spec
-    income_norm = mean_income / 1000.0
-    variance_norm = income_variance
-    rain_norm = rain / 100.0
-    aqi_norm = aqi / 500.0
-
-    return [income_norm, variance_norm, rain_norm, aqi_norm]
+    forecast_rows = _coerce_forecast_rows(payload)
+    return build_features(forecast_rows)
 
 
 def _features_for_next_week_risk(payload: Dict[str, Any]) -> list[float]:
@@ -290,23 +292,28 @@ def _fraud_safety_overlay(payload: Dict[str, Any]) -> float:
 def get_risk_score(features: Dict[str, Any]) -> float:
     """Return risk score in [0,1].
 
-    Features (dict) should include at least mean_income and income_variance. Other keys
-    (rain, aqi) are optional and default to 0.
+    Pricing risk uses the same 9-feature forecast representation as admin forecasting.
     """
+    forecast_rows = _coerce_forecast_rows(features)
+    summary = summarize_forecast(forecast_rows)
     vec = _features_for_risk(features)
-    try:
-        if _is_model_compatible(_risk_model, len(vec)):
-            return _predict_probability(_risk_model, vec)
-    except Exception as exc:
-        logger.debug("Risk model prediction failed: %s", exc)
+    model = _load_risk_model()
 
-    # fallback heuristic: higher income -> lower risk, higher variance/rain/aqi -> higher risk
-    income_norm, variance_norm, rain_norm, aqi_norm = vec
-    score = 0.5 * (1.0 - min(1.0, income_norm / 3.0))
-    score += 0.3 * min(1.0, variance_norm)
-    score += 0.1 * min(1.0, rain_norm)
-    score += 0.1 * min(1.0, aqi_norm)
-    return float(max(0.0, min(1.0, round(score, 2))))
+    try:
+        if _is_model_compatible(model, len(vec)):
+            score = _predict_probability(model, vec)
+            logger.info("[ML PRICING USED] feature_count=%s risk_score=%.3f", len(vec), score)
+            return score
+
+        logger.warning(
+            "[ML PRICING FALLBACK] model_incompatible=True expected=%s got=%s",
+            getattr(model, "n_features_in_", "unknown"),
+            len(vec),
+        )
+    except Exception as exc:
+        logger.warning("[ML PRICING FALLBACK] prediction_failed=%s", exc)
+
+    return float(np.clip(_next_week_heuristic(summary), 0.0, 1.0))
 
 
 def get_next_week_risk_score(forecast_data) -> dict:

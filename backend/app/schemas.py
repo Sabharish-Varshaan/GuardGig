@@ -177,6 +177,10 @@ class PremiumCalculateRequest(BaseModel):
     income: float = Field(gt=0)
     income_variance: Optional[float] = 0
     risk_preference: Literal["Low", "Medium", "High"] = "Medium"
+    city: Optional[str] = None
+    lat: Optional[float] = None
+    lon: Optional[float] = None
+    forecast_data: Optional[list[dict]] = None
 
 
 class PremiumCalculateResponse(BaseModel):

@@ -3,6 +3,8 @@ import logging
 
 from ml.predict import get_risk_score
 
+from .trigger_utils import get_7day_forecast, resolve_coordinates
+
 
 logger = logging.getLogger(__name__)
 
@@ -58,19 +60,66 @@ def _calculate_bcr_pricing(mean_income: float, risk_score: float) -> tuple[float
     return premium, coverage
 
 
-def calculate_policy_risk_score(income: float, income_variance: float = 0.0, *, rain: float = 0.0, aqi: float = 0.0) -> float:
+def _resolve_pricing_forecast(
+    city: str | None = None,
+    lat: float | None = None,
+    lon: float | None = None,
+    forecast_data: list[dict] | None = None,
+) -> list[dict]:
+    if isinstance(forecast_data, list) and forecast_data:
+        return [row for row in forecast_data if isinstance(row, dict)]
+
+    resolved_lat = lat
+    resolved_lon = lon
+
+    if resolved_lat is None or resolved_lon is None:
+        coordinates = resolve_coordinates(location=city, lat=lat, lon=lon)
+        if coordinates is not None:
+            resolved_lat, resolved_lon = coordinates
+
+    if resolved_lat is None or resolved_lon is None:
+        return []
+
+    try:
+        return get_7day_forecast(float(resolved_lat), float(resolved_lon))
+    except Exception as exc:
+        logger.warning("[ML PRICING FALLBACK] forecast_fetch_failed=%s", exc)
+        return []
+
+
+def calculate_policy_risk_score(
+    income: float,
+    income_variance: float = 0.0,
+    *,
+    rain: float = 0.0,
+    aqi: float = 0.0,
+    city: str | None = None,
+    lat: float | None = None,
+    lon: float | None = None,
+    forecast_data: list[dict] | None = None,
+) -> float:
     """Calculate policy risk score in [0, 1] from underwriting features."""
-    features = {
-        "mean_income": float(income or 0.0),
-        "income_variance": float(income_variance or 0.0),
-        "rain": float(rain or 0.0),
-        "aqi": float(aqi or 0.0),
-    }
+    _ = income
+    _ = income_variance
+    _ = rain
+    _ = aqi
+    resolved_forecast = _resolve_pricing_forecast(city=city, lat=lat, lon=lon, forecast_data=forecast_data)
+
+    if not resolved_forecast:
+        logger.warning(
+            "[ML PRICING FALLBACK] forecast_unavailable=True city=%s lat=%s lon=%s",
+            city,
+            lat,
+            lon,
+        )
+
+    features = {"forecast_data": resolved_forecast}
 
     try:
         risk_score = float(get_risk_score(features))
-    except Exception:
-        risk_score = 0.0
+    except Exception as exc:
+        logger.warning("[CRITICAL] ML fallback triggered: %s", exc)
+        risk_score = 0.5
 
     return max(0.0, min(1.0, round(risk_score, 4)))
 
@@ -81,6 +130,10 @@ def calculate_coverage_amount(
     *,
     rain: float = 0.0,
     aqi: float = 0.0,
+    city: str | None = None,
+    lat: float | None = None,
+    lon: float | None = None,
+    forecast_data: list[dict] | None = None,
     risk_score: float | None = None,
 ) -> float:
     """Calculate coverage from mean income and ML risk score.
@@ -94,6 +147,10 @@ def calculate_coverage_amount(
             income_variance,
             rain=rain,
             aqi=aqi,
+            city=city,
+            lat=lat,
+            lon=lon,
+            forecast_data=forecast_data,
         )
     else:
         risk_score = max(0.0, min(1.0, float(risk_score)))
@@ -102,15 +159,25 @@ def calculate_coverage_amount(
     return coverage
 
 
-def calculate_premium(income: float, risk_preference: str = "Medium", income_variance: float = 0.0, *, rain: float = 0.0, aqi: float = 0.0, lat: float | None = None, lon: float | None = None, risk_score: float | None = None) -> float:
+def calculate_premium(
+    income: float,
+    risk_preference: str = "Medium",
+    income_variance: float = 0.0,
+    *,
+    rain: float = 0.0,
+    aqi: float = 0.0,
+    city: str | None = None,
+    lat: float | None = None,
+    lon: float | None = None,
+    forecast_data: list[dict] | None = None,
+    risk_score: float | None = None,
+) -> float:
     """Calculate premium from BCR-based trigger probability and income.
 
     - `income` is treated as mean daily income.
     - risk_preference/location args are retained for API compatibility.
     """
     _ = risk_preference  # Retained for API compatibility.
-    _ = lat
-    _ = lon
 
     mean_income = float(income or 0.0)
     if risk_score is None:
@@ -119,6 +186,10 @@ def calculate_premium(income: float, risk_preference: str = "Medium", income_var
             income_variance,
             rain=rain,
             aqi=aqi,
+            city=city,
+            lat=lat,
+            lon=lon,
+            forecast_data=forecast_data,
         )
     else:
         risk_score = max(0.0, min(1.0, float(risk_score)))

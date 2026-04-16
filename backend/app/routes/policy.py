@@ -61,7 +61,7 @@ def create_policy(current_user: dict = Depends(require_current_user)):
     # Check if user has completed onboarding
     onboarding_response = (
         admin.table(settings.supabase_onboarding_table)
-        .select("mean_income, income_variance, min_income, max_income, risk_preference, onboarding_completed, created_at")
+        .select("mean_income, income_variance, min_income, max_income, risk_preference, onboarding_completed, created_at, city")
         .eq("user_id", current_user["id"])
         .limit(1)
         .execute()
@@ -133,7 +133,11 @@ def create_policy(current_user: dict = Depends(require_current_user)):
         )
 
     # Evaluate policy risk once and reuse in pricing + underwriting decisions.
-    risk_score = calculate_policy_risk_score(mean_income, income_variance=income_variance)
+    risk_score = calculate_policy_risk_score(
+        mean_income,
+        income_variance=income_variance,
+        city=onboarding.get("city"),
+    )
 
     coverage_amount = calculate_coverage_amount(
         mean_income,
