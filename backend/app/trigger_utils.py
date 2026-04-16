@@ -12,6 +12,7 @@ import requests
 from dotenv import load_dotenv
 
 from .config import get_settings
+from .utils.cache_utils import get_cache, set_cache
 
 logger = logging.getLogger(__name__)
 
@@ -540,12 +541,23 @@ async def fetch_7day_forecast_async(city: str) -> list[dict]:
     
     Returns list of 7 day forecasts with rain (mm) and temperature (°C).
     """
+    city_normalized = (city or "").strip().lower()
+    if city_normalized:
+        cache_key = f"forecast:{city_normalized}"
+        cached_forecast = get_cache(cache_key)
+        if isinstance(cached_forecast, list):
+            return cached_forecast
+
     coordinates = resolve_coordinates(location=city)
     if coordinates is None:
         logger.warning(f"Could not resolve coordinates for city: {city}")
         return []
-    
-    return await asyncio.to_thread(get_7day_forecast, coordinates[0], coordinates[1])
+
+    forecast = await asyncio.to_thread(get_7day_forecast, coordinates[0], coordinates[1])
+    if city_normalized and forecast:
+        set_cache(cache_key, forecast)
+
+    return forecast
 
 
 def evaluate_rain_trigger(rain_mm: float) -> Literal["none", "partial", "full"]:

@@ -12,6 +12,7 @@ from unittest.mock import patch, MagicMock
 import json
 
 from app.trigger_utils import check_trigger
+from app.utils import cache_utils
 
 
 class TestTriggerLogic:
@@ -337,3 +338,77 @@ class TestHeatTriggerLogic:
         assert trigger["payout_percentage"] == 100
         assert trigger["trigger_type"] == "rain"
         assert trigger["trigger_value"] == 160.0
+
+
+class TestForecastCityCache:
+    @pytest.mark.asyncio
+    async def test_first_request_cache_miss_then_store(self):
+        sample_forecast = [{"date": "2026-04-16", "rain": 10.0, "temperature": 35.0}]
+
+        with patch("app.trigger_utils.get_cache", return_value=None) as mock_get_cache, patch(
+            "app.trigger_utils.resolve_coordinates", return_value=(13.0827, 80.2707)
+        ), patch("app.trigger_utils.get_7day_forecast", return_value=sample_forecast), patch(
+            "app.trigger_utils.set_cache"
+        ) as mock_set_cache:
+            from app.trigger_utils import fetch_7day_forecast_async
+
+            result = await fetch_7day_forecast_async("Chennai")
+
+            assert result == sample_forecast
+            mock_get_cache.assert_called_once_with("forecast:chennai")
+            mock_set_cache.assert_called_once_with("forecast:chennai", sample_forecast)
+
+    @pytest.mark.asyncio
+    async def test_second_request_same_city_cache_hit(self):
+        sample_forecast = [{"date": "2026-04-17", "rain": 8.0, "temperature": 34.0}]
+
+        with patch("app.trigger_utils.get_cache", return_value=sample_forecast) as mock_get_cache, patch(
+            "app.trigger_utils.resolve_coordinates"
+        ) as mock_resolve, patch("app.trigger_utils.get_7day_forecast") as mock_fetch:
+            from app.trigger_utils import fetch_7day_forecast_async
+
+            result = await fetch_7day_forecast_async("chennai")
+
+            assert result == sample_forecast
+            mock_get_cache.assert_called_once_with("forecast:chennai")
+            mock_resolve.assert_not_called()
+            mock_fetch.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_different_city_uses_separate_cache_keys(self):
+        chennai_forecast = [{"date": "2026-04-18", "rain": 5.0, "temperature": 33.0}]
+        delhi_forecast = [{"date": "2026-04-18", "rain": 0.0, "temperature": 39.0}]
+
+        with patch("app.trigger_utils.get_cache", side_effect=[None, None]) as mock_get_cache, patch(
+            "app.trigger_utils.resolve_coordinates", side_effect=[(13.0827, 80.2707), (28.6139, 77.2090)]
+        ), patch(
+            "app.trigger_utils.get_7day_forecast", side_effect=[chennai_forecast, delhi_forecast]
+        ), patch("app.trigger_utils.set_cache") as mock_set_cache:
+            from app.trigger_utils import fetch_7day_forecast_async
+
+            result_one = await fetch_7day_forecast_async("Chennai")
+            result_two = await fetch_7day_forecast_async("Delhi")
+
+            assert result_one == chennai_forecast
+            assert result_two == delhi_forecast
+            assert mock_get_cache.call_args_list[0].args[0] == "forecast:chennai"
+            assert mock_get_cache.call_args_list[1].args[0] == "forecast:delhi"
+            assert mock_set_cache.call_args_list[0].args[0] == "forecast:chennai"
+            assert mock_set_cache.call_args_list[1].args[0] == "forecast:delhi"
+
+
+class TestRedisCacheFallback:
+    def test_get_cache_returns_none_on_redis_error(self):
+        with patch.object(cache_utils.redis_client, "get", side_effect=Exception("redis down")):
+            assert cache_utils.get_cache("forecast:chennai") is None
+
+    def test_set_cache_does_not_raise_on_redis_error(self):
+        with patch.object(cache_utils.redis_client, "setex", side_effect=Exception("redis down")):
+            cache_utils.set_cache("forecast:chennai", [{"date": "2026-04-19"}])
+
+    def test_cache_ttl_is_900_seconds(self):
+        with patch.object(cache_utils.redis_client, "setex") as mock_setex:
+            cache_utils.set_cache("forecast:delhi", [{"date": "2026-04-20"}])
+
+            assert mock_setex.call_args.args[0] == "forecast:delhi"
+            assert mock_setex.call_args.args[1] == 900

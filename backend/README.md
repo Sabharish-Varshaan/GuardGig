@@ -171,6 +171,14 @@ RAZORPAY_KEY_SECRET=<your-razorpay-test-key-secret>
 
 OPENWEATHER_API_KEY=your_api_key_here
 
+# Redis cache (Railway: prefer REDIS_URL from Redis service variable)
+REDIS_URL=redis://localhost:6379/0
+# Optional fallback vars when REDIS_URL is not used
+REDIS_HOST=localhost
+REDIS_PORT=6379
+REDIS_DB=0
+REDIS_PASSWORD=
+
 JWT_SECRET=<use-a-long-random-secret>
 JWT_ALGORITHM=HS256
 ACCESS_TOKEN_EXP_MINUTES=60
@@ -215,6 +223,25 @@ APP_DEMO_MODE=true .venv/bin/uvicorn app.main:app --reload --host 0.0.0.0 --port
 Base URL: `http://localhost:8000`
 
 If you want normal production-like behavior instead of the demo flow, omit `APP_DEMO_MODE=true`.
+
+## 4.1 Railway Deployment Notes (Redis Cache Ready)
+
+1. Create two Railway services in the same project:
+   - Backend service from this `backend` folder
+   - Redis service (Railway Redis)
+2. In backend service variables, set all required app secrets plus Redis variable:
+   - Preferred: `REDIS_URL` (from Railway Redis connection variable)
+   - Optional fallback: `REDIS_HOST`, `REDIS_PORT`, `REDIS_DB`, `REDIS_PASSWORD`
+3. Keep `backend/railway.json` start command and health check as-is:
+   - `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
+   - Health path: `/api/health`
+4. Cache behavior in production:
+   - Keys are city-scoped: `forecast:{city}`
+   - TTL is 900 seconds (15 minutes)
+   - Redis outages gracefully fall back to live API fetch (no request failure)
+5. Verify after deploy:
+   - First next-week-risk request for a city logs `[CACHE MISS]`
+   - Repeated request for same city logs `[CACHE HIT]`
 
 ## 5. Quick Verification
 
