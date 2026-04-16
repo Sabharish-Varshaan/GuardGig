@@ -31,9 +31,19 @@ def check_fraud(request: FraudCheckRequest, current_user: dict = Depends(require
     claim = claim_response.data[0]
 
     # Calculate fraud score
-    location_valid = request.gps.lower() == "expected"
+    gps_spoofing_suspected = bool(request.location_change_km is not None and request.location_change_km > 5.0)
+    location_valid = request.gps.lower() == "expected" and not gps_spoofing_suspected
     activity_status = "active" if request.activity.lower() != "suspicious" else "none"
-    fraud_score = calculate_fraud_score(activity_status, location_valid, request.claim_frequency)
+    fraud_score = calculate_fraud_score(
+        activity_status,
+        location_valid,
+        request.claim_frequency,
+        location_change_km=request.location_change_km,
+        reported_rain_mm=request.reported_rain_mm,
+        actual_rain_mm=request.actual_rain_mm,
+        time_since_last_claim_hours=request.time_since_last_claim_hours,
+        weather_mismatch=request.weather_mismatch,
+    )
 
     # Determine decision
     if fraud_score > settings.claim_fraud_threshold:

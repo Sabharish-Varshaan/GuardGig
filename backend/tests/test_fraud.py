@@ -13,6 +13,8 @@ import pytest
 from datetime import datetime, timedelta
 from unittest.mock import patch, MagicMock
 
+from app.claim_rules import calculate_fraud_score
+
 
 class TestFraudDetectionHeuristic:
     """Test fraud detection using heuristic fallback"""
@@ -317,3 +319,70 @@ class TestFraudWithClaims:
         print(f"Actual: rejected={is_rejected}, payout={final_payout}")
         assert not is_rejected and final_payout == 4500
         print("Result: PASS")
+
+
+class TestFraudSafetyLayer:
+    """Regression coverage for the stronger fraud safety overlay."""
+
+    def test_gps_spoofing_increases_fraud_score(self):
+        base_score = calculate_fraud_score(
+            activity_status="active",
+            location_valid=True,
+            claim_frequency=0,
+            location_change_km=0.0,
+            reported_rain_mm=20.0,
+            actual_rain_mm=20.0,
+        )
+        spoofed_score = calculate_fraud_score(
+            activity_status="active",
+            location_valid=False,
+            claim_frequency=0,
+            location_change_km=7.5,
+            reported_rain_mm=20.0,
+            actual_rain_mm=20.0,
+        )
+
+        assert spoofed_score > base_score
+        assert spoofed_score >= 0.3
+
+    def test_weather_mismatch_increases_fraud_score(self):
+        clean_score = calculate_fraud_score(
+            activity_status="active",
+            location_valid=True,
+            claim_frequency=0,
+            location_change_km=0.0,
+            reported_rain_mm=10.0,
+            actual_rain_mm=10.0,
+        )
+        mismatch_score = calculate_fraud_score(
+            activity_status="active",
+            location_valid=True,
+            claim_frequency=0,
+            location_change_km=0.0,
+            reported_rain_mm=10.0,
+            actual_rain_mm=45.0,
+        )
+
+        assert mismatch_score > clean_score
+        assert mismatch_score >= 0.15
+
+    def test_claim_frequency_abuse_increases_fraud_score(self):
+        clean_score = calculate_fraud_score(
+            activity_status="active",
+            location_valid=True,
+            claim_frequency=0,
+            location_change_km=0.0,
+            reported_rain_mm=10.0,
+            actual_rain_mm=10.0,
+        )
+        abusive_score = calculate_fraud_score(
+            activity_status="active",
+            location_valid=True,
+            claim_frequency=8,
+            location_change_km=0.0,
+            reported_rain_mm=10.0,
+            actual_rain_mm=10.0,
+        )
+
+        assert abusive_score > clean_score
+        assert abusive_score >= 0.35

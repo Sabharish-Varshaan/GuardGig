@@ -119,7 +119,17 @@ def fetch_recent_claim_count(admin, claims_table: str, user_id: str, lookback_da
     return len(response.data or [])
 
 
-def calculate_fraud_score(activity_status: str, location_valid: bool, claim_frequency: int) -> float:
+def calculate_fraud_score(
+    activity_status: str,
+    location_valid: bool,
+    claim_frequency: int,
+    *,
+    location_change_km: float | None = None,
+    reported_rain_mm: float | None = None,
+    actual_rain_mm: float | None = None,
+    time_since_last_claim_hours: float | None = None,
+    weather_mismatch: bool | None = None,
+) -> float:
     """Calculate fraud score.
 
     This function will attempt to use a trained fraud model (if present) via
@@ -128,33 +138,88 @@ def calculate_fraud_score(activity_status: str, location_valid: bool, claim_freq
     """
     claim_frequency = max(0, claim_frequency)
 
+    location_change_km = max(0.0, float(location_change_km or (0.0 if location_valid else 10.0)))
+    time_since_last_claim_hours = max(0.0, float(time_since_last_claim_hours or 0.0))
+
+    weather_mismatch = bool(weather_mismatch) if weather_mismatch is not None else False
+    if reported_rain_mm is not None and actual_rain_mm is not None:
+        weather_mismatch = abs(float(reported_rain_mm) - float(actual_rain_mm)) > 5.0 or weather_mismatch
+
     try:
         # lazy import to avoid hard dependency when models are not present
         from ml.predict import get_fraud_score
 
         features = {
             "number_of_claims_today": float(claim_frequency),
-            "time_since_last_claim": 0.0,  # unknown in this call site; keep 0 as conservative estimate
-            "location_change": 0.0 if location_valid else 1.0,
+            "time_since_last_claim": float(time_since_last_claim_hours),
+            "location_change": float(location_change_km),
+            "location_change_km": float(location_change_km),
             "activity_status": activity_status,
+            "claim_frequency": float(claim_frequency),
+            "location_valid": bool(location_valid),
+            "reported_rain_mm": reported_rain_mm,
+            "actual_rain_mm": actual_rain_mm,
+            "weather_mismatch": weather_mismatch,
+            "gps_spoofing_suspected": bool(location_change_km > 5.0 or not location_valid),
         }
         score = float(get_fraud_score(features))
         score = min(1.0, max(0.0, round(score, 2)))
-        logger.debug(f"  [FRAUD] Calculated via ML model: {score:.2f} (activity={activity_status}, claims={claim_frequency}, location={'valid' if location_valid else 'invalid'})")
+        logger.debug(
+            "  [FRAUD] Calculated via ML model: %.2f (activity=%s, claims=%s, location=%s, gps_jump_km=%.1f, weather_mismatch=%s)",
+            score,
+            activity_status,
+            claim_frequency,
+            "valid" if location_valid else "invalid",
+            location_change_km,
+            weather_mismatch,
+        )
         return score
     except Exception as e:
         # Fallback to previous heuristic
         logger.debug(f"  [FRAUD] ML model unavailable ({str(e)[:50]}), using heuristic")
-        score = min(0.5, claim_frequency / 20.0)
+        score = min(0.35, claim_frequency / 20.0)
+
+        if claim_frequency >= 8:
+            score += 0.35
+        elif claim_frequency >= 5:
+            score += 0.25
+        elif claim_frequency >= 3:
+            score += 0.15
+
+        if time_since_last_claim_hours < 6:
+            score += 0.15
+        elif time_since_last_claim_hours < 24:
+            score += 0.08
+
+        if location_change_km > 20:
+            score += 0.40
+        elif location_change_km > 5:
+            score += 0.30
+        elif location_change_km > 1:
+            score += 0.12
 
         if activity_status.lower() in {"none", "inactive", "no_activity", "suspicious"}:
-            score += 0.4
+            score += 0.35
+
+        if weather_mismatch:
+            score += 0.25
 
         if not location_valid:
-            score += 0.3
+            score += 0.25
+
+        if claim_frequency >= 10 and (not location_valid or activity_status.lower() != "active"):
+            score += 0.15
 
         final_score = min(1.0, round(score, 2))
-        logger.debug(f"  [FRAUD] Heuristic result: {final_score:.2f} (activity={activity_status}, claims={claim_frequency}, location={'valid' if location_valid else 'invalid'})")
+        logger.debug(
+            "  [FRAUD] Heuristic result: %.2f (activity=%s, claims=%s, location=%s, gps_jump_km=%.1f, weather_mismatch=%s)",
+            final_score,
+            activity_status,
+            claim_frequency,
+            "valid" if location_valid else "invalid",
+            location_change_km,
+            weather_mismatch,
+        )
         return final_score
 
 

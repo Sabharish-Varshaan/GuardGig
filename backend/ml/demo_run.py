@@ -34,7 +34,12 @@ def run_demo():
         "number_of_claims_today": 1,
         "time_since_last_claim": 48.0,
         "location_change": 0.2,
+        "location_change_km": 0.2,
         "activity_status": "active",
+        "claim_frequency": 1,
+        "reported_rain_mm": 12.0,
+        "actual_rain_mm": 12.0,
+        "weather_mismatch": False,
     }
 
     print("\nSample risk features:")

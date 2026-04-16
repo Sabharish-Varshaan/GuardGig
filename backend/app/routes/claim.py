@@ -136,6 +136,9 @@ def create_demo_claim(current_user: dict = Depends(require_current_user)):
         activity_status="active",
         location_valid=True,
         claim_frequency=claim_count,
+        location_change_km=0.0,
+        reported_rain_mm=120.0,
+        actual_rain_mm=120.0,
     )
     original_payout_percentage = payout_percentage_raw
     try:
@@ -173,6 +176,9 @@ def create_demo_claim(current_user: dict = Depends(require_current_user)):
         "rain": 120.0,
         "aqi": 50.0,
         "temperature": 45.0,
+        "location_change_km": 0.0,
+        "reported_rain_mm": 120.0,
+        "actual_rain_mm": 120.0,
         "heat_percentage": trigger_data.get("heat_percentage", 0),
         "payout_percentage": payout_percentage_raw,
         "payout_amount": payout,

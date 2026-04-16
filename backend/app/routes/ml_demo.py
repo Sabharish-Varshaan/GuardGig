@@ -18,7 +18,12 @@ class MLScoreRequest(BaseModel):
     number_of_claims_today: Optional[int] = 0
     time_since_last_claim: Optional[float] = 0.0
     location_change: Optional[float] = 0.0
+    location_change_km: Optional[float] = 0.0
     activity_status: Optional[str] = "active"
+    claim_frequency: Optional[int] = 0
+    reported_rain_mm: Optional[float] = 0.0
+    actual_rain_mm: Optional[float] = 0.0
+    weather_mismatch: Optional[bool] = False
 
 
 class MLScoreResponse(BaseModel):
@@ -40,7 +45,12 @@ def score(payload: MLScoreRequest):
             "number_of_claims_today": int(payload.number_of_claims_today or 0),
             "time_since_last_claim": float(payload.time_since_last_claim or 0.0),
             "location_change": float(payload.location_change or 0.0),
+            "location_change_km": float(payload.location_change_km or payload.location_change or 0.0),
             "activity_status": str(payload.activity_status or "active"),
+            "claim_frequency": int(payload.claim_frequency or payload.number_of_claims_today or 0),
+            "reported_rain_mm": float(payload.reported_rain_mm or 0.0),
+            "actual_rain_mm": float(payload.actual_rain_mm or 0.0),
+            "weather_mismatch": bool(payload.weather_mismatch or False),
         }
 
         risk_score = get_risk_score(risk_features)

@@ -223,6 +223,9 @@ async def automated_claim_check():
             activity_status="active",
             location_valid=True,
             claim_frequency=claim_count,
+            location_change_km=0.0,
+            reported_rain_mm=rain,
+            actual_rain_mm=rain,
         )
         logger.info(f"  → ML scores: fraud_score={fraud_score:.2f}, risk_score={risk_score:.2f}")
 

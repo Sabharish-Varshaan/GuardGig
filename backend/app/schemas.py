@@ -291,6 +291,11 @@ class FraudCheckRequest(BaseModel):
     gps: str  # e.g., "latitude,longitude" or location string
     activity: str  # e.g., "normal", "suspicious"
     claim_frequency: int = Field(ge=0)  # number of claims in period
+    location_change_km: Optional[float] = Field(default=None, ge=0)
+    reported_rain_mm: Optional[float] = Field(default=None, ge=0)
+    actual_rain_mm: Optional[float] = Field(default=None, ge=0)
+    time_since_last_claim_hours: Optional[float] = Field(default=None, ge=0)
+    weather_mismatch: Optional[bool] = False
 
 
 class FraudCheckResponse(BaseModel):

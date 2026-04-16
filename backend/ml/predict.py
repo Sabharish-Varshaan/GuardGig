@@ -22,6 +22,7 @@ _HERE = Path(__file__).resolve().parent
 _RISK_MODEL_PATH = _HERE / "risk_model.pkl"
 _FRAUD_MODEL_PATH = _HERE / "fraud_model.pkl"
 _EXPECTED_RISK_FEATURES = 9
+_FRAUD_SPOT_CHECK_KM = 5.0
 
 logger = logging.getLogger(__name__)
 
@@ -214,7 +215,7 @@ def _features_for_fraud(payload: Dict[str, Any]) -> list[float]:
     # Expecting keys: number_of_claims_today, time_since_last_claim, location_change, activity_status
     claims_today = float(payload.get("number_of_claims_today") or 0.0)
     time_since_last = float(payload.get("time_since_last_claim") or 0.0)
-    location_change = float(payload.get("location_change") or 0.0)
+    location_change = float(payload.get("location_change") or payload.get("location_change_km") or 0.0)
     activity_status = str(payload.get("activity_status") or "unknown").lower()
 
     claims_norm = claims_today / 5.0
@@ -223,6 +224,67 @@ def _features_for_fraud(payload: Dict[str, Any]) -> list[float]:
     activity_flag = 1.0 if activity_status in {"inactive", "none", "no_activity", "suspicious"} else 0.0
 
     return [claims_norm, time_norm, location_flag, activity_flag]
+
+
+def _fraud_safety_overlay(payload: Dict[str, Any]) -> float:
+    claims_today = max(0.0, float(payload.get("number_of_claims_today") or 0.0))
+    claim_frequency = max(claims_today, float(payload.get("claim_frequency") or 0.0))
+    time_since_last = max(0.0, float(payload.get("time_since_last_claim") or 0.0))
+    location_change_km = max(
+        0.0,
+        float(
+            payload.get("location_change_km")
+            or payload.get("gps_jump_km")
+            or payload.get("location_change")
+            or 0.0
+        ),
+    )
+    activity_status = str(payload.get("activity_status") or "unknown").lower()
+
+    reported_rain = payload.get("reported_rain_mm")
+    actual_rain = payload.get("actual_rain_mm")
+    weather_mismatch = bool(payload.get("weather_mismatch") or False)
+    rain_gap = 0.0
+    if reported_rain is not None and actual_rain is not None:
+        rain_gap = abs(float(reported_rain) - float(actual_rain))
+        weather_mismatch = weather_mismatch or rain_gap > 5.0
+
+    score = 0.0
+
+    if claim_frequency >= 8:
+        score += 0.35
+    elif claim_frequency >= 5:
+        score += 0.25
+    elif claim_frequency >= 3:
+        score += 0.15
+    elif claim_frequency >= 1:
+        score += 0.05
+
+    if time_since_last < 6:
+        score += 0.15
+    elif time_since_last < 24:
+        score += 0.08
+
+    if location_change_km > 20:
+        score += 0.40
+    elif location_change_km > _FRAUD_SPOT_CHECK_KM:
+        score += 0.30
+    elif location_change_km > 1.0:
+        score += 0.12
+
+    if weather_mismatch:
+        score += 0.25 if rain_gap > 20.0 else 0.15
+
+    if activity_status in {"inactive", "none", "no_activity", "suspicious"}:
+        score += 0.35
+
+    if payload.get("location_valid") is False:
+        score += 0.25
+
+    if bool(payload.get("gps_spoofing_suspected")):
+        score += 0.30
+
+    return float(np.clip(score, 0.0, 1.0))
 
 
 def get_risk_score(features: Dict[str, Any]) -> float:
@@ -278,18 +340,29 @@ def get_fraud_score(features: Dict[str, Any]) -> float:
     """Return fraud score in [0,1].
 
     Features expected: number_of_claims_today, time_since_last_claim, location_change, activity_status
+    Optional safety inputs: location_change_km, claim_frequency, reported_rain_mm, actual_rain_mm,
+    weather_mismatch, gps_spoofing_suspected, location_valid.
     """
     vec = _features_for_fraud(features)
+    safety_overlay = _fraud_safety_overlay(features)
     try:
-        if _fraud_model is not None:
-            proba = _fraud_model.predict_proba([vec])[0][1]
-            return float(np.clip(proba, 0.0, 1.0))
+        if _fraud_model is not None and _is_model_compatible(_fraud_model, len(vec)):
+            proba = float(_fraud_model.predict_proba([vec])[0][1])
+            return float(np.clip(max(proba, safety_overlay), 0.0, 1.0))
     except Exception as exc:
         logger.debug("Fraud model prediction failed: %s", exc)
 
-    # fallback heuristic similar to previous behavior
+    # conservative fallback heuristic when the saved model is missing or incompatible
     claims_norm, time_norm, location_flag, activity_flag = vec
-    score = min(1.0, round(0.3 * claims_norm + 0.4 * activity_flag + 0.2 * location_flag + 0.1 * (1 - time_norm), 2))
+    score = (
+        0.22 * claims_norm
+        + 0.18 * (1.0 - time_norm)
+        + 0.20 * location_flag
+        + 0.20 * activity_flag
+        + 0.20 * safety_overlay
+    )
+    score = max(score, safety_overlay)
+    score = min(1.0, round(score, 2))
     return float(score)
 
 
