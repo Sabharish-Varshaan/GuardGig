@@ -149,8 +149,8 @@ function ClaimsScreen() {
 
         <Card style={styles.summaryCard}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Payout History</Text>
-            <Button onPress={() => refreshClaims().catch(() => {})} title="Retry" variant="secondary" />
+            <Text style={[styles.sectionTitle, styles.sectionTitleWithAction]}>Payout History</Text>
+            <Button onPress={() => refreshClaims().catch(() => {})} style={styles.retryButton} title="Retry" variant="secondary" />
           </View>
 
           {claimsLoading && (
@@ -244,7 +244,7 @@ const styles = StyleSheet.create({
     marginTop: appTheme.spacing.sm
   },
   sectionHeader: {
-    alignItems: "center",
+    alignItems: "flex-start",
     flexDirection: "row",
     justifyContent: "space-between",
     marginBottom: appTheme.spacing.sm
@@ -253,6 +253,17 @@ const styles = StyleSheet.create({
     color: appTheme.colors.textPrimary,
     fontFamily: "Orbitron_600SemiBold",
     fontSize: 18
+  },
+  sectionTitleWithAction: {
+    flex: 1,
+    paddingRight: appTheme.spacing.sm
+  },
+  retryButton: {
+    alignSelf: "flex-start",
+    flexShrink: 0,
+    maxWidth: 126,
+    minWidth: 96,
+    width: undefined
   },
   loadingRow: {
     alignItems: "center",

@@ -69,9 +69,10 @@ export default function NotificationsScreen() {
 
         <Card style={styles.card}>
           <View style={styles.rowBetween}>
-            <Text style={styles.sectionTitle}>Recent Updates</Text>
+            <Text style={[styles.sectionTitle, styles.sectionTitleWithAction]}>Recent Updates</Text>
             <Button
               onPress={() => refreshNotifications().catch(() => {})}
+              style={styles.retryButton}
               title="Retry"
               variant="secondary"
             />
@@ -130,11 +131,22 @@ const styles = StyleSheet.create({
     fontFamily: "Orbitron_600SemiBold",
     fontSize: 18
   },
+  sectionTitleWithAction: {
+    flex: 1,
+    paddingRight: appTheme.spacing.sm
+  },
   rowBetween: {
-    alignItems: "center",
+    alignItems: "flex-start",
     flexDirection: "row",
     justifyContent: "space-between",
     gap: 10
+  },
+  retryButton: {
+    alignSelf: "flex-start",
+    flexShrink: 0,
+    maxWidth: 126,
+    minWidth: 96,
+    width: undefined
   },
   loadingRow: {
     alignItems: "center",
