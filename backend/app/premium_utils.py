@@ -34,7 +34,7 @@ def calculate_coverage_amount(
 ) -> float:
     """Calculate coverage from mean income and ML risk score.
 
-    coverage = mean_income * 7 * (0.6 + 0.8 * risk_score)
+    coverage = mean_income * 3 * (0.5 + 0.5 * risk_score)
     """
     mean_income = float(income or 0.0)
     if risk_score is None:
@@ -47,7 +47,7 @@ def calculate_coverage_amount(
     else:
         risk_score = max(0.0, min(1.0, float(risk_score)))
 
-    coverage = mean_income * 7.0 * (0.6 + 0.8 * risk_score)
+    coverage = mean_income * 3.0 * (0.5 + 0.5 * risk_score)
     return round(max(0.0, coverage), 2)
 
 
@@ -80,8 +80,8 @@ def calculate_premium(income: float, risk_preference: str = "Medium", income_var
         risk_score=risk_score,
     )
 
-    premium = coverage_amount * risk_score * 0.1
-    premium = max(15.0, min(premium, 80.0))
+    premium = coverage_amount * (0.015 + 0.02 * risk_score)
+    premium = max(15.0, min(premium, 50.0))
     premium = round(premium, 2)
 
     logger.info(

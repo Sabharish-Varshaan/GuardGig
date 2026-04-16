@@ -35,15 +35,25 @@ def test_premium_soft_normalization_bounds():
     mid = calculate_premium(200.0, "Medium", income_variance=0.0, risk_score=0.5)
     very_high = calculate_premium(10000.0, "Medium", income_variance=0.0, risk_score=1.0)
 
-    assert 15.0 <= very_low <= 80.0
-    assert 15.0 <= mid <= 80.0
-    assert 15.0 <= very_high <= 80.0
+    assert 15.0 <= very_low <= 50.0
+    assert 15.0 <= mid <= 50.0
+    assert 15.0 <= very_high <= 50.0
+
+
+def test_mid_income_coverage_stays_reasonable():
+    # Mid-income range should stay around sustainable coverage levels.
+    mid_income = 500.0
+    low_risk = calculate_coverage_amount(mid_income, risk_score=0.2)
+    high_risk = calculate_coverage_amount(mid_income, risk_score=0.8)
+
+    assert low_risk <= 1500.0
+    assert high_risk <= 1500.0
 
 
 def test_coverage_formula_matches_expected_expression():
     mean_income = 150.0
     risk_score = 0.4
-    expected = round(mean_income * 7 * (0.6 + 0.8 * risk_score), 2)
+    expected = round(mean_income * 3 * (0.5 + 0.5 * risk_score), 2)
     actual = calculate_coverage_amount(mean_income, risk_score=risk_score)
 
     assert actual == expected
