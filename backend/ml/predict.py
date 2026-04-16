@@ -16,9 +16,12 @@ from typing import Dict, Any
 import joblib
 import numpy as np
 
+from .feature_engineering import build_features, summarize_forecast
+
 _HERE = Path(__file__).resolve().parent
 _RISK_MODEL_PATH = _HERE / "risk_model.pkl"
 _FRAUD_MODEL_PATH = _HERE / "fraud_model.pkl"
+_EXPECTED_RISK_FEATURES = 9
 
 logger = logging.getLogger(__name__)
 
@@ -105,6 +108,108 @@ def _predict_probability(model: Any, vec: list[float]) -> float:
     return float(np.clip(raw, 0.0, 1.0))
 
 
+def _load_risk_model(force_refresh: bool = False):
+    global _risk_model
+
+    if force_refresh or _risk_model is None:
+        _risk_model = _load_model(_RISK_MODEL_PATH)
+
+    return _risk_model
+
+
+def _risk_model_is_compatible(model: Any) -> bool:
+    if model is None:
+        return False
+
+    n_features = getattr(model, "n_features_in_", None)
+    if n_features is None:
+        return True
+
+    return int(n_features) == _EXPECTED_RISK_FEATURES
+
+
+def ensure_risk_model_available(force_refresh: bool = False) -> bool:
+    """Ensure the upgraded risk model exists and matches the new feature set."""
+    model = _load_risk_model(force_refresh=force_refresh)
+    if _risk_model_is_compatible(model):
+        return True
+
+    from .train_risk_model import train_risk_model
+
+    train_risk_model()
+    _load_risk_model(force_refresh=True)
+    return _risk_model_is_compatible(_risk_model)
+
+
+def explain_prediction(features: Dict[str, Any] | list[float]) -> list[str]:
+    if isinstance(features, dict):
+        summary = {
+            "avg_temp": float(features.get("avg_temp", 0.0) or 0.0),
+            "max_temp": float(features.get("max_temp", 0.0) or 0.0),
+            "total_rain": float(features.get("total_rain", 0.0) or 0.0),
+            "max_rain": float(features.get("max_rain", 0.0) or 0.0),
+            "trigger_days": float(features.get("trigger_days", 0.0) or 0.0),
+            "avg_payout_pct": float(features.get("avg_payout_pct", 0.0) or 0.0),
+            "temp_variance": float(features.get("temp_variance", 0.0) or 0.0),
+            "rain_variance": float(features.get("rain_variance", 0.0) or 0.0),
+            "consecutive_trigger_days": float(features.get("consecutive_trigger_days", 0.0) or 0.0),
+        }
+    else:
+        values = list(features or [])
+        summary = {
+            "avg_temp": float(values[0] if len(values) > 0 else 0.0),
+            "max_temp": float(values[1] if len(values) > 1 else 0.0),
+            "total_rain": float(values[2] if len(values) > 2 else 0.0),
+            "max_rain": float(values[3] if len(values) > 3 else 0.0),
+            "trigger_days": float(values[4] if len(values) > 4 else 0.0),
+            "avg_payout_pct": float(values[5] if len(values) > 5 else 0.0),
+            "temp_variance": float(values[6] if len(values) > 6 else 0.0),
+            "rain_variance": float(values[7] if len(values) > 7 else 0.0),
+            "consecutive_trigger_days": float(values[8] if len(values) > 8 else 0.0),
+        }
+
+    reasons: list[str] = []
+    if summary["avg_temp"] > 40 or summary["max_temp"] > 45:
+        reasons.append("High temperature")
+    if summary["total_rain"] > 100 or summary["max_rain"] > 50:
+        reasons.append("Heavy rainfall")
+    if summary["trigger_days"] > 3:
+        reasons.append("Frequent disruptions")
+    if summary["consecutive_trigger_days"] >= 3:
+        reasons.append("Persistent trigger streak")
+    if summary["temp_variance"] > 6:
+        reasons.append("Temperature volatility")
+    if summary["rain_variance"] > 20:
+        reasons.append("Rainfall volatility")
+
+    return reasons[:4]
+
+
+def _next_week_heuristic(summary: Dict[str, float]) -> float:
+    avg_temp = summary["avg_temp"] / 50.0
+    max_temp = summary["max_temp"] / 55.0
+    total_rain = summary["total_rain"] / 300.0
+    max_rain = summary["max_rain"] / 150.0
+    trigger_days = summary["trigger_days"] / 7.0
+    avg_payout_pct = summary["avg_payout_pct"] / 100.0
+    temp_variance = summary["temp_variance"] / 10.0
+    rain_variance = summary["rain_variance"] / 50.0
+    consecutive_trigger_days = summary["consecutive_trigger_days"] / 7.0
+
+    heuristic = (
+        0.22 * avg_temp
+        + 0.12 * max_temp
+        + 0.20 * total_rain
+        + 0.06 * max_rain
+        + 0.14 * trigger_days
+        + 0.10 * avg_payout_pct
+        + 0.06 * temp_variance
+        + 0.04 * rain_variance
+        + 0.06 * consecutive_trigger_days
+    )
+    return float(np.clip(heuristic, 0.0, 1.0))
+
+
 def _features_for_fraud(payload: Dict[str, Any]) -> list[float]:
     # Expecting keys: number_of_claims_today, time_since_last_claim, location_change, activity_status
     claims_today = float(payload.get("number_of_claims_today") or 0.0)
@@ -142,26 +247,31 @@ def get_risk_score(features: Dict[str, Any]) -> float:
     return float(max(0.0, min(1.0, round(score, 2))))
 
 
-def get_next_week_risk_score(features: Dict[str, Any]) -> tuple[float, bool]:
-    """Return (ml_score, used_model) for admin next-week city risk in [0,1]."""
-    vec = _features_for_next_week_risk(features)
-    try:
-        if _is_model_compatible(_risk_model, len(vec)):
-            return _predict_probability(_risk_model, vec), True
-    except Exception as exc:
-        logger.warning("Admin next-week risk model prediction failed: %s", exc)
+def get_next_week_risk_score(forecast_data) -> dict:
+    """Return the explainable next-week risk payload for admin forecasts."""
+    summary = summarize_forecast(forecast_data)
+    features = build_features(forecast_data)
+    explanation = explain_prediction(summary)
 
-    # Fallback keeps system deterministic if model is unavailable/incompatible.
-    avg_temp_norm, max_temp_norm, total_rain_norm, max_rain_norm, trigger_days_norm, avg_payout_norm = vec
-    heuristic = (
-        0.15 * min(1.0, avg_temp_norm)
-        + 0.15 * min(1.0, max_temp_norm)
-        + 0.2 * min(1.0, total_rain_norm)
-        + 0.2 * min(1.0, max_rain_norm)
-        + 0.15 * min(1.0, trigger_days_norm)
-        + 0.15 * min(1.0, avg_payout_norm)
-    )
-    return float(np.clip(heuristic, 0.0, 1.0)), False
+    model = _load_risk_model()
+    if _risk_model_is_compatible(model):
+        try:
+            score = float(np.clip(model.predict([features])[0], 0.0, 1.0))
+            return {
+                "risk_score": score,
+                "ml_used": True,
+                "explanation": explanation,
+                "features": summary,
+            }
+        except Exception as exc:
+            logger.warning("Admin next-week risk model prediction failed: %s", exc)
+
+    return {
+        "risk_score": _next_week_heuristic(summary),
+        "ml_used": False,
+        "explanation": explanation,
+        "features": summary,
+    }
 
 
 def get_fraud_score(features: Dict[str, Any]) -> float:

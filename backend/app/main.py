@@ -37,6 +37,7 @@ from .services.policy_lifecycle_service import update_policy_status
 from .services.payout_service import process_payout
 from .supabase_client import get_admin_client
 from .trigger_utils import TRIGGERS, check_trigger, fetch_trigger_snapshot
+from ml.predict import ensure_risk_model_available
 
 settings = get_settings()
 IST = ZoneInfo("Asia/Kolkata")
@@ -355,6 +356,11 @@ async def startup_event():
     logger.info("🚀 GuardGig API starting up...")
     _verify_migration_007_applied()
     logger.info("✓ Migration 007 verified")
+
+    if ensure_risk_model_available():
+        logger.info("✓ Risk model verified or auto-trained")
+    else:
+        logger.warning("Risk model could not be verified; admin forecast will use fallback scoring")
 
     # Add automated job to run every 5 minutes
     scheduler.add_job(

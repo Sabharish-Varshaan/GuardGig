@@ -74,6 +74,8 @@ def empty_next_week_risk_response() -> AdminNextWeekRiskResponse:
         risk_level="LOW",
         risk_score=0.0,
         ml_risk_score=0.0,
+        ml_used=False,
+        ml_explanation=[],
         trigger_risk=0,
         final_score=0.0,
         total_expected_claims=0,
@@ -97,6 +99,22 @@ def build_default_forecast() -> list[dict]:
         }
         for i in range(7)
     ]
+
+
+def _normalize_ml_result(result) -> tuple[float, bool, list[str]]:
+    if isinstance(result, dict):
+        return (
+            float(result.get("risk_score", 0.0) or 0.0),
+            bool(result.get("ml_used", False)),
+            list(result.get("explanation", []) or []),
+        )
+
+    if isinstance(result, tuple):
+        score = float(result[0] if len(result) > 0 else 0.0)
+        used_model = bool(result[1] if len(result) > 1 else False)
+        return score, used_model, []
+
+    return 0.0, False, []
 
 
 @router.post("/login", response_model=AdminLoginResponse)
@@ -220,6 +238,7 @@ async def get_next_week_risk(current_admin: dict = Depends(require_admin_user)):
     city_results = {}
     all_days_results = {}  # Track all days across all cities
     any_city_used_model = False
+    city_explanations = {}
     
     for city, policy_records in city_groups.items():
         forecast = await fetch_7day_forecast_async(city)
@@ -328,7 +347,8 @@ async def get_next_week_risk(current_admin: dict = Depends(require_admin_user)):
         }
         logger.info("[ML INPUT] city=%s features=%s", city, ml_input)
 
-        ml_score, used_model = get_next_week_risk_score(ml_input)
+        ml_result = get_next_week_risk_score(forecast)
+        ml_score, used_model, explanation = _normalize_ml_result(ml_result)
         trigger_risk_score = max_payout_pct / 100.0
 
         if not used_model:
@@ -338,14 +358,12 @@ async def get_next_week_risk(current_admin: dict = Depends(require_admin_user)):
             logger.warning("[ML OUTPUT] city=%s model_unavailable=True fallback=trigger_based", city)
         else:
             any_city_used_model = True
-            city_final_score = (0.7 * ml_score) + (0.3 * trigger_risk_score)
-
-        # Trigger system is core insurance logic; ML must not downgrade hard trigger severity.
-        city_final_score = max(city_final_score, trigger_risk_score)
+            city_final_score = (0.85 * ml_score) + (0.15 * trigger_risk_score)
 
         city_final_score = min(max(city_final_score, 0.0), 1.0)
         ml_score = min(max(float(ml_score), 0.0), 1.0)
         city_risk_level = risk_level_from_score(city_final_score)
+        city_explanations[city] = explanation
 
         logger.info(
             "[ML OUTPUT] city=%s ml_score=%.3f used_model=%s",
@@ -400,13 +418,10 @@ async def get_next_week_risk(current_admin: dict = Depends(require_admin_user)):
     ml_risk_score = (weighted_ml_score / total_users_weight) if total_users_weight else 0.0
     trigger_risk_score = max_payout_tier / 100.0
     if any_city_used_model:
-        system_final_score = (0.7 * ml_risk_score) + (0.3 * trigger_risk_score)
+        system_final_score = (0.85 * ml_risk_score) + (0.15 * trigger_risk_score)
     else:
         ml_risk_score = trigger_risk_score
         system_final_score = trigger_risk_score
-
-    # Keep trigger severity authoritative at system level as well.
-    system_final_score = max(system_final_score, trigger_risk_score)
 
     system_final_score = min(max(system_final_score, 0.0), 1.0)
     overall_risk_level = risk_level_from_score(system_final_score)
@@ -425,17 +440,28 @@ async def get_next_week_risk(current_admin: dict = Depends(require_admin_user)):
     logger.info("[FINAL SCORE] system trigger_risk=%.3f final_score=%.3f", trigger_risk_score, system_final_score)
     
     # High risk cities
-    high_risk_cities = [c for c, r in city_results.items() if r["risk_level"] == "HIGH"]
+    ordered_cities = sorted(city_results.items(), key=lambda item: item[1]["final_score"], reverse=True)
+    high_risk_cities = [c for c, r in ordered_cities if r["risk_level"] == "HIGH"]
+
+    ml_explanation: list[str] = []
+    for city, _ in ordered_cities[:3]:
+        for reason in city_explanations.get(city, []):
+            if reason not in ml_explanation:
+                ml_explanation.append(reason)
+
+    if not ml_explanation and ordered_cities:
+        ml_explanation = city_explanations.get(ordered_cities[0][0], [])
 
     city_predictions = [
         CityMLPrediction(
             city=city,
             ml_score=round(r["ml_score"], 4),
+            trigger_score=r["max_payout_pct"],
             trigger_pct=r["max_payout_pct"],
             final_score=round(r["final_score"], 4),
             risk_level=r["risk_level"],
         )
-        for city, r in city_results.items()
+        for city, r in ordered_cities
     ]
     
     # Build city breakdown
@@ -479,6 +505,8 @@ async def get_next_week_risk(current_admin: dict = Depends(require_admin_user)):
         risk_level=overall_risk_level,
         risk_score=round(system_final_score, 4),
         ml_risk_score=round(ml_risk_score, 4),
+        ml_used=any_city_used_model,
+        ml_explanation=ml_explanation,
         trigger_risk=max_payout_tier,
         final_score=round(system_final_score, 4),
         total_expected_claims=total_expected_claims,
