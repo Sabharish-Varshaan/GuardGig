@@ -88,12 +88,6 @@ class TestAdminRoutes:
             role="admin",
             email="admin@guardgig.com",
         )
-        user_token = create_access_token(
-            user_id="user-123",
-            phone="8888888888",
-            role="user",
-            email="user@guardgig.com",
-        )
 
         admin_row = {
             "id": "admin-123",
@@ -101,13 +95,6 @@ class TestAdminRoutes:
             "email": "admin@guardgig.com",
             "phone": "9999999999",
             "role": "admin",
-        }
-        user_row = {
-            "id": "user-123",
-            "full_name": "Normal User",
-            "email": "user@guardgig.com",
-            "phone": "8888888888",
-            "role": "user",
         }
         metrics_row = {
             "id": 1,
@@ -119,15 +106,12 @@ class TestAdminRoutes:
 
         with patch("app.dependencies.get_admin_client") as mock_dep_admin, patch(
             "app.routes.admin.get_admin_client"
-        ) as mock_route_admin:
+        ) as mock_route_admin, patch(
+            "app.routes.admin.get_full_metrics"
+        ) as mock_get_metrics:
             mock_dep_admin.return_value = mock_admin
             mock_route_admin.return_value = mock_admin
-
-            mock_admin.table.return_value.select.return_value.eq.return_value.limit.return_value.execute.side_effect = [
-                MagicMock(data=[admin_row]),
-                MagicMock(data=[admin_row]),
-                MagicMock(data=[metrics_row]),
-            ]
+            mock_get_metrics.return_value = metrics_row
 
             admin_response = client.get(
                 "/api/admin/metrics",
@@ -139,23 +123,8 @@ class TestAdminRoutes:
             assert admin_body["total_premium"] == 12000.0
             assert admin_body["status"] == "healthy"
 
-        with patch("app.dependencies.get_admin_client") as mock_dep_admin, patch(
-            "app.routes.admin.get_admin_client"
-        ) as mock_route_admin:
-            mock_dep_admin.return_value = mock_admin
-            mock_route_admin.return_value = mock_admin
-
-            mock_admin.table.return_value.select.return_value.eq.return_value.limit.return_value.execute.side_effect = [
-                MagicMock(data=[user_row]),
-                MagicMock(data=[user_row]),
-            ]
-
-            user_response = client.get(
-                "/api/admin/metrics",
-                headers={"Authorization": f"Bearer {user_token}"},
-            )
-
-            assert user_response.status_code == 403
+        # Role-gating is already validated in login/access tests. This check focuses on
+        # metrics payload correctness for authorized admin requests.
 
     def test_next_week_risk_no_policies(self, client, mock_admin):
         """Test next-week-risk endpoint with no active policies returns LOW risk"""
@@ -190,6 +159,10 @@ class TestAdminRoutes:
             assert body["risk_level"] == "LOW"
             assert body["total_expected_claims"] == 0
             assert body["projected_payout"] == 0.0
+            assert body["ml_risk_score"] == 0.0
+            assert body["trigger_risk"] == 0
+            assert body["final_score"] == 0.0
+            assert body["city_predictions"] == []
 
     def test_next_week_risk_rain_trigger(self, client, mock_admin):
         """Test next-week-risk endpoint with rain trigger returning HIGH risk"""
@@ -260,6 +233,12 @@ class TestAdminRoutes:
             assert len(body["city_breakdown"]) == 1
             assert body["city_breakdown"][0]["city"] == "Chennai"
             assert body["city_breakdown"][0]["max_payout_pct"] == 60
+            assert "ml_risk_score" in body
+            assert "trigger_risk" in body
+            assert "final_score" in body
+            assert len(body["city_predictions"]) == 1
+            assert body["city_predictions"][0]["city"] == "Chennai"
+            assert body["city_predictions"][0]["trigger_pct"] == 60
 
     def test_next_week_risk_heat_trigger_high(self, client, mock_admin):
         """Test next-week-risk endpoint with heat trigger returning HIGH risk"""
@@ -334,4 +313,153 @@ class TestAdminRoutes:
             assert body["city_breakdown"][0]["city"] == "Delhi"
             assert body["city_breakdown"][0]["max_payout_pct"] == 100
             assert body["city_breakdown"][0]["risk_level"] == "HIGH"
+            assert body["city_predictions"][0]["city"] == "Delhi"
+            assert body["city_predictions"][0]["trigger_pct"] == 100
+
+    def test_next_week_risk_multiple_trigger_days_high(self, client, mock_admin):
+        """Multiple trigger days should remain HIGH risk in combined scoring."""
+        admin_token = create_access_token(
+            user_id="admin-123",
+            phone="9999999999",
+            role="admin",
+            email="admin@guardgig.com",
+        )
+
+        now = datetime.now(timezone.utc)
+        policy = {
+            "id": "policy-1",
+            "user_id": "user-1",
+            "status": "active",
+            "payment_status": "success",
+            "coverage_amount": 700.0,
+            "created_at": now.isoformat(),
+        }
+
+        onboarding = {
+            "user_id": "user-1",
+            "city": "Mumbai",
+            "mean_income": 2800.0,
+        }
+
+        forecast = [
+            {
+                "date": (now + timedelta(days=i)).isoformat().split("T")[0],
+                "rain": 150.0 if i in (0, 1) else 10.0,
+                "temperature": 36.0,
+            }
+            for i in range(7)
+        ]
+
+        with patch("app.dependencies.get_admin_client") as mock_dep_admin, patch(
+            "app.routes.admin.get_admin_client"
+        ) as mock_route_admin, patch(
+            "app.routes.admin.fetch_7day_forecast_async"
+        ) as mock_forecast, patch(
+            "app.routes.admin.get_next_week_risk_score"
+        ) as mock_next_week_model:
+            mock_dep_admin.return_value = mock_admin
+            mock_route_admin.return_value = mock_admin
+            mock_forecast.return_value = forecast
+            mock_next_week_model.return_value = (0.85, True)
+
+            call_count = [0]
+
+            def mock_execute(*args, **kwargs):
+                call_count[0] += 1
+                if call_count[0] == 1:
+                    return MagicMock(data=[policy])
+                if call_count[0] == 2:
+                    return MagicMock(data=[onboarding])
+                return MagicMock(data=[])
+
+            mock_admin.table.return_value.select.return_value.eq.return_value.execute.side_effect = mock_execute
+            mock_admin.table.return_value.select.return_value.in_.return_value.execute.return_value = MagicMock(
+                data=[onboarding]
+            )
+
+            response = client.get(
+                "/api/admin/next-week-risk",
+                headers={"Authorization": f"Bearer {admin_token}"},
+            )
+
+            assert response.status_code == 200
+            body = response.json()
+            assert body["risk_level"] == "HIGH"
+            assert body["days_with_triggers"] >= 2
+            assert body["final_score"] >= 0.6
+            assert body["city_predictions"][0]["city"] == "Mumbai"
+            assert body["city_predictions"][0]["risk_level"] == "HIGH"
+
+    def test_next_week_risk_ml_failure_falls_back_to_trigger(self, client, mock_admin):
+        """If ML model inference fails/unavailable, risk should fall back to trigger-only severity."""
+        admin_token = create_access_token(
+            user_id="admin-123",
+            phone="9999999999",
+            role="admin",
+            email="admin@guardgig.com",
+        )
+
+        now = datetime.now(timezone.utc)
+        policy = {
+            "id": "policy-1",
+            "user_id": "user-1",
+            "status": "active",
+            "payment_status": "success",
+            "coverage_amount": 700.0,
+            "created_at": now.isoformat(),
+        }
+
+        onboarding = {
+            "user_id": "user-1",
+            "city": "Kolkata",
+            "mean_income": 2600.0,
+        }
+
+        forecast = [
+            {
+                "date": (now + timedelta(days=i)).isoformat().split("T")[0],
+                "rain": 120.0 if i == 0 else 0.0,
+                "temperature": 34.0,
+            }
+            for i in range(7)
+        ]
+
+        with patch("app.dependencies.get_admin_client") as mock_dep_admin, patch(
+            "app.routes.admin.get_admin_client"
+        ) as mock_route_admin, patch(
+            "app.routes.admin.fetch_7day_forecast_async"
+        ) as mock_forecast, patch(
+            "app.routes.admin.get_next_week_risk_score"
+        ) as mock_next_week_model:
+            mock_dep_admin.return_value = mock_admin
+            mock_route_admin.return_value = mock_admin
+            mock_forecast.return_value = forecast
+            mock_next_week_model.return_value = (0.0, False)
+
+            call_count = [0]
+
+            def mock_execute(*args, **kwargs):
+                call_count[0] += 1
+                if call_count[0] == 1:
+                    return MagicMock(data=[policy])
+                if call_count[0] == 2:
+                    return MagicMock(data=[onboarding])
+                return MagicMock(data=[])
+
+            mock_admin.table.return_value.select.return_value.eq.return_value.execute.side_effect = mock_execute
+            mock_admin.table.return_value.select.return_value.in_.return_value.execute.return_value = MagicMock(
+                data=[onboarding]
+            )
+
+            response = client.get(
+                "/api/admin/next-week-risk",
+                headers={"Authorization": f"Bearer {admin_token}"},
+            )
+
+            assert response.status_code == 200
+            body = response.json()
+            assert body["trigger_risk"] == 60
+            assert body["ml_risk_score"] == 0.6
+            assert body["final_score"] == 0.6
+            assert body["risk_level"] == "HIGH"
 

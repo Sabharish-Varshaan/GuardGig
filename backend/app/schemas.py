@@ -340,12 +340,24 @@ class CityRiskBreakdown(BaseModel):
     forecast_days: list[CityForecastDay]
 
 
+class CityMLPrediction(BaseModel):
+    city: str
+    ml_score: float  # raw ML score in [0, 1]
+    trigger_pct: int  # trigger-derived max payout percentage (0-100)
+    final_score: float  # blended score in [0, 1]
+    risk_level: Literal["LOW", "MEDIUM", "HIGH"]
+
+
 class AdminNextWeekRiskResponse(BaseModel):
     risk_level: Literal["LOW", "MEDIUM", "HIGH"]
     risk_score: float  # 0.0 to 1.0, lightweight ML-style aggregate
+    ml_risk_score: float  # system-wide ML score in [0, 1]
+    trigger_risk: int  # trigger-derived system risk as percentage (0-100)
+    final_score: float  # blended system score in [0, 1]
     total_expected_claims: int
     projected_payout: float
     high_risk_cities: list[str]  # list of city names with HIGH risk
+    city_predictions: list[CityMLPrediction]
     max_payout_tier: int  # highest payout_pct across all cities and days
     days_with_triggers: int  # count of days with at least one trigger
     city_breakdown: list[CityRiskBreakdown]

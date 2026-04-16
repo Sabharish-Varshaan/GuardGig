@@ -17,11 +17,13 @@ from ..schemas import (
     AdminMetricsResponse,
     AdminNextWeekRiskResponse,
     CityForecastDay,
+    CityMLPrediction,
     CityRiskBreakdown,
     DayForecastSummary,
 )
 from ..supabase_client import get_admin_client
 from ..trigger_utils import fetch_7day_forecast_async, compute_trigger_payouts
+from ml.predict import get_next_week_risk_score
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
@@ -56,6 +58,45 @@ def determine_trigger_type(rain_pct: int, aqi_pct: int, heat_pct: int) -> str:
     if aqi_pct > 0:
         return "AQI"
     return "NONE"
+
+
+def risk_level_from_score(score: float) -> str:
+    if score >= 0.6:
+        return "HIGH"
+    if score >= 0.3:
+        return "MEDIUM"
+    return "LOW"
+
+
+def empty_next_week_risk_response() -> AdminNextWeekRiskResponse:
+    now = datetime.now(timezone.utc).isoformat()
+    return AdminNextWeekRiskResponse(
+        risk_level="LOW",
+        risk_score=0.0,
+        ml_risk_score=0.0,
+        trigger_risk=0,
+        final_score=0.0,
+        total_expected_claims=0,
+        projected_payout=0.0,
+        high_risk_cities=[],
+        city_predictions=[],
+        max_payout_tier=0,
+        days_with_triggers=0,
+        city_breakdown=[],
+        forecast_summary=[],
+        last_updated=now,
+    )
+
+
+def build_default_forecast() -> list[dict]:
+    return [
+        {
+            "date": (datetime.now(timezone.utc) + timedelta(days=i)).isoformat().split("T")[0],
+            "rain": 0.0,
+            "temperature": 20.0,
+        }
+        for i in range(7)
+    ]
 
 
 @router.post("/login", response_model=AdminLoginResponse)
@@ -142,19 +183,7 @@ async def get_next_week_risk(current_admin: dict = Depends(require_admin_user)):
     
     policies = policies_response.data or []
     if not policies:
-        # No active policies, return LOW risk
-        return AdminNextWeekRiskResponse(
-            risk_level="LOW",
-            risk_score=0.0,
-            total_expected_claims=0,
-            projected_payout=0.0,
-            high_risk_cities=[],
-            max_payout_tier=0,
-            days_with_triggers=0,
-            city_breakdown=[],
-            forecast_summary=[],
-            last_updated=datetime.now(timezone.utc).isoformat(),
-        )
+        return empty_next_week_risk_response()
     
     # 2. Fetch onboarding data for all users
     user_ids = list(set(p["user_id"] for p in policies))
@@ -185,40 +214,27 @@ async def get_next_week_risk(current_admin: dict = Depends(require_admin_user)):
         })
     
     if not city_groups:
-        # No valid city data, return LOW risk
-        return AdminNextWeekRiskResponse(
-            risk_level="LOW",
-            risk_score=0.0,
-            total_expected_claims=0,
-            projected_payout=0.0,
-            high_risk_cities=[],
-            max_payout_tier=0,
-            days_with_triggers=0,
-            city_breakdown=[],
-            forecast_summary=[],
-            last_updated=datetime.now(timezone.utc).isoformat(),
-        )
+        return empty_next_week_risk_response()
     
     # 4. Fetch 7-day forecast for each city and compute risk
     city_results = {}
     all_days_results = {}  # Track all days across all cities
-    system_temperatures = []
+    any_city_used_model = False
     
     for city, policy_records in city_groups.items():
         forecast = await fetch_7day_forecast_async(city)
         if not forecast:
-            forecast = [{
-                "date": (datetime.now(timezone.utc) + timedelta(days=i)).isoformat().split("T")[0],
-                "rain": 0.0,
-                "temperature": 20.0,
-            } for i in range(7)]
+            forecast = build_default_forecast()
         
         # Compute max payout and triggers for this city
         max_payout_pct = 0
         expected_triggers_set = set()
         city_forecast_days = []
+        temperatures = []
+        rain_values = []
+        payout_percentages = []
         
-        for day_idx, day_data in enumerate(forecast[:7]):
+        for day_data in forecast[:7]:
             rain = day_data.get("rain", 0.0)
             temp = day_data.get("temperature", 20.0)
             aqi = 0.0  # AQI not available from 7-day forecast
@@ -238,6 +254,10 @@ async def get_next_week_risk(current_admin: dict = Depends(require_admin_user)):
             if aqi_pct > 0:
                 expected_triggers_set.add("AQI")
 
+            temperatures.append(float(temp))
+            rain_values.append(float(rain))
+            payout_percentages.append(float(day_max_pct))
+
             city_forecast_days.append(
                 CityForecastDay(
                     date=day_data.get("date", ""),
@@ -252,17 +272,28 @@ async def get_next_week_risk(current_admin: dict = Depends(require_admin_user)):
             date_str = day_data.get("date", "")
             if date_str not in all_days_results:
                 all_days_results[date_str] = {
-                    "rain": rain,
-                    "temperature": temp,
+                    "rain": float(rain),
+                    "temperature": float(temp),
                     "payout_pct": day_max_pct,
-                    "triggers": [],
+                    "triggers": set(),
                 }
             
             # Update max across all cities for this date
             if day_max_pct > all_days_results[date_str]["payout_pct"]:
                 all_days_results[date_str]["payout_pct"] = day_max_pct
-            
-            all_days_results[date_str]["triggers"] = list(expected_triggers_set)
+            if float(rain) > all_days_results[date_str]["rain"]:
+                all_days_results[date_str]["rain"] = float(rain)
+            if float(temp) > all_days_results[date_str]["temperature"]:
+                all_days_results[date_str]["temperature"] = float(temp)
+
+            day_triggers = set()
+            if rain_pct > 0:
+                day_triggers.add("RAIN")
+            if heat_pct > 0:
+                day_triggers.add("HEAT")
+            if aqi_pct > 0:
+                day_triggers.add("AQI")
+            all_days_results[date_str]["triggers"].update(day_triggers)
         
         # Compute city-level aggregates
         num_policies = len(policy_records)
@@ -280,35 +311,62 @@ async def get_next_week_risk(current_admin: dict = Depends(require_admin_user)):
         # Updated payout: accounts for payout_pct reduction
         projected_payout = expected_claims * avg_coverage * (max_payout_pct / 100.0)
         
-        # Count trigger days for this city
-        city_trigger_days = sum(1 for day_data in forecast[:7] if int(
-            max(
-                *compute_trigger_payouts(day_data.get("rain", 0.0), 0.0, day_data.get("temperature", 20.0))
-            )
-        ) > 0)
-        
-        # Calculate average temperature for this city
-        city_temps = [day_data.get("temperature", 20.0) for day_data in forecast[:7]]
-        city_avg_temp = sum(city_temps) / len(city_temps) if city_temps else 20.0
-        system_temperatures.extend(city_temps)
-        
-        # New multi-factor risk scoring per city
-        city_risk_score = (
-            0.5 * (max_payout_pct / 100.0) +
-            0.3 * (city_trigger_days / 7.0) +
-            0.2 * (city_avg_temp / 50.0)
+        city_trigger_days = sum(1 for pct in payout_percentages if pct > 0)
+        avg_temperature = sum(temperatures) / len(temperatures) if temperatures else 20.0
+        max_temperature = max(temperatures) if temperatures else 20.0
+        total_rainfall = sum(rain_values)
+        max_rainfall = max(rain_values) if rain_values else 0.0
+        avg_payout_pct = sum(payout_percentages) / len(payout_percentages) if payout_percentages else 0.0
+
+        ml_input = {
+            "avg_temperature": avg_temperature,
+            "max_temperature": max_temperature,
+            "total_rainfall": total_rainfall,
+            "max_rainfall": max_rainfall,
+            "trigger_days": city_trigger_days,
+            "avg_payout_percentage": avg_payout_pct,
+        }
+        logger.info("[ML INPUT] city=%s features=%s", city, ml_input)
+
+        ml_score, used_model = get_next_week_risk_score(ml_input)
+        trigger_risk_score = max_payout_pct / 100.0
+
+        if not used_model:
+            # Safety fallback to trigger-only risk when ML is unavailable.
+            ml_score = trigger_risk_score
+            city_final_score = trigger_risk_score
+            logger.warning("[ML OUTPUT] city=%s model_unavailable=True fallback=trigger_based", city)
+        else:
+            any_city_used_model = True
+            city_final_score = (0.7 * ml_score) + (0.3 * trigger_risk_score)
+
+        # Trigger system is core insurance logic; ML must not downgrade hard trigger severity.
+        city_final_score = max(city_final_score, trigger_risk_score)
+
+        city_final_score = min(max(city_final_score, 0.0), 1.0)
+        ml_score = min(max(float(ml_score), 0.0), 1.0)
+        city_risk_level = risk_level_from_score(city_final_score)
+
+        logger.info(
+            "[ML OUTPUT] city=%s ml_score=%.3f used_model=%s",
+            city,
+            ml_score,
+            used_model,
         )
-        city_risk_score = min(max(city_risk_score, 0.0), 1.0)  # Normalize to [0, 1]
-        
-        # Use original thresholds for risk_level (backwards compatibility)
-        city_risk_level = "HIGH" if max_payout_pct >= 60 else "MEDIUM" if max_payout_pct >= 30 else "LOW"
+        logger.info(
+            "[FINAL SCORE] city=%s trigger_risk=%.3f final_score=%.3f",
+            city,
+            trigger_risk_score,
+            city_final_score,
+        )
         
         # Detailed logging
         logger.info(
             f"City risk analysis: {city} | users={num_users} | affected_ratio={affected_ratio:.2f} | "
             f"max_payout={max_payout_pct}% | expected_claims={expected_claims} | "
             f"projected_payout={projected_payout:.2f} | trigger_days={city_trigger_days} | "
-            f"avg_temp={city_avg_temp:.1f}°C | risk_score={city_risk_score:.3f} | risk_level={city_risk_level}"
+            f"avg_temp={avg_temperature:.1f}°C | ml_score={ml_score:.3f} | "
+            f"final_score={city_final_score:.3f} | risk_level={city_risk_level}"
         )
         
         city_results[city] = {
@@ -320,9 +378,11 @@ async def get_next_week_risk(current_admin: dict = Depends(require_admin_user)):
             "avg_coverage": avg_coverage,
             "projected_payout": projected_payout,
             "risk_level": city_risk_level,
-            "risk_score": city_risk_score,
+            "risk_score": city_final_score,
+            "ml_score": ml_score,
+            "final_score": city_final_score,
             "trigger_days": city_trigger_days,
-            "avg_temp": city_avg_temp,
+            "avg_temp": avg_temperature,
             "expected_triggers": sorted(list(expected_triggers_set)),
             "forecast_days": city_forecast_days,
         }
@@ -332,40 +392,51 @@ async def get_next_week_risk(current_admin: dict = Depends(require_admin_user)):
     total_projected_payout = sum(r["projected_payout"] for r in city_results.values())
     max_payout_tier = max((r["max_payout_pct"] for r in city_results.values()), default=0)
     
-    # Calculate system-wide aggregate values for new risk_score formula
+    # Calculate system-wide aggregate values
     num_trigger_days = sum(1 for d in all_days_results.values() if d["payout_pct"] > 0)
-    
-    # Calculate system-wide average temperature from all city forecasts
-    avg_temperature = (sum(system_temperatures) / len(system_temperatures)) if system_temperatures else 20.0
-    
-    # New multi-factor risk scoring formula (system-wide)
-    system_risk_score = (
-        0.5 * (max_payout_tier / 100.0) +
-        0.3 * (num_trigger_days / 7.0) +
-        0.2 * (avg_temperature / 50.0)
-    )
-    system_risk_score = min(max(system_risk_score, 0.0), 1.0)  # Normalize to [0, 1]
-    
-    # Use original thresholds for risk_level (backwards compatibility)
-    if max_payout_tier >= 60:
-        overall_risk_level = "HIGH"
-    elif max_payout_tier >= 30:
-        overall_risk_level = "MEDIUM"
+
+    total_users_weight = sum(max(1, r["num_users"]) for r in city_results.values())
+    weighted_ml_score = sum(r["ml_score"] * max(1, r["num_users"]) for r in city_results.values())
+    ml_risk_score = (weighted_ml_score / total_users_weight) if total_users_weight else 0.0
+    trigger_risk_score = max_payout_tier / 100.0
+    if any_city_used_model:
+        system_final_score = (0.7 * ml_risk_score) + (0.3 * trigger_risk_score)
     else:
-        overall_risk_level = "LOW"
+        ml_risk_score = trigger_risk_score
+        system_final_score = trigger_risk_score
+
+    # Keep trigger severity authoritative at system level as well.
+    system_final_score = max(system_final_score, trigger_risk_score)
+
+    system_final_score = min(max(system_final_score, 0.0), 1.0)
+    overall_risk_level = risk_level_from_score(system_final_score)
     
     # System-wide logging
     total_num_users = sum(r["num_users"] for r in city_results.values())
     logger.info(
         f"System-wide risk summary | total_users={total_num_users} | "
-        f"avg_temp={avg_temperature:.1f}°C | trigger_days={num_trigger_days} | "
+        f"trigger_days={num_trigger_days} | "
         f"max_payout={max_payout_tier}% | total_expected_claims={total_expected_claims} | "
         f"total_projected_payout={total_projected_payout:.2f} | "
-        f"risk_score={system_risk_score:.3f} | risk_level={overall_risk_level}"
+        f"ml_risk_score={ml_risk_score:.3f} | final_score={system_final_score:.3f} | "
+        f"risk_level={overall_risk_level}"
     )
+
+    logger.info("[FINAL SCORE] system trigger_risk=%.3f final_score=%.3f", trigger_risk_score, system_final_score)
     
     # High risk cities
     high_risk_cities = [c for c, r in city_results.items() if r["risk_level"] == "HIGH"]
+
+    city_predictions = [
+        CityMLPrediction(
+            city=city,
+            ml_score=round(r["ml_score"], 4),
+            trigger_pct=r["max_payout_pct"],
+            final_score=round(r["final_score"], 4),
+            risk_level=r["risk_level"],
+        )
+        for city, r in city_results.items()
+    ]
     
     # Build city breakdown
     city_breakdown = [
@@ -389,7 +460,10 @@ async def get_next_week_risk(current_admin: dict = Depends(require_admin_user)):
     # Build forecast summary
     forecast_summary = []
     for i, (date_str, day_result) in enumerate(sorted(all_days_results.items())):
-        day_of_week = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"][i % 7]
+        if date_str:
+            day_of_week = datetime.fromisoformat(date_str).strftime("%a")
+        else:
+            day_of_week = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"][i % 7]
         forecast_summary.append(
             DayForecastSummary(
                 day=day_of_week,
@@ -397,16 +471,20 @@ async def get_next_week_risk(current_admin: dict = Depends(require_admin_user)):
                 rain=day_result["rain"],
                 temperature=day_result["temperature"],
                 payout_pct=day_result["payout_pct"],
-                triggers=day_result["triggers"],
+                triggers=sorted(day_result["triggers"]),
             )
         )
     
     return AdminNextWeekRiskResponse(
         risk_level=overall_risk_level,
-        risk_score=round(system_risk_score, 4),
+        risk_score=round(system_final_score, 4),
+        ml_risk_score=round(ml_risk_score, 4),
+        trigger_risk=max_payout_tier,
+        final_score=round(system_final_score, 4),
         total_expected_claims=total_expected_claims,
         projected_payout=round(total_projected_payout, 2),
         high_risk_cities=high_risk_cities,
+        city_predictions=city_predictions,
         max_payout_tier=max_payout_tier,
         days_with_triggers=num_trigger_days,
         city_breakdown=city_breakdown,

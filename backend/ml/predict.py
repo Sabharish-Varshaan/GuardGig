@@ -9,8 +9,8 @@ and fall back to safe heuristics when models are missing.
 """
 from __future__ import annotations
 
-from pathlib import Path
 import logging
+from pathlib import Path
 from typing import Dict, Any
 
 import joblib
@@ -52,6 +52,59 @@ def _features_for_risk(payload: Dict[str, Any]) -> list[float]:
     return [income_norm, variance_norm, rain_norm, aqi_norm]
 
 
+def _features_for_next_week_risk(payload: Dict[str, Any]) -> list[float]:
+    """Build normalized 6-feature vector for admin next-week city forecasting.
+
+    Expected payload keys:
+    - avg_temperature
+    - max_temperature
+    - total_rainfall
+    - max_rainfall
+    - trigger_days
+    - avg_payout_percentage
+    """
+    avg_temperature = float(payload.get("avg_temperature") or 0.0)
+    max_temperature = float(payload.get("max_temperature") or 0.0)
+    total_rainfall = float(payload.get("total_rainfall") or 0.0)
+    max_rainfall = float(payload.get("max_rainfall") or 0.0)
+    trigger_days = float(payload.get("trigger_days") or 0.0)
+    avg_payout_percentage = float(payload.get("avg_payout_percentage") or 0.0)
+
+    # Keep normalization deterministic and aligned with training script.
+    avg_temp_norm = np.clip(avg_temperature / 50.0, 0.0, 1.5)
+    max_temp_norm = np.clip(max_temperature / 55.0, 0.0, 1.5)
+    total_rain_norm = np.clip(total_rainfall / 700.0, 0.0, 2.0)
+    max_rain_norm = np.clip(max_rainfall / 200.0, 0.0, 2.0)
+    trigger_days_norm = np.clip(trigger_days / 7.0, 0.0, 1.0)
+    avg_payout_norm = np.clip(avg_payout_percentage / 100.0, 0.0, 1.0)
+
+    return [
+        float(avg_temp_norm),
+        float(max_temp_norm),
+        float(total_rain_norm),
+        float(max_rain_norm),
+        float(trigger_days_norm),
+        float(avg_payout_norm),
+    ]
+
+
+def _is_model_compatible(model: Any, expected_features: int) -> bool:
+    if model is None:
+        return False
+    n_features = getattr(model, "n_features_in_", None)
+    if n_features is None:
+        return True
+    return int(n_features) == int(expected_features)
+
+
+def _predict_probability(model: Any, vec: list[float]) -> float:
+    if hasattr(model, "predict_proba"):
+        raw = float(model.predict_proba([vec])[0][1])
+    else:
+        raw = float(model.predict([vec])[0])
+    return float(np.clip(raw, 0.0, 1.0))
+
+
 def _features_for_fraud(payload: Dict[str, Any]) -> list[float]:
     # Expecting keys: number_of_claims_today, time_since_last_claim, location_change, activity_status
     claims_today = float(payload.get("number_of_claims_today") or 0.0)
@@ -75,9 +128,8 @@ def get_risk_score(features: Dict[str, Any]) -> float:
     """
     vec = _features_for_risk(features)
     try:
-        if _risk_model is not None:
-            proba = _risk_model.predict_proba([vec])[0][1]
-            return float(np.clip(proba, 0.0, 1.0))
+        if _is_model_compatible(_risk_model, len(vec)):
+            return _predict_probability(_risk_model, vec)
     except Exception as exc:
         logger.debug("Risk model prediction failed: %s", exc)
 
@@ -88,6 +140,28 @@ def get_risk_score(features: Dict[str, Any]) -> float:
     score += 0.1 * min(1.0, rain_norm)
     score += 0.1 * min(1.0, aqi_norm)
     return float(max(0.0, min(1.0, round(score, 2))))
+
+
+def get_next_week_risk_score(features: Dict[str, Any]) -> tuple[float, bool]:
+    """Return (ml_score, used_model) for admin next-week city risk in [0,1]."""
+    vec = _features_for_next_week_risk(features)
+    try:
+        if _is_model_compatible(_risk_model, len(vec)):
+            return _predict_probability(_risk_model, vec), True
+    except Exception as exc:
+        logger.warning("Admin next-week risk model prediction failed: %s", exc)
+
+    # Fallback keeps system deterministic if model is unavailable/incompatible.
+    avg_temp_norm, max_temp_norm, total_rain_norm, max_rain_norm, trigger_days_norm, avg_payout_norm = vec
+    heuristic = (
+        0.15 * min(1.0, avg_temp_norm)
+        + 0.15 * min(1.0, max_temp_norm)
+        + 0.2 * min(1.0, total_rain_norm)
+        + 0.2 * min(1.0, max_rain_norm)
+        + 0.15 * min(1.0, trigger_days_norm)
+        + 0.15 * min(1.0, avg_payout_norm)
+    )
+    return float(np.clip(heuristic, 0.0, 1.0)), False
 
 
 def get_fraud_score(features: Dict[str, Any]) -> float:
