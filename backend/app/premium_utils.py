@@ -1,5 +1,10 @@
 
+import logging
+
 from ml.predict import get_risk_score
+
+
+logger = logging.getLogger(__name__)
 
 
 def calculate_policy_risk_score(income: float, income_variance: float = 0.0, *, rain: float = 0.0, aqi: float = 0.0) -> float:
@@ -43,6 +48,13 @@ def calculate_premium(income: float, risk_preference: str = "Medium", income_var
     else:
         trigger_probability = 0.08
 
-    premium = trigger_probability * float(income or 0.0) * 7
+    coverage_days = 7
+    risk_multiplier = 1.2
+    mean_income = float(income or 0.0)
+
+    premium = trigger_probability * mean_income * coverage_days * risk_multiplier
     premium = max(20.0, min(premium, 50.0))
-    return round(premium, 2)
+    premium = round(premium, 2)
+
+    logger.info("[PREMIUM] income=%s, risk=%s, premium=%s", mean_income, risk_score, premium)
+    return premium

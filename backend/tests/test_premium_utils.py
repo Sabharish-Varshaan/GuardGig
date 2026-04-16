@@ -10,9 +10,16 @@ def test_low_income_low_risk_maps_to_floor_premium():
     assert premium == 20.0
 
 
+def test_medium_income_medium_risk_maps_to_cap_premium():
+    with patch("app.premium_utils.calculate_policy_risk_score", return_value=0.5):
+        premium = calculate_premium(300.0, "Medium", income_variance=0.0)
+
+    assert premium == 50.0
+
+
 def test_high_income_high_risk_maps_to_cap_premium():
     with patch("app.premium_utils.calculate_policy_risk_score", return_value=0.8):
-        premium = calculate_premium(2000.0, "High", income_variance=0.0)
+        premium = calculate_premium(600.0, "High", income_variance=0.0)
 
     assert premium == 50.0
 
