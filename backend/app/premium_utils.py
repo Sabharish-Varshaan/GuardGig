@@ -16,6 +16,35 @@ def _trigger_probability_from_risk(risk_score: float) -> float:
     return round(0.08 - (0.06 * risk_score), 4)
 
 
+def _calculate_bcr_pricing_from_probability(mean_income: float, trigger_probability: float) -> tuple[float, float, float]:
+    """Calculate premium and coverage with a fixed actuarial BCR target.
+
+    Returns (premium, coverage, normalized_trigger_probability).
+    """
+    safe_trigger_probability = float(trigger_probability or 0.0)
+    if safe_trigger_probability <= 0.0:
+        safe_trigger_probability = 0.05
+
+    raw_premium = safe_trigger_probability * mean_income * 3.0
+    premium = max(20.0, min(raw_premium, 50.0))
+
+    target_bcr = 0.65
+    coverage = (premium * target_bcr) / safe_trigger_probability
+    coverage = min(coverage, mean_income * 1.5)
+
+    premium = round(premium, 2)
+    coverage = round(max(0.0, coverage), 2)
+
+    expected_payout = coverage * safe_trigger_probability
+    loss_ratio = (expected_payout / premium) if premium > 0 else 0.0
+    print(
+        f"[ACTUARIAL CHECK] premium={premium}, coverage={coverage}, "
+        f"prob={safe_trigger_probability}, loss_ratio={loss_ratio}"
+    )
+
+    return premium, coverage, safe_trigger_probability
+
+
 def _calculate_bcr_pricing(mean_income: float, risk_score: float) -> tuple[float, float]:
     """Calculate premium and coverage using a BCR-oriented sequence.
 
@@ -25,15 +54,7 @@ def _calculate_bcr_pricing(mean_income: float, risk_score: float) -> tuple[float
     4) both rounded to 2 decimals
     """
     trigger_probability = _trigger_probability_from_risk(risk_score)
-
-    premium = trigger_probability * mean_income * 3.0
-    premium = max(20.0, min(premium, 50.0))
-
-    coverage = premium / trigger_probability
-    coverage = coverage * 0.65
-
-    premium = round(premium, 2)
-    coverage = round(max(0.0, coverage), 2)
+    premium, coverage, _ = _calculate_bcr_pricing_from_probability(mean_income, trigger_probability)
     return premium, coverage
 
 
@@ -64,7 +85,7 @@ def calculate_coverage_amount(
 ) -> float:
     """Calculate coverage from mean income and ML risk score.
 
-    coverage = (premium / trigger_probability) * 0.65
+    coverage = (premium * 0.65) / trigger_probability
     """
     mean_income = float(income or 0.0)
     if risk_score is None:

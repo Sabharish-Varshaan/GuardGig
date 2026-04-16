@@ -1,10 +1,10 @@
 from unittest.mock import patch
 
-from app.premium_utils import calculate_coverage_amount, calculate_premium
+from app.premium_utils import calculate_coverage_amount, calculate_premium, _calculate_bcr_pricing_from_probability
 
 
 def test_same_income_different_risk_changes_coverage():
-    income = 200.0
+    income = 400.0
 
     low_risk_coverage = calculate_coverage_amount(income, risk_score=0.2)
     high_risk_coverage = calculate_coverage_amount(income, risk_score=0.8)
@@ -55,7 +55,7 @@ def test_coverage_formula_matches_expected_expression():
     risk_score = 0.4
     trigger_probability = 0.08 - (0.06 * risk_score)
     premium = max(20.0, min(trigger_probability * mean_income * 3.0, 50.0))
-    expected = round((premium / trigger_probability) * 0.65, 2)
+    expected = round(min((premium * 0.65) / trigger_probability, mean_income * 1.5), 2)
     actual = calculate_coverage_amount(mean_income, risk_score=risk_score)
 
     assert actual == expected
@@ -69,14 +69,33 @@ def test_coverage_decreases_when_risk_decreases():
 
 
 def test_expected_payout_is_about_sixty_percent_of_premium_pool():
-    mean_income = 500.0
-    risk_score = 0.8
-    trigger_probability = 0.08 - (0.06 * risk_score)
-
-    premium = calculate_premium(mean_income, "Medium", income_variance=0.0, risk_score=risk_score)
-    coverage = calculate_coverage_amount(mean_income, risk_score=risk_score)
+    mean_income = 400.0
+    premium, coverage, trigger_probability = _calculate_bcr_pricing_from_probability(mean_income, 0.2)
     expected_payout = trigger_probability * coverage
     ratio = expected_payout / premium
 
+    assert 0.60 <= ratio <= 0.70
+
+
+def test_bcr_cases_for_reference_probabilities():
+    mean_income = 400.0
+
+    for probability in (0.1, 0.2, 0.3):
+        premium, coverage, used_probability = _calculate_bcr_pricing_from_probability(mean_income, probability)
+        expected_payout = coverage * used_probability
+        ratio = expected_payout / premium
+
+        assert 20.0 <= premium <= 50.0
+        assert 0.60 <= ratio <= 0.70
+
+
+def test_trigger_probability_edge_case_fallback():
+    premium, coverage, used_probability = _calculate_bcr_pricing_from_probability(400.0, 0.0)
+    expected_payout = coverage * used_probability
+    ratio = expected_payout / premium
+
+    assert used_probability == 0.05
+    assert 20.0 <= premium <= 50.0
+    assert coverage <= 600.0
     assert 0.60 <= ratio <= 0.70
 

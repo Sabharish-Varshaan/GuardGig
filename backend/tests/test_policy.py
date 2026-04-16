@@ -251,11 +251,11 @@ class TestPolicyRiskUnderwriting:
         trigger_probability = 0.08 - (0.06 * risk_score)
         premium = max(20.0, min(trigger_probability * mean_income * 3.0, 50.0))
 
-        coverage_amount = round((premium / trigger_probability) * 0.65, 2)
+        coverage_amount = round(min((premium * 0.65) / trigger_probability, mean_income * 1.5), 2)
 
         print("\n[TEST] Policy Risk - ML Coverage")
         print(f"Input: risk_score={risk_score}, mean_income={mean_income}")
-        print("Expected: coverage_amount=371.43")
+        print("Expected: coverage_amount=150.0")
         print(f"Actual: coverage_amount={coverage_amount}")
-        assert coverage_amount == 371.43
+        assert coverage_amount == 150.0
         print("Result: PASS")
