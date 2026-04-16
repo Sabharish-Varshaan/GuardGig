@@ -24,37 +24,71 @@ def calculate_policy_risk_score(income: float, income_variance: float = 0.0, *, 
     return max(0.0, min(1.0, round(risk_score, 4)))
 
 
-def calculate_premium(income: float, risk_preference: str = "Medium", income_variance: float = 0.0, *, rain: float = 0.0, aqi: float = 0.0, lat: float | None = None, lon: float | None = None) -> float:
-    """Calculate premium using trigger probability and income.
+def calculate_coverage_amount(
+    income: float,
+    income_variance: float = 0.0,
+    *,
+    rain: float = 0.0,
+    aqi: float = 0.0,
+    risk_score: float | None = None,
+) -> float:
+    """Calculate coverage from mean income and ML risk score.
+
+    coverage = mean_income * 7 * (0.6 + 0.8 * risk_score)
+    """
+    mean_income = float(income or 0.0)
+    if risk_score is None:
+        risk_score = calculate_policy_risk_score(
+            mean_income,
+            income_variance,
+            rain=rain,
+            aqi=aqi,
+        )
+    else:
+        risk_score = max(0.0, min(1.0, float(risk_score)))
+
+    coverage = mean_income * 7.0 * (0.6 + 0.8 * risk_score)
+    return round(max(0.0, coverage), 2)
+
+
+def calculate_premium(income: float, risk_preference: str = "Medium", income_variance: float = 0.0, *, rain: float = 0.0, aqi: float = 0.0, lat: float | None = None, lon: float | None = None, risk_score: float | None = None) -> float:
+    """Calculate premium from ML-driven coverage and risk score.
 
     - `income` is treated as mean daily income.
-    - risk_preference/rain/aqi/location args are retained for API compatibility.
+    - risk_preference/location args are retained for API compatibility.
     """
     _ = risk_preference  # Retained for API compatibility.
     _ = lat
     _ = lon
 
-    risk_score = calculate_policy_risk_score(
-        income,
+    mean_income = float(income or 0.0)
+    if risk_score is None:
+        risk_score = calculate_policy_risk_score(
+            mean_income,
+            income_variance,
+            rain=rain,
+            aqi=aqi,
+        )
+    else:
+        risk_score = max(0.0, min(1.0, float(risk_score)))
+
+    coverage_amount = calculate_coverage_amount(
+        mean_income,
         income_variance,
         rain=rain,
         aqi=aqi,
+        risk_score=risk_score,
     )
 
-    if risk_score < 0.3:
-        trigger_probability = 0.02
-    elif risk_score < 0.6:
-        trigger_probability = 0.05
-    else:
-        trigger_probability = 0.08
-
-    coverage_days = 7
-    risk_multiplier = 1.2
-    mean_income = float(income or 0.0)
-
-    premium = trigger_probability * mean_income * coverage_days * risk_multiplier
-    premium = max(20.0, min(premium, 50.0))
+    premium = coverage_amount * risk_score * 0.1
+    premium = max(15.0, min(premium, 80.0))
     premium = round(premium, 2)
 
-    logger.info("[PREMIUM] income=%s, risk=%s, premium=%s", mean_income, risk_score, premium)
+    logger.info(
+        "[PREMIUM] income=%s, risk=%s, coverage=%s, premium=%s",
+        mean_income,
+        risk_score,
+        coverage_amount,
+        premium,
+    )
     return premium

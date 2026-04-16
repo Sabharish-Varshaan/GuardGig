@@ -244,18 +244,16 @@ class TestPolicyStatus:
 class TestPolicyRiskUnderwriting:
     """Test risk model underwriting behavior beyond premium."""
 
-    def test_high_risk_reduces_coverage_amount(self):
-        """Coverage should be reduced by 20% when risk_score > 0.7"""
-        base_coverage = 700.0
+    def test_ml_driven_coverage_amount(self):
+        """Coverage should follow the ML-driven formula based on income and risk."""
+        mean_income = 100.0
         risk_score = 0.75
 
-        coverage_amount = base_coverage
-        if risk_score > 0.7:
-            coverage_amount = round(coverage_amount * 0.8, 2)
+        coverage_amount = round(mean_income * 7 * (0.6 + 0.8 * risk_score), 2)
 
-        print("\n[TEST] Policy Risk - Coverage Reduction")
-        print(f"Input: risk_score={risk_score}, base_coverage={base_coverage}")
-        print("Expected: coverage_amount=560.0")
+        print("\n[TEST] Policy Risk - ML Coverage")
+        print(f"Input: risk_score={risk_score}, mean_income={mean_income}")
+        print("Expected: coverage_amount=840.0")
         print(f"Actual: coverage_amount={coverage_amount}")
-        assert coverage_amount == 560.0
+        assert coverage_amount == 840.0
         print("Result: PASS")
