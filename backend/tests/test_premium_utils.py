@@ -22,7 +22,7 @@ def test_same_risk_different_income_changes_coverage():
 
 
 def test_premium_varies_with_ml_risk_for_same_income():
-    income = 200.0
+    income = 800.0
     with patch("app.premium_utils.calculate_policy_risk_score", side_effect=[0.25, 0.75]):
         low_risk_premium = calculate_premium(income, "Medium", income_variance=0.0)
         high_risk_premium = calculate_premium(income, "Medium", income_variance=0.0)
@@ -46,15 +46,31 @@ def test_mid_income_coverage_stays_reasonable():
     low_risk = calculate_coverage_amount(mid_income, risk_score=0.2)
     high_risk = calculate_coverage_amount(mid_income, risk_score=0.8)
 
-    assert low_risk <= 1500.0
-    assert high_risk <= 1500.0
+    assert low_risk <= 1000.0
+    assert high_risk <= 1000.0
 
 
 def test_coverage_formula_matches_expected_expression():
     mean_income = 150.0
     risk_score = 0.4
-    expected = round(mean_income * 3 * (0.5 + 0.5 * risk_score), 2)
+    expected = round((mean_income * 2) * (0.5 + 0.5 * risk_score), 2)
     actual = calculate_coverage_amount(mean_income, risk_score=risk_score)
 
     assert actual == expected
+
+
+def test_sustainability_examples_match_expected_values():
+    case_1_coverage = calculate_coverage_amount(500.0, risk_score=0.5)
+    case_2_coverage = calculate_coverage_amount(500.0, risk_score=0.8)
+
+    assert case_1_coverage == 750.0
+    assert case_2_coverage == 900.0
+
+
+def test_sustainability_examples_keep_premium_affordable():
+    case_1_premium = calculate_premium(500.0, "Medium", income_variance=0.0, risk_score=0.5)
+    case_2_premium = calculate_premium(500.0, "Medium", income_variance=0.0, risk_score=0.8)
+
+    assert case_1_premium < 50.0
+    assert case_2_premium < 50.0
 

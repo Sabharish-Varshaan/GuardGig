@@ -249,11 +249,11 @@ class TestPolicyRiskUnderwriting:
         mean_income = 100.0
         risk_score = 0.75
 
-        coverage_amount = round(mean_income * 3 * (0.5 + 0.5 * risk_score), 2)
+        coverage_amount = round((mean_income * 2) * (0.5 + 0.5 * risk_score), 2)
 
         print("\n[TEST] Policy Risk - ML Coverage")
         print(f"Input: risk_score={risk_score}, mean_income={mean_income}")
-        print("Expected: coverage_amount=262.5")
+        print("Expected: coverage_amount=175.0")
         print(f"Actual: coverage_amount={coverage_amount}")
-        assert coverage_amount == 262.5
+        assert coverage_amount == 175.0
         print("Result: PASS")

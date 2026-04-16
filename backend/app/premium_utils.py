@@ -34,7 +34,7 @@ def calculate_coverage_amount(
 ) -> float:
     """Calculate coverage from mean income and ML risk score.
 
-    coverage = mean_income * 3 * (0.5 + 0.5 * risk_score)
+    coverage = (mean_income * 2) * (0.5 + 0.5 * risk_score)
     """
     mean_income = float(income or 0.0)
     if risk_score is None:
@@ -47,8 +47,10 @@ def calculate_coverage_amount(
     else:
         risk_score = max(0.0, min(1.0, float(risk_score)))
 
-    coverage = mean_income * 3.0 * (0.5 + 0.5 * risk_score)
-    return round(max(0.0, coverage), 2)
+    base_coverage = mean_income * 2.0
+    coverage = base_coverage * (0.5 + 0.5 * risk_score)
+    coverage = min(max(0.0, coverage), 3000.0)
+    return round(coverage, 2)
 
 
 def calculate_premium(income: float, risk_preference: str = "Medium", income_variance: float = 0.0, *, rain: float = 0.0, aqi: float = 0.0, lat: float | None = None, lon: float | None = None, risk_score: float | None = None) -> float:
