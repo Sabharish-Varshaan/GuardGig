@@ -34,6 +34,7 @@ def persist_claim_payment(
     claims_table: str,
     claim_id: str,
     payment_status: str,
+    payout_status: str | None,
     transaction_id: str | None,
     paid_at: str | None,
     payout_method: str,
@@ -42,18 +43,20 @@ def persist_claim_payment(
 ) -> dict:
     normalized_method = normalize_payout_method(payout_method)
     logger.debug(f"  [PERSIST] Saving payout to claim {claim_id}: status={payment_status}, transaction_id={transaction_id}")
+    update_payload = {
+        "payment_status": payment_status,
+        "transaction_id": transaction_id,
+        "paid_at": paid_at,
+        "payout_method": normalized_method,
+        "masked_account": masked_account,
+        "trigger_snapshot": trigger_snapshot,
+    }
+    if payout_status is not None:
+        update_payload["payout_status"] = payout_status
+
     response = (
         admin.table(claims_table)
-        .update(
-            {
-                "payment_status": payment_status,
-                "transaction_id": transaction_id,
-                "paid_at": paid_at,
-                "payout_method": normalized_method,
-                "masked_account": masked_account,
-                "trigger_snapshot": trigger_snapshot,
-            }
-        )
+        .update(update_payload)
         .eq("id", claim_id)
         .execute()
     )
@@ -63,3 +66,15 @@ def persist_claim_payment(
     if result:
         logger.debug(f"  [PERSIST] ✓ Payout persisted: claim_id={claim_id}, status={payment_status}")
     return result
+
+
+def update_claim_payout_status(admin, claims_table: str, claim_id: str, payout_status: str) -> dict:
+    logger.debug(f"  [LIFECYCLE] Updating claim {claim_id} payout_status={payout_status}")
+    response = (
+        admin.table(claims_table)
+        .update({"payout_status": payout_status})
+        .eq("id", claim_id)
+        .execute()
+    )
+    rows = response.data or []
+    return rows[0] if rows else {}

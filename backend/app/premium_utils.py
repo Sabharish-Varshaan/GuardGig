@@ -20,17 +20,15 @@ def calculate_policy_risk_score(income: float, income_variance: float = 0.0, *, 
 
 
 def calculate_premium(income: float, risk_preference: str = "Medium", income_variance: float = 0.0, *, rain: float = 0.0, aqi: float = 0.0, lat: float | None = None, lon: float | None = None) -> float:
-    """Calculate premium combining ML risk score and income variance.
+    """Calculate premium using trigger probability and income.
 
-    - `income` is expected to be weekly income (existing API contract).
-    - risk_preference/rain/aqi/location args are used in ML feature set.
+    - `income` is treated as mean daily income.
+    - risk_preference/rain/aqi/location args are retained for API compatibility.
     """
     _ = risk_preference  # Retained for API compatibility.
     _ = lat
     _ = lon
 
-    base = income * 0.006
-    
     risk_score = calculate_policy_risk_score(
         income,
         income_variance,
@@ -38,8 +36,13 @@ def calculate_premium(income: float, risk_preference: str = "Medium", income_var
         aqi=aqi,
     )
 
-    # Combined formula: base * (1 + risk_score + variance_factor)
-    variance_factor = income_variance * 0.02
-    premium = base * (1 + risk_score + variance_factor)
-    
+    if risk_score < 0.3:
+        trigger_probability = 0.02
+    elif risk_score < 0.6:
+        trigger_probability = 0.05
+    else:
+        trigger_probability = 0.08
+
+    premium = trigger_probability * float(income or 0.0) * 7
+    premium = max(20.0, min(premium, 50.0))
     return round(premium, 2)

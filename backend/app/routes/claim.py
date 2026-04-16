@@ -15,8 +15,7 @@ from ..dependencies import require_current_user
 from ..metrics_utils import update_metrics_on_payout
 from ..schemas import ClaimCreateResponse, ClaimsListResponse, ClaimResponse
 from ..services.notification_service import create_notification
-from ..services.payout_details_service import fetch_user_payout_details, resolve_claim_payout_destination
-from ..services.payment_service import persist_claim_payment, simulate_razorpay_payout
+from ..services.payout_service import process_payout
 from ..supabase_client import get_admin_client
 from ..trigger_utils import check_trigger
 
@@ -193,6 +192,7 @@ def create_demo_claim(current_user: dict = Depends(require_current_user)):
         "payout_percentage": payout_percentage_raw,
         "payout_amount": payout,
         "status": "approved",
+        "payout_status": "pending",
         "fraud_score": fraud_score,
         "risk_score": risk_score,
         "activity_status": "active",
@@ -215,38 +215,16 @@ def create_demo_claim(current_user: dict = Depends(require_current_user)):
 
     claim = claim_rows[0]
 
-    payout_details = fetch_user_payout_details(admin, settings.supabase_payout_details_table, current_user["id"])
-    payout_destination = resolve_claim_payout_destination(payout_details)
-    payout_method = "pending"
-    masked_account = None
-
-    if not payout_destination:
-        payment_status = "pending_payout_details"
-        transaction_id = None
-        paid_at = None
-    else:
-        payout_method, masked_account = payout_destination
-        try:
-            payout_result = simulate_razorpay_payout(payout, current_user["id"])
-            payment_status = payout_result["status"]
-            transaction_id = payout_result["transaction_id"]
-            paid_at = payout_result["paid_at"]
-        except Exception:
-            payment_status = "failed"
-            transaction_id = None
-            paid_at = None
-
-    persist_claim_payment(
-        admin,
-        settings.supabase_claims_table,
-        claim["id"],
-        payment_status,
-        transaction_id,
-        paid_at,
-        payout_method,
-        masked_account,
-        trigger_snapshot,
+    payout_result = process_payout(
+        claim,
+        admin=admin,
+        claims_table=settings.supabase_claims_table,
+        payout_details_table=settings.supabase_payout_details_table,
+        trigger_snapshot=trigger_snapshot,
     )
+    payment_status = payout_result["payment_status"]
+    payout_method = payout_result["payout_method"]
+    transaction_id = payout_result["transaction_id"]
 
     latest_notification = None
     if claim.get("status") == "approved" and payment_status in {"paid", "credited"} and payout > 0:
@@ -256,9 +234,9 @@ def create_demo_claim(current_user: dict = Depends(require_current_user)):
             admin,
             settings.supabase_notifications_table,
             user_id=current_user["id"],
-            title="Payout Credited 💸",
-            message=f"₹{payout:.2f} credited due to {trigger_type}",
-            notification_type="payout_credited",
+            title="Payout Credited 💰",
+            message=f"₹{payout:.2f} has been credited via {str(payout_method).upper()}",
+            notification_type="payout",
             claim_id=claim["id"],
             metadata={
                 "trigger_type": trigger_type,

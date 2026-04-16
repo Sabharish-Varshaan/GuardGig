@@ -225,6 +225,7 @@ class ClaimResponse(BaseModel):
     status: Literal["pending", "approved", "rejected"]
     fraud_score: Optional[float] = Field(None, ge=0, le=1)
     risk_score: Optional[float] = Field(None, ge=0, le=1)
+    payout_status: Optional[str] = None
     payment_status: Optional[str] = None
     transaction_id: Optional[str] = None
     paid_at: Optional[str] = None

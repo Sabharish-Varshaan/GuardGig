@@ -33,8 +33,7 @@ from .routes.claim import router as claim_router
 from .routes.fraud import router as fraud_router
 from .routes.ml_demo import router as ml_demo_router
 from .services.notification_service import create_notification
-from .services.payout_details_service import fetch_user_payout_details, resolve_claim_payout_destination
-from .services.payment_service import persist_claim_payment, simulate_razorpay_payout
+from .services.payout_service import process_payout
 from .supabase_client import get_admin_client
 from .trigger_utils import check_trigger, fetch_trigger_snapshot
 
@@ -266,6 +265,7 @@ async def automated_claim_check():
             "payout_percentage": payout_percentage_raw,
             "payout_amount": payout,
             "status": "approved",
+            "payout_status": "pending",
             "fraud_score": fraud_score,
             "risk_score": risk_score,
             "activity_status": "active",
@@ -301,42 +301,16 @@ async def automated_claim_check():
         print("Claim created successfully with ID:", claim_id)
         logger.info(f"  ✓ CLAIM CREATED: {claim_id}, amount=₹{payout}")
 
-        payout_details = fetch_user_payout_details(admin, settings.supabase_payout_details_table, user_id)
-        payout_destination = resolve_claim_payout_destination(payout_details)
-        payout_method = "pending"
-        masked_account = None
-
-        # 8) Execute payout and persist payout fields
-        if not payout_destination:
-            payment_status = "pending_payout_details"
-            transaction_id = None
-            paid_at = None
-            logger.info("  → Skipping payout: recipient payout details not configured")
-        else:
-            payout_method, masked_account = payout_destination
-            try:
-                payout_result = simulate_razorpay_payout(payout, user_id)
-                payment_status = payout_result["status"]
-                transaction_id = payout_result["transaction_id"]
-                paid_at = payout_result["paid_at"]
-                logger.info(f"  ✓ PAYOUT PROCESSED: {transaction_id}, status={payment_status}, method={payout_method}")
-            except Exception as exc:
-                logger.error(f"  ✗ Payout failed: {exc}")
-                payment_status = "failed"
-                transaction_id = None
-                paid_at = None
-
-        persist_claim_payment(
-            admin,
-            settings.supabase_claims_table,
-            claim["id"],
-            payment_status,
-            transaction_id,
-            paid_at,
-            payout_method,
-            masked_account,
-            trigger_snapshot,
+        payout_result = process_payout(
+            claim,
+            admin=admin,
+            claims_table=settings.supabase_claims_table,
+            payout_details_table=settings.supabase_payout_details_table,
+            trigger_snapshot=trigger_snapshot,
         )
+        payment_status = payout_result["payment_status"]
+        payout_method = payout_result["payout_method"]
+        transaction_id = payout_result["transaction_id"]
         
         # Track successful payout in system metrics (non-blocking)
         # Run only for approved claims with a paid payout.
@@ -353,9 +327,9 @@ async def automated_claim_check():
                     admin,
                     settings.supabase_notifications_table,
                     user_id=user_id,
-                    title="Payout Credited 💸",
-                    message=f"₹{payout:.2f} credited due to {trigger_type}",
-                    notification_type="payout_credited",
+                    title="Payout Credited 💰",
+                    message=f"₹{payout:.2f} has been credited via {str(payout_method).upper()}",
+                    notification_type="payout",
                     claim_id=claim["id"],
                     metadata={
                         "trigger_type": trigger_type,

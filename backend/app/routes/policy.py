@@ -135,7 +135,7 @@ def create_policy(current_user: dict = Depends(require_current_user)):
     risk_score = calculate_policy_risk_score(float(weekly_income), income_variance=income_variance)
 
     # Calculate premium
-    premium = calculate_premium(float(weekly_income), str(risk_preference), income_variance=income_variance)
+    premium = calculate_premium(float(mean_income), str(risk_preference), income_variance=income_variance)
 
     coverage_amount = 700.00
     if risk_score > 0.7:
