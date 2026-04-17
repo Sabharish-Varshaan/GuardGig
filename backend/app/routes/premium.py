@@ -19,6 +19,7 @@ def calculate_premium(request: PremiumCalculateRequest):
         premium=pricing["premium"],
         coverage=pricing["coverage"],
         coverage_percentage=pricing["coverage_percentage"],
+        mode=pricing["mode"],
         target=pricing["target"],
         reason=pricing["reason"],
     )

@@ -25,7 +25,8 @@ def _calculate_bcr_pricing_from_probability(mean_income: float, trigger_probabil
     - Premium uses sqrt-normalized income: prob * sqrt(income) * K
     - Premium is bounded to [20, 50]
     - Coverage targets 40% income when affordable at BCR 0.65
-    - Coverage uses 40%/25%/BCR-safe priority with a 60% cap
+    - Coverage targets 40% income when sustainable, else falls back to BCR-safe
+    - Coverage is capped at 60% and has a soft high-risk floor (without breaking BCR)
     - Returns (premium, coverage, clamped_trigger_probability)
     """
     income = float(mean_income or 0.0)
@@ -49,30 +50,45 @@ def _calculate_bcr_pricing_from_probability(mean_income: float, trigger_probabil
     )
 
     target_coverage = income * 0.4
-    min_coverage = income * 0.25
+    min_coverage = income * 0.2
     max_coverage = income * 0.6
 
-    def _select_coverage(current_premium: float) -> tuple[float, str]:
-        bcr_safe_coverage = (current_premium * target_bcr) / prob
-        if current_premium > 0 and ((target_coverage * prob) / current_premium) <= max_loss_ratio:
-            selected_coverage = target_coverage
-            selected_reason = "Target protection achieved (40%)"
-        elif current_premium > 0 and ((min_coverage * prob) / current_premium) <= max_loss_ratio:
-            selected_coverage = min_coverage
-            selected_reason = "Minimum protection applied (25%)"
-        else:
-            selected_coverage = bcr_safe_coverage
-            selected_reason = "Adjusted for sustainability (BCR constraint)"
+    # For low-risk users, uplift premium up to the level needed for 40% coverage
+    # at the safety threshold, while still respecting the [20, 50] bounds.
+    required_target_premium = (target_coverage * prob) / max_loss_ratio if max_loss_ratio > 0 else 50.0
+    if prob <= 0.12 and required_target_premium <= 50.0:
+        premium = max(premium, min(required_target_premium + 0.01, 50.0))
 
-        selected_coverage = min(max_coverage, selected_coverage)
-        return selected_coverage, selected_reason
+    target_loss_ratio = (target_coverage * prob) / premium if premium > 0 else float("inf")
+    if target_loss_ratio <= max_loss_ratio:
+        coverage = target_coverage
+        reason = "Optimal protection (40%) achieved"
+    else:
+        coverage = (premium * target_bcr) / prob
+        reason = "Adjusted for risk (sustainability mode)"
 
-    coverage, reason = _select_coverage(premium)
+    coverage = min(coverage, max_coverage)
 
-    min_safety_coverage = income * 0.2
-    while coverage < min_safety_coverage and premium < 50.0:
-        premium = min(premium * 1.1, 50.0)
-        coverage, reason = _select_coverage(premium)
+    # Soft high-risk floor: nudge toward 20% minimum only when still BCR-safe.
+    soft_floor = min_coverage * 0.9
+    if coverage < min_coverage and premium > 0:
+        while coverage < soft_floor and premium < 50.0:
+            premium = min(premium * 1.1, 50.0)
+            target_loss_ratio = (target_coverage * prob) / premium if premium > 0 else float("inf")
+            if target_loss_ratio <= max_loss_ratio:
+                coverage = target_coverage
+                reason = "Optimal protection (40%) achieved"
+            else:
+                coverage = (premium * target_bcr) / prob
+                reason = "Adjusted for risk (sustainability mode)"
+            coverage = min(coverage, max_coverage)
+
+        if coverage < min_coverage:
+            candidate = max(coverage, soft_floor)
+            candidate_loss_ratio = (candidate * prob) / premium
+            if candidate_loss_ratio <= max_loss_ratio:
+                coverage = candidate
+                reason = "High-risk: essential protection mode"
 
     if income > 0:
         protection_pct = round((coverage / income) * 100, 1)
@@ -113,9 +129,9 @@ def _calculate_bcr_pricing(mean_income: float, risk_score: float) -> tuple[float
     """Calculate premium and coverage using a BCR-oriented sequence.
 
     1) premium = trigger_probability * sqrt(mean_income) * 5.2, with dampening, bounded to [20, 50]
-    2) attempt 40% income coverage when affordable at BCR 0.65
+    2) attempt 40% income coverage when affordable at loss_ratio <= 0.7
     3) otherwise fall back to BCR-safe coverage
-    4) enforce coverage guardrails to [25%, 60%]
+    4) enforce coverage guardrails with 60% cap and soft high-risk floor
     """
     trigger_probability = _trigger_probability_from_risk(risk_score)
     premium, coverage, _ = _calculate_bcr_pricing_from_probability(mean_income, trigger_probability)
@@ -153,19 +169,23 @@ def calculate_pricing_details(
     prob = _trigger_probability_from_risk(risk_score)
     premium, coverage, used_prob = _calculate_bcr_pricing_from_probability(mean_income, prob)
     target_coverage = round(mean_income * 0.4, 2)
-    reason = (
-        "Target protection achieved (40%)"
-        if coverage == target_coverage
-        else "Adjusted for sustainability (BCR constraint)"
-    )
-    if mean_income > 0 and coverage == round(mean_income * 0.25, 2):
-        reason = "Minimum protection applied (25%)"
+    min_balanced_coverage = mean_income * 0.25
+    if coverage == target_coverage:
+        mode = "optimal"
+        reason = "Optimal protection (40%) achieved"
+    elif coverage >= min_balanced_coverage:
+        mode = "balanced"
+        reason = "Adjusted for risk (sustainability mode)"
+    else:
+        mode = "high-risk"
+        reason = "High-risk: essential protection mode"
     coverage_percentage = round((coverage / mean_income) * 100, 1) if mean_income > 0 else 0.0
 
     return {
         "premium": premium,
         "coverage": coverage,
         "coverage_percentage": coverage_percentage,
+        "mode": mode,
         "target": "40%",
         "reason": reason,
         "probability": used_prob,

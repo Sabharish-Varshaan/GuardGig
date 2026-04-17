@@ -187,6 +187,7 @@ class PremiumCalculateResponse(BaseModel):
     premium: float
     coverage: float
     coverage_percentage: float
+    mode: str
     target: str
     reason: str
 

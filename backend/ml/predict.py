@@ -106,9 +106,17 @@ def _is_model_compatible(model: Any, expected_features: int) -> bool:
 def _predict_probability(model: Any, vec: list[float]) -> float:
     if hasattr(model, "predict_proba"):
         raw = float(model.predict_proba([vec])[0][1])
+    elif hasattr(model, "decision_function"):
+        decision = float(model.decision_function([vec])[0])
+        raw = 1.0 / (1.0 + np.exp(-decision))
     else:
         raw = float(model.predict([vec])[0])
     return float(np.clip(raw, 0.0, 1.0))
+
+
+def _post_process_risk_probability(raw_prob: float) -> float:
+    scaled = 0.05 + (float(raw_prob) * 0.25)
+    return float(np.clip(scaled, 0.05, 0.30))
 
 
 def _load_risk_model(force_refresh: bool = False):
@@ -122,6 +130,9 @@ def _load_risk_model(force_refresh: bool = False):
 
 def _risk_model_is_compatible(model: Any) -> bool:
     if model is None:
+        return False
+
+    if not hasattr(model, "predict_proba"):
         return False
 
     n_features = getattr(model, "n_features_in_", None)
@@ -297,13 +308,23 @@ def get_risk_score(features: Dict[str, Any]) -> float:
     forecast_rows = _coerce_forecast_rows(features)
     summary = summarize_forecast(forecast_rows)
     vec = _features_for_risk(features)
+
+    # Ensure we have the calibrated probability model, not a legacy regressor.
+    ensure_risk_model_available()
     model = _load_risk_model()
 
     try:
         if _is_model_compatible(model, len(vec)):
-            score = _predict_probability(model, vec)
-            logger.info("[ML PRICING USED] feature_count=%s risk_score=%.3f", len(vec), score)
-            return score
+            raw_prob = _predict_probability(model, vec)
+            prob = _post_process_risk_probability(raw_prob)
+            print("[ML PROBABILITY]", {"raw_prob": round(raw_prob, 4), "final_prob": round(prob, 4)})
+            logger.info(
+                "[ML PRICING USED] feature_count=%s raw_prob=%.4f calibrated_prob=%.4f",
+                len(vec),
+                raw_prob,
+                prob,
+            )
+            return prob
 
         logger.warning(
             "[ML PRICING FALLBACK] model_incompatible=True expected=%s got=%s",
@@ -313,7 +334,10 @@ def get_risk_score(features: Dict[str, Any]) -> float:
     except Exception as exc:
         logger.warning("[ML PRICING FALLBACK] prediction_failed=%s", exc)
 
-    return float(np.clip(_next_week_heuristic(summary), 0.0, 1.0))
+    raw_prob = float(np.clip(_next_week_heuristic(summary), 0.0, 1.0))
+    prob = _post_process_risk_probability(raw_prob)
+    print("[ML PROBABILITY]", {"raw_prob": round(raw_prob, 4), "final_prob": round(prob, 4)})
+    return prob
 
 
 def get_next_week_risk_score(forecast_data) -> dict:
@@ -325,7 +349,7 @@ def get_next_week_risk_score(forecast_data) -> dict:
     model = _load_risk_model()
     if _risk_model_is_compatible(model):
         try:
-            score = float(np.clip(model.predict([features])[0], 0.0, 1.0))
+            score = _predict_probability(model, features)
             return {
                 "risk_score": score,
                 "ml_used": True,

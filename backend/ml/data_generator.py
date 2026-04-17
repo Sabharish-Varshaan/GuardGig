@@ -67,13 +67,23 @@ def generate_synthetic_risk_dataset(n_samples: int = 3000, random_state: int = 4
         ]
     ).astype(float)
 
-    targets = np.clip(
-        0.4 * (avg_temp / 50.0)
-        + 0.3 * (total_rain / 300.0)
-        + 0.2 * (trigger_days / 7.0)
-        + 0.1 * (avg_payout_pct / 100.0),
-        0.0,
-        1.0,
-    ).astype(float)
+    # Build event probabilities from a monotonic weather severity signal.
+    heat_signal = _clip((avg_temp - 30.0) / 20.0, 0.0, 1.0)
+    rain_signal = _clip(total_rain / 300.0, 0.0, 1.0)
+    trigger_signal = _clip(trigger_days / 7.0, 0.0, 1.0)
+    payout_signal = _clip(avg_payout_pct / 100.0, 0.0, 1.0)
+    aqi_proxy = _clip((avg_temp - 25.0) / 25.0 + 0.35 * rain_signal, 0.0, 1.0)
+
+    severity = (
+        0.25 * heat_signal
+        + 0.35 * rain_signal
+        + 0.20 * trigger_signal
+        + 0.10 * payout_signal
+        + 0.10 * aqi_proxy
+    )
+    noisy_severity = np.clip(severity + rng.normal(0.0, 0.06, size=n_samples), 0.0, 1.0)
+    logits = -2.5 + 4.0 * noisy_severity
+    event_probabilities = 1.0 / (1.0 + np.exp(-logits))
+    targets = rng.binomial(1, event_probabilities).astype(int)
 
     return SyntheticRiskDataset(features=features, targets=targets, feature_names=FEATURE_NAMES.copy())
