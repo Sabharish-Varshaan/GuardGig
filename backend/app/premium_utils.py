@@ -10,41 +10,43 @@ logger = logging.getLogger(__name__)
 
 
 def _trigger_probability_from_risk(risk_score: float) -> float:
-    """Map ML risk score in [0, 1] to trigger probability.
+    """Map ML risk score in [0, 1] to trigger probability via direct clamping.
 
-    Lower risk yields higher trigger probability under this actuarial profile,
-    which keeps coverage conservative for low-risk cohorts after BCR control.
+    Clamps probability to [0.1, 0.3] without inverse mapping.
+    Ensures strict BCR target of 0.65 is achievable.
     """
-    return round(0.08 - (0.06 * risk_score), 4)
+    return round(max(0.1, min(0.3, float(risk_score or 0.0))), 4)
 
 
 def _calculate_bcr_pricing_from_probability(mean_income: float, trigger_probability: float) -> tuple[float, float, float]:
-    """Calculate premium and coverage with a fixed actuarial BCR target.
+    """Calculate premium and coverage with strict BCR and coverage constraints.
 
-    Returns (premium, coverage, normalized_trigger_probability).
+    - Premium: prob * income * 3, clamped [20, 50]
+    - Coverage: (premium * 0.65) / prob, capped at 50% income, floor 80
+    - Returns (premium, coverage, clamped_trigger_probability).
     """
-    safe_trigger_probability = float(trigger_probability or 0.0)
-    if safe_trigger_probability <= 0.0:
-        safe_trigger_probability = 0.05
-
-    raw_premium = safe_trigger_probability * mean_income * 3.0
-    premium = max(20.0, min(raw_premium, 50.0))
+    income = float(mean_income or 0.0)
+    prob = max(0.1, min(0.3, float(trigger_probability or 0.0)))
 
     target_bcr = 0.65
-    coverage = (premium * target_bcr) / safe_trigger_probability
-    coverage = min(coverage, mean_income * 1.5)
+    raw_premium = prob * income * 3.0
+    premium = max(20.0, min(raw_premium, 50.0))
+
+    coverage = (premium * target_bcr) / prob
+    coverage = min(coverage, income * 0.5)  # Tighter cap: 50% of income
+    coverage = max(coverage, 80.0)  # Floor: 80 minimum
 
     premium = round(premium, 2)
-    coverage = round(max(0.0, coverage), 2)
+    coverage = round(coverage, 2)
 
-    expected_payout = coverage * safe_trigger_probability
+    expected_payout = coverage * prob
     loss_ratio = (expected_payout / premium) if premium > 0 else 0.0
     print(
-        f"[ACTUARIAL CHECK] premium={premium}, coverage={coverage}, "
-        f"prob={safe_trigger_probability}, loss_ratio={loss_ratio}"
+        f"[BCR DEBUG] premium={premium}, coverage={coverage}, "
+        f"prob={prob}, loss_ratio={loss_ratio:.4f}"
     )
 
-    return premium, coverage, safe_trigger_probability
+    return premium, coverage, prob
 
 
 def _calculate_bcr_pricing(mean_income: float, risk_score: float) -> tuple[float, float]:
