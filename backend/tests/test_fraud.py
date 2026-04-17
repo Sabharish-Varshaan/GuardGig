@@ -16,6 +16,58 @@ from unittest.mock import patch, MagicMock
 from app.claim_rules import calculate_fraud_score
 
 
+class _FraudRouteResponse:
+    def __init__(self, data):
+        self.data = data
+
+
+class _FraudRouteAdmin:
+    def __init__(self, claim: dict):
+        self.claim = dict(claim)
+        self._table = None
+        self._op = None
+        self._filters = {}
+        self._payload = None
+
+    def table(self, table_name):
+        self._table = table_name
+        self._op = None
+        self._filters = {}
+        self._payload = None
+        return self
+
+    def select(self, *_args, **_kwargs):
+        self._op = "select"
+        return self
+
+    def update(self, payload):
+        self._op = "update"
+        self._payload = payload
+        return self
+
+    def eq(self, key, value):
+        self._filters[key] = value
+        return self
+
+    def limit(self, _count):
+        return self
+
+    def execute(self):
+        if self._op == "select":
+            if (
+                self._filters.get("id") == self.claim.get("id")
+                and self._filters.get("user_id") == self.claim.get("user_id")
+            ):
+                return _FraudRouteResponse([dict(self.claim)])
+            return _FraudRouteResponse([])
+
+        if self._op == "update":
+            self.claim.update(self._payload or {})
+            return _FraudRouteResponse([dict(self.claim)])
+
+        return _FraudRouteResponse([])
+
+
 class TestFraudDetectionHeuristic:
     """Test fraud detection using heuristic fallback"""
 
@@ -318,6 +370,75 @@ class TestFraudWithClaims:
         print("Expected: status=approved, payout halved to 4500")
         print(f"Actual: rejected={is_rejected}, payout={final_payout}")
         assert not is_rejected and final_payout == 4500
+
+
+class TestFraudGpsDistance:
+    def test_far_gps_flagged(self, client):
+        from app.auth_utils import create_access_token
+
+        token = create_access_token(user_id="test-user-123", phone="9876543210")
+        admin = _FraudRouteAdmin(
+            claim={
+                "id": "claim-1",
+                "user_id": "test-user-123",
+                "status": "pending",
+                "fraud_score": 0.0,
+            }
+        )
+
+        with patch("app.routes.fraud.get_admin_client", return_value=admin), patch(
+            "app.routes.fraud.calculate_fraud_score", return_value=0.4
+        ):
+            response = client.post(
+                "/api/fraud/check",
+                json={
+                    "claim_id": "claim-1",
+                    "gps": "12.9716,77.5946",
+                    "activity": "normal",
+                    "claim_frequency": 0,
+                    "weather_lat": 12.9,
+                    "weather_lon": 77.3,
+                },
+                headers={"Authorization": f"Bearer {token}"},
+            )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["decision"] == "rejected"
+        assert "location mismatch" in body["message"].lower()
+
+    def test_near_gps_allowed(self, client):
+        from app.auth_utils import create_access_token
+
+        token = create_access_token(user_id="test-user-123", phone="9876543210")
+        admin = _FraudRouteAdmin(
+            claim={
+                "id": "claim-2",
+                "user_id": "test-user-123",
+                "status": "pending",
+                "fraud_score": 0.0,
+            }
+        )
+
+        with patch("app.routes.fraud.get_admin_client", return_value=admin), patch(
+            "app.routes.fraud.calculate_fraud_score", return_value=0.4
+        ):
+            response = client.post(
+                "/api/fraud/check",
+                json={
+                    "claim_id": "claim-2",
+                    "gps": "12.9716,77.5946",
+                    "activity": "normal",
+                    "claim_frequency": 0,
+                    "weather_lat": 12.972,
+                    "weather_lon": 77.595,
+                },
+                headers={"Authorization": f"Bearer {token}"},
+            )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["decision"] == "approved"
         print("Result: PASS")
 
 

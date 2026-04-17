@@ -73,6 +73,22 @@ def create_order(current_user: dict = Depends(require_current_user)):
     if not order_id:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to create Razorpay order")
 
+    # Persist payment context to prevent replay/cross-order verification.
+    payment_context = {
+        "user_id": current_user["id"],
+        "policy_id": policy["id"],
+        "order_id": order_id,
+        "amount_paise": amount_paise,
+        "currency": settings.razorpay_currency,
+        "payment_status": "created",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    try:
+        admin.table(settings.supabase_payments_table).insert(payment_context).execute()
+    except Exception as exc:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to persist payment context") from exc
+
     return PaymentOrderResponse(
         order_id=order_id,
         amount=amount_paise,
@@ -225,7 +241,30 @@ def verify_payment(request: PaymentVerifyRequest, current_user: dict = Depends(r
     if not signature:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing Razorpay signature")
 
-    # Step 1: Verify Razorpay signature BEFORE activating policy (fail-safe security)
+    # Step 1: Validate order context from DB before cryptographic verification.
+    payment_rows = (
+        admin.table(settings.supabase_payments_table)
+        .select("*")
+        .eq("order_id", order_id)
+        .limit(1)
+        .execute()
+        .data
+        or []
+    )
+    if not payment_rows:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid payment context")
+
+    payment_context = payment_rows[0]
+    expected_amount_paise = int(round(float(policy.get("premium") or 0) * 100))
+    context_user_matches = str(payment_context.get("user_id") or "") == str(current_user["id"])
+    context_policy_matches = str(payment_context.get("policy_id") or "") == str(policy.get("id") or "")
+    context_amount_matches = int(payment_context.get("amount_paise") or 0) == expected_amount_paise
+    already_paid = str(payment_context.get("payment_status") or "").lower() == "paid"
+
+    if not (context_user_matches and context_policy_matches and context_amount_matches) or already_paid:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid payment context")
+
+    # Step 2: Verify Razorpay signature BEFORE activating policy (fail-safe security)
     client = _build_client()
     try:
         client.utility.verify_payment_signature({
@@ -236,7 +275,19 @@ def verify_payment(request: PaymentVerifyRequest, current_user: dict = Depends(r
     except Exception as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid payment signature. Payment verification failed.") from exc
 
-    # Step 2: Only after successful signature verification → activate policy
+    admin.table(settings.supabase_payments_table).update(
+        {
+            "payment_status": "paid",
+            "payment_id": payment_id,
+            "payment_signature": signature,
+            "verified_at": datetime.now(timezone.utc).isoformat(),
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
+    ).eq("order_id", order_id).execute()
+
+    print("[PAYMENT VERIFIED]", {"order_id": order_id, "user_id": current_user["id"]})
+
+    # Step 3: Only after successful signature verification → activate policy
     activated_at_dt = datetime.now(timezone.utc)
     expires_at_dt = activated_at_dt + timedelta(days=7)
     activated_at = activated_at_dt.isoformat()

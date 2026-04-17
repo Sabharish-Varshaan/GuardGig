@@ -40,8 +40,15 @@ def _calculate_loss_ratio(total_premium: float, total_payout: float) -> float:
         return 0.0
     
     ratio = total_payout / total_premium
-    # Clamp to [0, 1] range
-    return min(1.0, max(0.0, round(ratio, 4)))
+    return max(0.0, round(ratio, 4))
+
+
+def classify_loss_ratio_status(loss_ratio: float) -> str:
+    if loss_ratio > 1.0:
+        return "HIGH RISK"
+    if loss_ratio > 0.7:
+        return "WARNING"
+    return "SAFE"
 
 
 def _compute_source_totals(admin) -> tuple[float, float, float]:
@@ -90,6 +97,7 @@ def _reconcile_metrics_if_needed(admin, metrics: dict, metrics_table: str) -> di
             "total_premium": cached_premium,
             "total_payout": cached_payout,
             "loss_ratio": cached_ratio,
+            "status": classify_loss_ratio_status(cached_ratio),
             "last_updated": metrics.get("last_updated", datetime.now(timezone.utc).isoformat()),
         }
 
@@ -117,6 +125,7 @@ def _reconcile_metrics_if_needed(admin, metrics: dict, metrics_table: str) -> di
         "total_premium": float(row.get("total_premium", source_premium) or source_premium),
         "total_payout": float(row.get("total_payout", source_payout) or source_payout),
         "loss_ratio": float(row.get("loss_ratio", source_ratio) or source_ratio),
+        "status": classify_loss_ratio_status(float(row.get("loss_ratio", source_ratio) or source_ratio)),
         "last_updated": row.get("last_updated", datetime.now(timezone.utc).isoformat()),
     }
 
@@ -191,12 +200,12 @@ def get_current_loss_ratio(admin, metrics_table: str = "system_metrics") -> floa
     """
     Fetch current loss ratio from system_metrics.
     Used by policy creation to check if new policies should be allowed.
-    Returns safeguarded value [0.0, 1.0].
+    Returns non-negative value.
     """
     try:
         metrics = _get_or_init_metrics(admin, metrics_table)
         loss_ratio = float(metrics.get("loss_ratio", 0))
-        return min(1.0, max(0.0, loss_ratio))
+        return max(0.0, loss_ratio)
     except Exception as exc:
         logger.error(f"[METRICS] Failed to fetch loss ratio: {exc}")
         return 0.0
@@ -216,6 +225,7 @@ def get_full_metrics(admin, metrics_table: str = "system_metrics") -> dict:
             "total_premium": 0.0,
             "total_payout": 0.0,
             "loss_ratio": 0.0,
+            "status": "SAFE",
             "last_updated": datetime.now(timezone.utc).isoformat(),
         }
 

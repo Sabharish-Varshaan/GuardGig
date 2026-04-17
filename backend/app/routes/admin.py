@@ -161,21 +161,12 @@ def get_metrics(current_admin: dict = Depends(require_admin_user)):
     metrics = get_full_metrics(admin)
     print("Metrics API response:", metrics)
     
-    # Determine health status based on loss ratio
-    loss_ratio = metrics["loss_ratio"]
-    if loss_ratio < 0.70:
-        status = "healthy"
-    elif loss_ratio <= 0.85:
-        status = "warning"
-    else:
-        status = "critical"
-    
     return AdminMetricsResponse(
         total_premium=metrics["total_premium"],
         total_payout=metrics["total_payout"],
         loss_ratio=metrics["loss_ratio"],
         loss_ratio_percentage=round(metrics["loss_ratio"] * 100, 2),
-        status=status,
+        status=str(metrics.get("status") or "SAFE"),
         last_updated=metrics["last_updated"],
     )
 

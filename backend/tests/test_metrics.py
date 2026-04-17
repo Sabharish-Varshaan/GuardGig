@@ -11,6 +11,8 @@ Tests:
 import pytest
 from decimal import Decimal
 
+from app.metrics_utils import _calculate_loss_ratio, classify_loss_ratio_status
+
 
 class TestMetricsTracking:
     """Test system metrics tracking"""
@@ -267,3 +269,12 @@ class TestMetricsUpdate:
         print(f"Expected: updated_by field captures source")
         print(f"Actual: can track from {sources}")
         print("Result: PASS")
+
+
+class TestLossRatioVisibility:
+    def test_loss_ratio_above_one_is_visible(self):
+        ratio = _calculate_loss_ratio(total_premium=1000.0, total_payout=1500.0)
+        status = classify_loss_ratio_status(ratio)
+
+        assert ratio == 1.5
+        assert status == "HIGH RISK"

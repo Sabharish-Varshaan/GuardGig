@@ -17,6 +17,68 @@ import hmac
 import json
 
 
+class _FakeResponse:
+    def __init__(self, data):
+        self.data = data
+
+
+class _FakePaymentsAdmin:
+    def __init__(self, *, policy: dict, payment_context: dict | None):
+        self._policy = dict(policy)
+        self._payment_context = dict(payment_context) if payment_context else None
+        self._table = None
+        self._op = None
+        self._payload = None
+        self._filters = {}
+
+    def table(self, name):
+        self._table = name
+        self._op = None
+        self._payload = None
+        self._filters = {}
+        return self
+
+    def select(self, *_args, **_kwargs):
+        self._op = "select"
+        return self
+
+    def update(self, payload):
+        self._op = "update"
+        self._payload = payload
+        return self
+
+    def limit(self, _value):
+        return self
+
+    def eq(self, key, value):
+        self._filters[key] = value
+        return self
+
+    def execute(self):
+        if self._table == "policies" and self._op == "select":
+            if self._filters.get("user_id") == self._policy.get("user_id"):
+                return _FakeResponse([dict(self._policy)])
+            return _FakeResponse([])
+
+        if self._table == "payments" and self._op == "select":
+            order_id = self._filters.get("order_id")
+            if self._payment_context and order_id == self._payment_context.get("order_id"):
+                return _FakeResponse([dict(self._payment_context)])
+            return _FakeResponse([])
+
+        if self._table == "payments" and self._op == "update":
+            if self._payment_context and self._filters.get("order_id") == self._payment_context.get("order_id"):
+                self._payment_context.update(self._payload or {})
+                return _FakeResponse([dict(self._payment_context)])
+            return _FakeResponse([])
+
+        if self._table == "policies" and self._op == "update":
+            self._policy.update(self._payload or {})
+            return _FakeResponse([dict(self._policy)])
+
+        return _FakeResponse([])
+
+
 class TestRazorpayPayment:
     """Test Razorpay payment integration"""
 
@@ -259,3 +321,73 @@ class TestPaymentSecurity:
         print(f"Actual: Original={valid_signature[:8]}..., Tampered={tampered_signature[:8]}...")
         assert valid_signature != tampered_signature
         print("Result: PASS (tampering detected)")
+
+
+class TestPaymentContextBinding:
+    def test_wrong_order_id_rejected(self, client, test_user_with_id):
+        from app.auth_utils import create_access_token
+
+        token = create_access_token(user_id=test_user_with_id["id"], phone=test_user_with_id["phone"])
+        policy = {
+            "id": "policy-123",
+            "user_id": test_user_with_id["id"],
+            "premium": 45.0,
+            "status": "inactive",
+            "payment_status": "pending",
+        }
+        admin = _FakePaymentsAdmin(policy=policy, payment_context=None)
+
+        with patch("app.routes.payment.get_admin_client", return_value=admin):
+            response = client.post(
+                "/api/payment/verify",
+                json={
+                    "order_id": "order_wrong",
+                    "payment_id": "pay_001",
+                    "signature": "sig_001",
+                },
+                headers={"Authorization": f"Bearer {token}"},
+            )
+
+        assert response.status_code == 400
+        assert response.json()["detail"] == "Invalid payment context"
+
+    def test_correct_order_context_succeeds(self, client, test_user_with_id):
+        from app.auth_utils import create_access_token
+
+        token = create_access_token(user_id=test_user_with_id["id"], phone=test_user_with_id["phone"])
+        policy = {
+            "id": "policy-123",
+            "user_id": test_user_with_id["id"],
+            "premium": 45.0,
+            "status": "inactive",
+            "payment_status": "pending",
+        }
+        payment_context = {
+            "order_id": "order_ok",
+            "user_id": test_user_with_id["id"],
+            "policy_id": "policy-123",
+            "amount_paise": 4500,
+            "payment_status": "created",
+        }
+        admin = _FakePaymentsAdmin(policy=policy, payment_context=payment_context)
+
+        razorpay_client = MagicMock()
+        razorpay_client.utility.verify_payment_signature.return_value = None
+
+        with patch("app.routes.payment.get_admin_client", return_value=admin), patch(
+            "app.routes.payment._build_client", return_value=razorpay_client
+        ), patch("app.routes.payment.update_metrics_on_premium", return_value={}):
+            response = client.post(
+                "/api/payment/verify",
+                json={
+                    "order_id": "order_ok",
+                    "payment_id": "pay_001",
+                    "signature": "sig_001",
+                },
+                headers={"Authorization": f"Bearer {token}"},
+            )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["payment_status"] == "success"
+        assert body["order_id"] == "order_ok"
