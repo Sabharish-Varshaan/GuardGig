@@ -25,7 +25,7 @@ def _calculate_bcr_pricing_from_probability(mean_income: float, trigger_probabil
     - Premium uses sqrt-normalized income: prob * sqrt(income) * K
     - Premium is bounded to [20, 50]
     - Coverage targets 40% income when affordable at BCR 0.65
-    - Coverage is guarded to [25%, 60%] of income
+    - Coverage uses 40%/25%/BCR-safe priority with a 60% cap
     - Returns (premium, coverage, clamped_trigger_probability)
     """
     income = float(mean_income or 0.0)
@@ -33,27 +33,46 @@ def _calculate_bcr_pricing_from_probability(mean_income: float, trigger_probabil
 
     target_bcr = 0.65
     max_loss_ratio = 0.7
-    premium_tuning_constant = 14.0
+    premium_tuning_constant = 5.2
     normalized_income = math.sqrt(max(0.0, income))
     base_premium = prob * normalized_income * premium_tuning_constant
-    premium = max(20.0, min(base_premium, 50.0))
+    premium = base_premium * (0.7 + 0.5 * prob)
+    premium = max(20.0, min(premium, 50.0))
 
-    bcr_safe_coverage = (premium * target_bcr) / prob
+    print(
+        "[PREMIUM TUNED]",
+        {
+            "income": income,
+            "prob": prob,
+            "premium": round(premium, 2),
+        },
+    )
+
     target_coverage = income * 0.4
     min_coverage = income * 0.25
     max_coverage = income * 0.6
 
-    if premium > 0 and ((target_coverage * prob) / premium) <= max_loss_ratio:
-        coverage = target_coverage
-        reason = "Target protection achieved (40%)"
-    elif premium > 0 and ((min_coverage * prob) / premium) <= max_loss_ratio:
-        coverage = min_coverage
-        reason = "Minimum protection applied (25%)"
-    else:
-        coverage = bcr_safe_coverage
-        reason = "Adjusted for sustainability (BCR constraint)"
+    def _select_coverage(current_premium: float) -> tuple[float, str]:
+        bcr_safe_coverage = (current_premium * target_bcr) / prob
+        if current_premium > 0 and ((target_coverage * prob) / current_premium) <= max_loss_ratio:
+            selected_coverage = target_coverage
+            selected_reason = "Target protection achieved (40%)"
+        elif current_premium > 0 and ((min_coverage * prob) / current_premium) <= max_loss_ratio:
+            selected_coverage = min_coverage
+            selected_reason = "Minimum protection applied (25%)"
+        else:
+            selected_coverage = bcr_safe_coverage
+            selected_reason = "Adjusted for sustainability (BCR constraint)"
 
-    coverage = min(max_coverage, coverage)
+        selected_coverage = min(max_coverage, selected_coverage)
+        return selected_coverage, selected_reason
+
+    coverage, reason = _select_coverage(premium)
+
+    min_safety_coverage = income * 0.2
+    while coverage < min_safety_coverage and premium < 50.0:
+        premium = min(premium * 1.1, 50.0)
+        coverage, reason = _select_coverage(premium)
 
     if income > 0:
         protection_pct = round((coverage / income) * 100, 1)
@@ -93,7 +112,7 @@ def _calculate_bcr_pricing_from_probability(mean_income: float, trigger_probabil
 def _calculate_bcr_pricing(mean_income: float, risk_score: float) -> tuple[float, float]:
     """Calculate premium and coverage using a BCR-oriented sequence.
 
-    1) premium = trigger_probability * sqrt(mean_income) * 14, bounded to [20, 50]
+    1) premium = trigger_probability * sqrt(mean_income) * 5.2, with dampening, bounded to [20, 50]
     2) attempt 40% income coverage when affordable at BCR 0.65
     3) otherwise fall back to BCR-safe coverage
     4) enforce coverage guardrails to [25%, 60%]
