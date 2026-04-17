@@ -2,8 +2,9 @@
 
 **TRY IT OUT**
 
-USER :- https://guardgigs.smartattend.online
-ADMIN :- https://adminguardgig.smartattend.online
+-USER :- https://guardgigs.smartattend.online
+
+-ADMIN :- https://adminguardgig.smartattend.online
 
 # AI-Powered Parametric Insurance for Quick-Commerce Gig Workers
 [Jump to Phase 3](#-phase-3-intelligent-dashboard--ai-driven-insights)
