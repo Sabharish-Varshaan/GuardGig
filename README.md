@@ -1,6 +1,12 @@
 # GuardGig
 # AI-Powered Parametric Insurance for Quick-Commerce Gig Workers
-[Jump to Phase 2](#phase-2-system-intelligence--automation)
+[Jump to Phase 3](#-phase-3-intelligent-dashboard--ai-driven-insights)
+
+## Pitch Deck
+
+You can view the full pitch deck here: [Google Drive Pitch Deck](https://drive.google.com/file/d/1zn-t2ePt0gKoxkudJ_SHW_Tugmlo6HUW/view?usp=drivesdk)
+
+---
 
 ## Hackathon Scope Note
 
@@ -13,6 +19,173 @@
 - GuardGig is published as a Progressive Web App (PWA).
 - Live URL: https://guardgigs.smartattend.online
 - The same product can also be deployed as an installable mobile app build.
+
+
+
+# 🧩 Phase 3: Intelligent Dashboard & AI-Driven Insights
+
+---
+
+## 🎯 Objective
+
+In Phase 3, we focused on building **intelligent dashboards and AI-driven analytics** to provide visibility, control, and predictive insights for both workers and insurers.
+
+---
+
+## 👤 Worker Dashboard (User Side)
+
+We implemented a **real-time, user-centric dashboard** that shows:
+
+* 📊 **Daily Income Input**
+* 🛡️ **Active Weekly Policy**
+* 💰 **Coverage Amount (20–40% of income)**
+* 💸 **Weekly Premium (₹20–₹50)**
+
+---
+
+### ⚙️ Key Features
+
+* **Live Risk Monitoring**
+
+  * Displays current environmental risk (RAIN / HEAT / AQI)
+
+* **Automatic Trigger Detection**
+
+  * Detects disruptions using external APIs
+
+* **Instant Payout Display**
+
+  * Shows:
+
+    * payout amount
+    * transaction ID
+    * payment method (UPI)
+    * timestamp
+
+---
+
+### 💡 Example (From System)
+
+```text
+Daily Income: ₹400  
+Coverage: ₹160  
+Premium: ₹35/week  
+Payout: ₹96 credited instantly
+```
+
+---
+
+## 🧑‍💼 Admin Dashboard (Insurer Side)
+
+We implemented a **centralized analytics dashboard** to monitor system performance.
+
+---
+
+### 📊 Metrics Implemented
+
+* **Total Premium Collected**
+* **Total Payout Distributed**
+* **Loss Ratio (Real-Time)**
+
+$$
+	ext{Loss Ratio} = \frac{\text{Total Payout}}{\text{Total Premium}}
+$$
+
+---
+
+### ⚠️ Risk Status Indicator
+
+* Displays:
+
+  * LOW / MEDIUM / HIGH risk levels
+* Based on:
+
+  * current environmental conditions
+  * aggregated system exposure
+
+---
+
+## 🤖 AI-Based Forecasting
+
+We implemented **predictive analytics** for:
+
+* 📅 **Next Week Risk Forecast**
+* Based on:
+
+  * historical weather patterns
+  * current environmental trends
+
+---
+
+### 📈 Example Output
+
+```text
+Next Week Risk: MEDIUM  
+Insight: Moderate disruptions expected
+```
+
+---
+
+## 🔍 Multi-User System Simulation
+
+To make the dashboard realistic, we implemented:
+
+* Multiple users with:
+
+  * different incomes
+  * different risk levels
+  * different claim histories
+
+This enables:
+
+* realistic loss ratio calculation
+* insurance pooling simulation
+
+---
+
+## 🛡️ Integration with Fraud & Payout Systems
+
+The dashboard reflects:
+
+* ✔ Approved claims
+* ✔ Rejected (fraudulent) claims
+* ✔ Credited payouts
+
+---
+
+## 🔁 End-to-End Flow in Phase 3
+
+```text
+User → Policy → Risk Monitoring → Trigger
+     → Claim → Fraud Check → Payout
+     → Dashboard Metrics Update
+```
+
+---
+
+## 🎯 Key Outcome
+
+Phase 3 successfully transforms GuardGig from a functional system into a:
+
+* 📊 **Data-driven platform**
+* 🤖 **AI-assisted decision system**
+* 💼 **Insurer-ready dashboard**
+
+---
+
+## 🏆 Final Insight
+
+> “Phase 3 brings visibility and intelligence to the system, enabling both users and insurers to understand, trust, and scale the platform.”
+
+---
+
+# 🎯 FINAL ONE-LINE
+
+```text
+Phase 3 proves that GuardGig is not just working — it is measurable, explainable, and scalable
+```
+
+---
 
 ## Local Setup (Backend + Frontend)
 
