@@ -1,6 +1,5 @@
 
 import logging
-import math
 
 from ml.predict import get_risk_score
 
@@ -8,6 +7,15 @@ from .trigger_utils import get_7day_forecast, resolve_coordinates
 
 
 logger = logging.getLogger(__name__)
+
+
+TARGET_BCR = 0.65
+MAX_BCR = 0.70
+MIN_PREMIUM = 20.0
+MAX_PREMIUM = 50.0
+MIN_COVERAGE_FLOOR = 150.0
+TARGET_INCOME_REPLACEMENT = 0.40
+MAX_COVERAGE_REPLACEMENT = 0.60
 
 
 def _trigger_probability_from_risk(risk_score: float) -> float:
@@ -20,75 +28,24 @@ def _trigger_probability_from_risk(risk_score: float) -> float:
 
 
 def _calculate_bcr_pricing_from_probability(mean_income: float, trigger_probability: float) -> tuple[float, float, float]:
-    """Calculate premium and coverage with nonlinear premium scaling and BCR constraints.
-
-    - Premium uses sqrt-normalized income: prob * sqrt(income) * K
-    - Premium is bounded to [20, 50]
-    - Coverage targets 40% income when affordable at BCR 0.65
-    - Coverage targets 40% income when sustainable, else falls back to BCR-safe
-    - Coverage is capped at 60% and has a soft high-risk floor (without breaking BCR)
-    - Returns (premium, coverage, clamped_trigger_probability)
-    """
+    """Calculate premium and coverage using meaningful-coverage-first BCR math."""
     income = float(mean_income or 0.0)
     prob = max(0.1, min(0.3, float(trigger_probability or 0.0)))
 
-    target_bcr = 0.65
-    max_loss_ratio = 0.7
-    premium_tuning_constant = 5.2
-    normalized_income = math.sqrt(max(0.0, income))
-    base_premium = prob * normalized_income * premium_tuning_constant
-    premium = base_premium * (0.7 + 0.5 * prob)
-    premium = max(20.0, min(premium, 50.0))
+    target_coverage = max(income * TARGET_INCOME_REPLACEMENT, MIN_COVERAGE_FLOOR)
+    target_coverage = min(target_coverage, income * MAX_COVERAGE_REPLACEMENT)
 
-    print(
-        "[PREMIUM TUNED]",
-        {
-            "income": income,
-            "prob": prob,
-            "premium": round(premium, 2),
-        },
+    required_premium = (target_coverage * prob) / TARGET_BCR
+    premium = max(MIN_PREMIUM, min(required_premium, MAX_PREMIUM))
+
+    coverage = (premium * TARGET_BCR) / prob
+    coverage = min(coverage, income * MAX_COVERAGE_REPLACEMENT)
+
+    reason = (
+        "Optimal protection (40%) achieved"
+        if premium >= required_premium
+        else "Adjusted for risk (sustainability mode)"
     )
-
-    target_coverage = income * 0.4
-    min_coverage = income * 0.2
-    max_coverage = income * 0.6
-
-    # For low-risk users, uplift premium up to the level needed for 40% coverage
-    # at the safety threshold, while still respecting the [20, 50] bounds.
-    required_target_premium = (target_coverage * prob) / max_loss_ratio if max_loss_ratio > 0 else 50.0
-    if prob <= 0.12 and required_target_premium <= 50.0:
-        premium = max(premium, min(required_target_premium + 0.01, 50.0))
-
-    target_loss_ratio = (target_coverage * prob) / premium if premium > 0 else float("inf")
-    if target_loss_ratio <= max_loss_ratio:
-        coverage = target_coverage
-        reason = "Optimal protection (40%) achieved"
-    else:
-        coverage = (premium * target_bcr) / prob
-        reason = "Adjusted for risk (sustainability mode)"
-
-    coverage = min(coverage, max_coverage)
-
-    # Soft high-risk floor: nudge toward 20% minimum only when still BCR-safe.
-    soft_floor = min_coverage * 0.9
-    if coverage < min_coverage and premium > 0:
-        while coverage < soft_floor and premium < 50.0:
-            premium = min(premium * 1.1, 50.0)
-            target_loss_ratio = (target_coverage * prob) / premium if premium > 0 else float("inf")
-            if target_loss_ratio <= max_loss_ratio:
-                coverage = target_coverage
-                reason = "Optimal protection (40%) achieved"
-            else:
-                coverage = (premium * target_bcr) / prob
-                reason = "Adjusted for risk (sustainability mode)"
-            coverage = min(coverage, max_coverage)
-
-        if coverage < min_coverage:
-            candidate = max(coverage, soft_floor)
-            candidate_loss_ratio = (candidate * prob) / premium
-            if candidate_loss_ratio <= max_loss_ratio:
-                coverage = candidate
-                reason = "High-risk: essential protection mode"
 
     if income > 0:
         protection_pct = round((coverage / income) * 100, 1)
@@ -100,8 +57,18 @@ def _calculate_bcr_pricing_from_probability(mean_income: float, trigger_probabil
 
     expected_payout = coverage * prob
     loss_ratio = (expected_payout / premium) if premium > 0 else 0.0
+    if loss_ratio > MAX_BCR:
+        logger.warning(
+            "[PRICING WARNING] bcr_ceiling_exceeded income=%s prob=%s premium=%s coverage=%s loss_ratio=%.4f",
+            income,
+            prob,
+            premium,
+            coverage,
+            loss_ratio,
+        )
+
     print(
-        "[FINAL PRICING]",
+        "[MEANINGFUL PRICING]",
         {
             "income": income,
             "prob": prob,
@@ -126,13 +93,7 @@ def _calculate_bcr_pricing_from_probability(mean_income: float, trigger_probabil
 
 
 def _calculate_bcr_pricing(mean_income: float, risk_score: float) -> tuple[float, float]:
-    """Calculate premium and coverage using a BCR-oriented sequence.
-
-    1) premium = trigger_probability * sqrt(mean_income) * 5.2, with dampening, bounded to [20, 50]
-    2) attempt 40% income coverage when affordable at loss_ratio <= 0.7
-    3) otherwise fall back to BCR-safe coverage
-    4) enforce coverage guardrails with 60% cap and soft high-risk floor
-    """
+    """Calculate premium and coverage using target-coverage-first BCR math."""
     trigger_probability = _trigger_probability_from_risk(risk_score)
     premium, coverage, _ = _calculate_bcr_pricing_from_probability(mean_income, trigger_probability)
     return premium, coverage
@@ -168,7 +129,13 @@ def calculate_pricing_details(
 
     prob = _trigger_probability_from_risk(risk_score)
     premium, coverage, used_prob = _calculate_bcr_pricing_from_probability(mean_income, prob)
-    target_coverage = round(mean_income * 0.4, 2)
+    target_coverage = round(
+        min(
+            max(mean_income * TARGET_INCOME_REPLACEMENT, MIN_COVERAGE_FLOOR),
+            mean_income * MAX_COVERAGE_REPLACEMENT,
+        ),
+        2,
+    )
     min_balanced_coverage = mean_income * 0.25
     if coverage == target_coverage:
         mode = "optimal"

@@ -62,37 +62,13 @@ def test_coverage_formula_matches_expected_expression():
     risk_score = 0.4
     trigger_probability = max(0.1, min(0.3, risk_score))  # Direct clamping
 
-    premium = trigger_probability * (mean_income ** 0.5) * 5.2
-    premium = premium * (0.7 + 0.5 * trigger_probability)
-    premium = max(20.0, min(premium, 50.0))
-    target_coverage = mean_income * 0.4
-    min_coverage = mean_income * 0.2
-    max_coverage = mean_income * 0.6
-    required_target_premium = (target_coverage * trigger_probability) / 0.7
-    if trigger_probability <= 0.12 and required_target_premium <= 50.0:
-        premium = max(premium, min(required_target_premium + 0.01, 50.0))
-    target_loss_ratio = (target_coverage * trigger_probability) / premium
-    if target_loss_ratio <= 0.7:
-        coverage = target_coverage
-    else:
-        bcr_safe_coverage = (premium * 0.65) / trigger_probability
-        coverage = bcr_safe_coverage
+    target_coverage = max(mean_income * 0.4, 150.0)
+    target_coverage = min(target_coverage, mean_income * 0.6)
+    required_premium = (target_coverage * trigger_probability) / 0.65
 
-    coverage = min(coverage, max_coverage)
-    if coverage < min_coverage:
-        soft_floor = min_coverage * 0.9
-        while coverage < soft_floor and premium < 50.0:
-            premium = min(premium * 1.1, 50.0)
-            if (target_coverage * trigger_probability) / premium <= 0.7:
-                coverage = target_coverage
-            else:
-                coverage = (premium * 0.65) / trigger_probability
-            coverage = min(coverage, max_coverage)
-
-        if coverage < min_coverage:
-            candidate = max(coverage, soft_floor)
-            if (candidate * trigger_probability) / premium <= 0.7:
-                coverage = candidate
+    premium = max(20.0, min(required_premium, 50.0))
+    coverage = (premium * 0.65) / trigger_probability
+    coverage = min(coverage, mean_income * 0.6)
 
     expected = round(coverage, 2)
     actual = calculate_coverage_amount(mean_income, risk_score=risk_score)
