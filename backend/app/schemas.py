@@ -185,6 +185,10 @@ class PremiumCalculateRequest(BaseModel):
 
 class PremiumCalculateResponse(BaseModel):
     premium: float
+    coverage: float
+    coverage_percentage: float
+    target: str
+    reason: str
 
 
 class PaymentOrderCreateRequest(BaseModel):
