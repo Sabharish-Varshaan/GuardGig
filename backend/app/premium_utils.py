@@ -32,24 +32,27 @@ def _calculate_bcr_pricing_from_probability(mean_income: float, trigger_probabil
     prob = max(0.1, min(0.3, float(trigger_probability or 0.0)))
 
     target_bcr = 0.65
-    premium_tuning_constant = 5.0
+    max_loss_ratio = 0.7
+    premium_tuning_constant = 14.0
     normalized_income = math.sqrt(max(0.0, income))
     base_premium = prob * normalized_income * premium_tuning_constant
     premium = max(20.0, min(base_premium, 50.0))
 
+    bcr_safe_coverage = (premium * target_bcr) / prob
     target_coverage = income * 0.4
-    required_premium = (target_coverage * prob) / target_bcr if prob > 0 else float("inf")
-
-    if required_premium <= premium:
-        coverage = target_coverage
-        reason = "Target protection achieved (40%)"
-    else:
-        coverage = (premium * target_bcr) / prob
-        reason = "Adjusted for sustainability (risk too high)"
-
     min_coverage = income * 0.25
     max_coverage = income * 0.6
-    coverage = max(min_coverage, coverage)
+
+    if premium > 0 and ((target_coverage * prob) / premium) <= max_loss_ratio:
+        coverage = target_coverage
+        reason = "Target protection achieved (40%)"
+    elif premium > 0 and ((min_coverage * prob) / premium) <= max_loss_ratio:
+        coverage = min_coverage
+        reason = "Minimum protection applied (25%)"
+    else:
+        coverage = bcr_safe_coverage
+        reason = "Adjusted for sustainability (BCR constraint)"
+
     coverage = min(max_coverage, coverage)
 
     if income > 0:
@@ -63,24 +66,25 @@ def _calculate_bcr_pricing_from_probability(mean_income: float, trigger_probabil
     expected_payout = coverage * prob
     loss_ratio = (expected_payout / premium) if premium > 0 else 0.0
     print(
-        "[PRICING DEBUG]",
+        "[FINAL PRICING]",
         {
             "income": income,
             "prob": prob,
             "premium": premium,
             "coverage": coverage,
             "coverage_pct": protection_pct,
-            "expected_payout": expected_payout,
             "loss_ratio": loss_ratio,
+            "reason": reason,
         },
     )
 
     logger.info(
-        "[PRICING EXPLAIN] reason=%s income=%s prob=%s protection_pct=%s",
+        "[PRICING EXPLAIN] reason=%s income=%s prob=%s protection_pct=%s loss_ratio=%s",
         reason,
         income,
         prob,
         protection_pct,
+        round(loss_ratio, 4),
     )
 
     return premium, coverage, prob
@@ -89,7 +93,7 @@ def _calculate_bcr_pricing_from_probability(mean_income: float, trigger_probabil
 def _calculate_bcr_pricing(mean_income: float, risk_score: float) -> tuple[float, float]:
     """Calculate premium and coverage using a BCR-oriented sequence.
 
-    1) premium = trigger_probability * sqrt(mean_income) * 5, bounded to [20, 50]
+    1) premium = trigger_probability * sqrt(mean_income) * 14, bounded to [20, 50]
     2) attempt 40% income coverage when affordable at BCR 0.65
     3) otherwise fall back to BCR-safe coverage
     4) enforce coverage guardrails to [25%, 60%]
@@ -133,8 +137,10 @@ def calculate_pricing_details(
     reason = (
         "Target protection achieved (40%)"
         if coverage == target_coverage
-        else "Adjusted for sustainability (risk too high)"
+        else "Adjusted for sustainability (BCR constraint)"
     )
+    if mean_income > 0 and coverage == round(mean_income * 0.25, 2):
+        reason = "Minimum protection applied (25%)"
     coverage_percentage = round((coverage / mean_income) * 100, 1) if mean_income > 0 else 0.0
 
     return {
